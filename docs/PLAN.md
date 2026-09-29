@@ -1,0 +1,406 @@
+# Chimera VTT — Plan
+
+As of 2026-09-29 · Living copy: [Flutter VTT Plan](https://claude.ai/code/artifact/2f8540db-0ec8-4398-951f-531a85e9181c)
+
+Chimera VTT is one Flutter app for desktop, web and phones, used by GMs and players alike. It combines a tactical map (grid, fog, tokens, conditions, sector tags) with AlchemyRPG-style cinematic scenes. It works with any game system. Tactical play and multiplayer come first, and Solaris Arcanum is the first system pack.
+
+## Contents
+
+1. [Working agreement](#working-agreement)
+2. [Background](#background)
+3. [Decisions so far](#decisions-so-far)
+4. [Why Flutter over Godot](#why-flutter-over-godot)
+5. [Architecture](#architecture)
+6. [Data model and sync protocol](#data-model-and-sync-protocol)
+7. [Tactical engine](#tactical-engine)
+8. [Customization: tiered scripting](#customization-tiered-scripting)
+9. [Web constraints](#web-constraints)
+10. [Proof of concept](#proof-of-concept)
+11. [Roadmap](#roadmap)
+12. [Architecture decision records](#architecture-decision-records)
+13. [Risks and fallbacks](#risks-and-fallbacks)
+14. [Repository review](#repository-review)
+15. [Open questions](#open-questions)
+
+---
+
+## Working agreement
+
+This project is written by hand, not vibe coded. AI assistants help with planning, architecture, reviews and explanations. They write implementation code only when the project owner explicitly asks for that specific piece. Code shown in design discussions is an illustration, not a deliverable.
+
+---
+
+## Background
+
+Chimera VTT started with a question about Solaris Arcanum's tag system in Atlas VTT, an Obsidian plugin.
+
+1. **Atlas fork.** Atlas VTT (ByteMirror/atlas-vtt, AGPL-3.0) was forked to `~/Documents/dev/atlas-vtt`, branch `feat/sector-tags`. The fork added sector tags:
+   - a `sector` flag on condition definitions
+   - a grid-snapped Sector tool (rectangle drawings that carry `conditions` and `conditionValues`)
+   - tokens that inherit the tags of the sector their centre is in
+   - a hover card instead of permanent labels
+   - fog that hides sectors from players
+   The 15 Solaris sector tags from Appendix C were prepared for the preset.
+2. **The multiplayer limit.** Atlas is local only. It has no networking, and its player view is a second window or a frame capture of the GM's canvas. Adding multiplayer to the fork meant fighting its Obsidian coupling.
+3. **A standalone app.** The idea became a new VTT inspired by Atlas and AlchemyRPG. It was planned in Godot first, then moved to Flutter (see below). It also grew from Solaris-only to system-agnostic.
+
+Related prior work: `~/Documents/dev/solaris-tags`, an Owlbear Rodeo extension. In it, each grid cell is a sector and each player switches the sector view on for their own screen. Both ideas carry over.
+
+---
+
+## Decisions so far
+
+| Topic | Decision | Consequence |
+| --- | --- | --- |
+| Framework | Flutter and Dart. The map is drawn with `CustomPainter`, and Flame is used only if needed | Strong UI and an official Supabase client. Lighting, sight and particles are our own code |
+| Platforms | Desktop and web for GM and players, phones later | Campaigns live in Supabase, not local files. Desktop adds export and import |
+| Relay | Supabase Realtime | The official `supabase_flutter` client covers Realtime, presence, Auth and Storage. No server of our own |
+| Authority | The GM client is the source of truth | Players send requests. The GM checks, applies and broadcasts |
+| Priority | Tactical map before cinematic scenes | Cinematic mode is phase 5 |
+| Anti-cheat | Trust the table | Hidden tokens and GM pins are never sent. Tokens under fog are sent and only hidden when drawn |
+| Scope | System-agnostic | Zone-based and grid-precise play both work. Game rules live in system packs |
+| Rules | Separate tactical engine | A pure-Dart package in the monorepo, split out once a second consumer exists |
+
+---
+
+## Why Flutter over Godot
+
+| | Godot 4.7 | Flutter (+ Flame or custom painting) |
+| --- | --- | --- |
+| Map rendering | Built in: sprites, shaders, 2D lights and shadows, particles | Good for large maps and hundreds of tokens. Lighting, line-of-sight shadows and particles are built by hand or taken from Flame |
+| UI (sheets, lobby, journals, settings, forms) | Weaker. Text input on web and phones is clunky | Flutter's core strength |
+| Supabase | No official client, so the Realtime protocol would be ours to write | Official `supabase_flutter` |
+| Web build | Heavy (estimated 30–40 MB, unverified), WebGL2 renderer only, threads need special headers | A few MB of app plus the rendering runtime |
+| Phones | The UI fights you | Native feel |
+| Tactical engine | A GDScript addon, usable only inside Godot | A pure Dart package, usable in the app, in tests and in a command-line tool |
+| Cinematic mode | Clear winner: particles, animation, audio buses | Doable, with more hand-building |
+
+Verdict: Flutter. The project is mostly UI, rules and networking with a map, not a visual 2D scene with some UI. Godot's advantage is lighting and particles, which only matter from phase 5 on. The third option, TypeScript with PixiJS, was set aside: it's weaker on phones and for heavy UI, and reusing Atlas code would bring the AGPL with it.
+
+---
+
+## Architecture
+
+The GM client holds the real scene. Supabase only relays messages, stores campaigns and serves images.
+
+```mermaid
+flowchart LR
+  GM["GM client<br/>Flutter, desktop or web<br/>holds the real scene<br/>checks player requests<br/>saves the campaign"]
+  subgraph SB[Supabase]
+    RT["Realtime channel<br/>broadcast + presence"]
+    PG["Postgres<br/>campaigns and scenes"]
+    ST["Storage<br/>images by content hash"]
+  end
+  P["Player clients<br/>Flutter, any platform<br/>filtered scene copy<br/>sends requests only"]
+  GM -- patches --> RT -- patches --> P
+  P -- requests --> RT -- requests --> GM
+  GM <-- save, load --> PG
+  ST -- images --> GM
+  ST -- images --> P
+```
+
+### Principles
+
+1. **Pure domain core.** `chimera_core` is plain Dart with no Flutter imports, so it runs in fast headless tests.
+2. **Every change is a command.** Applying a command returns patches or a refusal. Nothing else changes state, not even the GM's own UI.
+3. **One authority per session.** The GM's session runs the reducer. Player sessions only apply the patches they receive.
+4. **The transport is behind an interface.** Supabase, loopback (for tests and solo play) and a later self-hosted relay are interchangeable.
+5. **Serializable records.** Every record converts to and from JSON and carries a schema version.
+6. **Presentation observes, never owns.** Views subscribe to the store and send commands. They know nothing about the network.
+7. **One codebase, two roles.** GM and player differ only in what they're allowed to do and in the filtered state they receive.
+8. **Strict analysis.** Strict Dart analysis options, with lints treated as errors in CI.
+
+### Layers
+
+Dependencies point one way. Every layer may use the core, the core uses only the tactical engine, and the engine uses nothing.
+
+```mermaid
+flowchart TD
+  APP["app: main, role selection, wiring"]
+  PRES["presentation: map painter, grid, tokens, fog, lobby, toolbar"]
+  SYNC["chimera_sync: Supabase and loopback, sessions, protocol"]
+  SVC["services: assets and cache, save and load, anonymous sign-in"]
+  CORE["chimera_core: model, commands, reducer, store, visibility (pure Dart)"]
+  ENG["tactical_engine (own package, no dependencies): topology, regions, measurement, sight, tag effects"]
+  APP --> PRES & SYNC & SVC
+  PRES --> CORE
+  SYNC --> CORE
+  SVC --> CORE
+  CORE --> ENG
+```
+
+Presentation, sync and services never call each other directly. `app` connects them through the store's change notifications and the session's commands.
+
+### Change flow
+
+A player's drag is a request. The scene changes only when the GM session sends a patch.
+
+```mermaid
+sequenceDiagram
+  participant A as Player A
+  participant RT as Realtime channel
+  participant GM as GM session
+  participant B as Player B
+  A->>RT: request: move token
+  RT->>GM: request
+  Note over GM: check owner, apply, emit patch #42
+  GM->>RT: patch #42
+  RT->>A: patch #42
+  RT->>B: patch #42
+  opt not allowed
+    GM-->>RT: refusal
+    RT-->>A: refusal, token snaps back
+  end
+```
+
+Patches carry a sequence number, and a player who sees a gap asks for a fresh snapshot. The dragging player's token moves at once on their own screen, then snaps back if the request is refused.
+
+### Project layout (planned)
+
+```
+chimera_vtt/                # monorepo, a Dart pub workspace
+  pubspec.yaml              # workspace root: lists every member, no dependencies
+  pubspec.lock              # one lockfile for the whole workspace
+  analysis_options.yaml     # shared lint rules
+  docs/
+  app/                      # the Flutter app
+    lib/
+      presentation/table/   # map painter, grid, tokens, fog
+      presentation/ui/      # lobby, toolbar, sheets
+      services/             # assets, persistence, auth
+      main.dart             # role selection and wiring
+  packages/
+    chimera_core/           # pure Dart: model, commands, reducer, store, visibility
+    chimera_sync/           # transport interface, Supabase and loopback adapters,
+                            # protocol, host and client sessions
+    tactical_engine/        # pure Dart, no Flutter, depends on nothing
+      lib/src/
+        topology/  regions/  measure/  sight/  effects/
+      test/                 # every pack's examples, headless
+```
+
+Every member declares `resolution: workspace`. `chimera_core` depends on `tactical_engine` as a path dependency. The engine stays in the monorepo while its API changes often, and moves to its own repository (with `git filter-repo`) once something outside this app uses it. Every package has its own `test/` folder, run with `dart test`, and widgets use `flutter_test`.
+
+---
+
+## Data model and sync protocol
+
+A scene is a set of records keyed by id, the same shape Atlas uses, so syncing sends one changed record at a time.
+
+- **Scene:** map image, grid (size, offset, units), and record tables: tokens, sectors, fog operations, drawings, pins, texts, lights and walls.
+- **Token:** position, size, image, owner (a player id), conditions with optional values, hidden flag.
+- **Sector:** a region holding sector tags. For Solaris, one grid cell. Each player can switch the sector view on for their own screen.
+- **System pack:** a data file defining conditions and sector tags (one definition with a `sector` flag), range bands, trackers and sheet fields.
+- **Campaign:** scenes, packs, assets and players, stored in Supabase Postgres, with images in Supabase Storage named by content hash.
+
+The protocol has four kinds of message:
+
+1. `snapshot`: the GM sends the whole player-filtered scene when someone joins or resyncs.
+2. `patch`: the GM sends record upserts and deletes, one per changed record, with a sequence number.
+3. `intent`: a player asks for a change (move token, roll dice, toggle own condition, ping). The GM checks ownership and applies it.
+4. `presence`: who is connected, their role and their cursor, from Realtime presence.
+
+A gap in sequence numbers makes a player ask for a fresh snapshot. Patches received from the network are never re-broadcast and never enter undo history.
+
+---
+
+## Tactical engine
+
+The rules brain is its own Dart package, `packages/tactical_engine`. It is pure Dart: no Flutter, no rendering, no networking, and nothing specific to one game system. It supports zone-based and grid-precise play because every choice about space comes from the system pack.
+
+```mermaid
+flowchart TD
+  POS["Positions: exact world coordinates"] --> TOP["Topology: square, hex, gridless or freeform zones"]
+  TOP --> REG["Regions: sectors, zones, areas, each carrying tags"]
+  REG --> MEAS["Measurement and sight: feet, cells or range bands; sight from walls or regions"]
+  MEAS --> Q["Queries: distance, range band, sight, move cost, tags in effect, validate"]
+  PACK["System pack: topology, tags and effects, range bands, movement units, sight sources"] -.-> TOP & REG & MEAS
+```
+
+- **Positions** are always exact. Zone games ignore the precision, and Solaris' Precise Movement option uses it.
+- **Topology** divides space: square grid, hex grid, gridless, or freeform zones drawn as polygons.
+- **Regions** are sectors, zones and areas (a spell's radius, a smoke cloud). Tags on regions apply to every entity inside.
+- **Measurement** returns a value, a unit and, when the pack defines bands, a range band. Sight comes from walls, from regions tagged to block it, or both.
+- **Tag effects** use a small set of data building blocks: advantage or disadvantage with a strength, movement cost change, blocks sight, occupant limit, and a required check on entry. Anything the building blocks can't express stays as rules text for people to read.
+
+The engine answers queries and checks commands. The GM session calls it before the reducer applies a command. Player clients call it for previews such as "this move costs 2 AP".
+
+### The same engine, three packs
+
+| Engine part | Solaris Arcanum | D&D 5e | Zone game (Fate-style) |
+| --- | --- | --- | --- |
+| Topology | Square grid, one cell is one 20 ft sector | Square grid, 5 ft cells | Freeform zones drawn as polygons |
+| Measurement | Range bands by sector count: Point Blank (same sector), Adjacent (the 8 around), Medium (up to 10), Far (beyond) | Feet, using the pack's diagonal rule | Zones apart: same zone, adjacent, further |
+| Region tags | Sector tags: Heavy Cover, Darkness (X), Zero-g… | Difficult terrain, obscured areas, spell areas | Zone aspects |
+| Sight | Regions tagged Line of Sight Breaker | Walls and occluders | Usually none, or zone aspects |
+| Movement | 1 AP per sector. Difficult Terrain needs a Traversal check | Feet. Difficult terrain costs double | One zone per move, blocked by barrier aspects |
+| Precise mode | Precise Movement: feet inside sectors | Always precise | Not used |
+
+---
+
+## Customization: tiered scripting
+
+Question: should the core embed a small pseudo-code interpreter for maximum customization?
+
+Answer: not a stupid plan. Most serious VTTs have scripting: Foundry runs JavaScript modules, Fantasy Grounds uses Lua, and Roll20 has a sandboxed API. The risk is in how much language you build and where it runs. A full custom language is expensive:
+
+- **It becomes a second product:** a parser, error messages, a debugger, documentation, and versioning.
+- **Security:** packs will be shared and their scripts run on the GM's machine, so a script must never reach files, the network or the app.
+- **Determinism:** player clients run the same queries for previews, so no local randomness, clocks or hidden state.
+- **Runaway scripts:** an infinite loop would freeze the GM's session.
+
+Proposal: three levels, each used only when the one below falls short.
+
+1. **Data building blocks** (ADR 012). They cover most tags.
+2. **A small expression language** for formulas and conditions, for example `disadvantage(2) when target.region.has("Obscured")` or `damage = 2d6 + attacker.might`. It reads only what the engine exposes. It has no loops, so it always finishes, and it's deterministic because dice come from the GM's seeded roller. Dart makes a small parser and evaluator straightforward to write and test.
+3. **Event hooks that return commands**, such as `on_enter_region`, `on_turn_start` and `on_hit`. A hook never changes state itself. It returns commands that go through the same checks and reducer as a player's click, with a step limit per call.
+
+A full scripting language (for example Lua) would come only if real packs outgrow level 3. It lives in the tactical engine, not in `chimera_core`. It is proposed as ADR 013 and is not yet in the decision log.
+
+---
+
+## Web constraints
+
+The web build sets the limits for everyone, because GM and players both run it. These points are from memory of recent Flutter releases, and phase 0 checks each one.
+
+| Constraint | Effect | Design response |
+| --- | --- | --- |
+| Web renderers: CanvasKit, or skwasm on browsers with WebAssembly GC | The first load downloads the rendering runtime, a few MB | Loading screen. Measure both renderers in the POC |
+| skwasm's multi-threaded mode may need cross-origin isolation headers | Hosting may have to send COOP/COEP headers | Check in phase 0. Fall back to single-threaded if the host can't send them |
+| Custom fragment shaders on web | Shader support and first-use stutter need checking | Fog works without shaders (a cut-out blend mode). Shaders are an upgrade |
+| Audio starts only after a user gesture | Music can't play automatically | A Join button before anything plays |
+| No filesystem access in the browser | The GM can't browse local folders | Uploads go to Supabase Storage. Desktop keeps folder import |
+
+---
+
+## Proof of concept
+
+The POC proves the risky parts of the architecture in one thin slice, and its code becomes the start of the real project.
+
+### Demo script
+
+The POC passes when this session runs start to finish with no restart, once with the GM on desktop and once with the GM in a browser.
+
+1. The GM creates a room and uploads a map image of about 4096 × 4096 px. The app shows a room code.
+2. A player opens the web build, enters the code, and sees the map.
+3. The GM places two tokens and assigns one to the player.
+4. The player drags their token, and the GM sees it move live. Dragging the GM's token is refused.
+5. The GM paints fog over half the map. The player's view goes dark there, and a token moved under the fog disappears for the player.
+6. The player closes the tab, reopens it, and is back in the same state.
+7. The GM saves the scene, restarts, and loads it again.
+
+### Hypotheses and pass criteria
+
+The thresholds below are first guesses, to be confirmed before the POC starts.
+
+| # | Hypothesis | Test | Pass |
+| --- | --- | --- | --- |
+| H1 | Flutter's web build draws a large map fast enough for both roles | Time the first load. Count frames with the 4096 px map and 50 tokens | First load ≤ 10 s on a 50 Mbit/s link. 60 fps on an M1-class laptop. ≥ 30 fps on a mid-range phone |
+| H2 | `supabase_flutter`'s Realtime is fast and reliable enough on desktop and web | Join, broadcast and presence from both builds. Time GM-to-player messages | All three work on both builds. p95 delay ≤ 200 ms within one region |
+| H3 | The GM-authoritative model keeps everyone in the same state | Two scripted players send 1,000 random requests | Each player's state hash equals the GM's filtered state hash |
+| H4 | Storage can serve images to the web build | Load the map through Storage in the browser, twice | No CORS errors. The cached second load takes ≤ 1 s |
+| H5 | Fog works in Flutter's web renderers | Paint and erase fog while players watch | 60 fps while painting. Players see fully opaque fog |
+| H6 | A session fits Supabase's message limits | Count messages in a simulated one-hour session, with drags throttled to 15 updates/s | Stays under the current plan's quota, checked against Supabase's pricing page |
+
+### Scope
+
+| In | Out |
+| --- | --- |
+| Square grid on one map image | Hex grids, lighting, walls |
+| Tokens: place, move, assign an owner | Conditions, sector tags, stat blocks |
+| Fog: rectangle and brush, paint and erase | Dice, initiative, pings |
+| Room code with anonymous sign-in | Accounts, invitations, roles beyond GM and player |
+| Snapshot, patch, request and presence messages, and resync | Cinematic scenes, audio |
+| Scene saved as a JSON file | Campaigns in Postgres, importers |
+| macOS and web builds | Windows and Linux builds, phone layout, UI polish |
+
+### Deliverables and timebox
+
+Two weeks, ending with a go or no-go decision on the architecture.
+
+- A git repository with the domain core, a Supabase transport, a loopback transport for tests, and the demo screens
+- Automated tests for the domain core, including the H3 convergence test
+- A macOS build and a hosted web build
+- A short report with the measured number for each hypothesis
+- Decision statuses updated to accepted or rejected
+
+If H2 fails, a small WebSocket relay of our own replaces Realtime behind the same transport interface. If H1 fails, the map moves to a tiled renderer or to Flame before anything else changes.
+
+---
+
+## Roadmap
+
+Phases 1–4 alone make a usable VTT, and cinematic mode and the Solaris pack follow. There are no dates yet: phase 0 measures what the rest will cost.
+
+| # | Phase | Contents | Gate at the end |
+| --- | --- | --- | --- |
+| 0 | Spike (the POC) | Web build, Realtime, Storage images, the H1–H6 measurements | Browser channel works |
+| 1 | GM tabletop | Map, grid, tokens, fog, undo, save | |
+| 2 | Players watch | Room code, snapshot, patches, reconnect | Replaces screen sharing |
+| 3 | Players act | Own tokens, dice, pings, conditions | |
+| 4 | Tactical rules | Conditions, sectors, range bands, initiative, tactical engine | A usable VTT |
+| 5 | Cinematic mode | Scenes, parallax, particles, music, ambience, handouts | |
+| 6 | Solaris pack | Tags, trackers, threat cards, Atlas and Fantasy Statblocks importers | |
+| 7 | Hardening | Request checks, rate limits, private channels with row-level security, hosting, phone layout | |
+
+---
+
+## Architecture decision records
+
+| ADR | Decision | Settled by | Status |
+| --- | --- | --- | --- |
+| 001 | Dart everywhere, strict analysis | Flutter chosen | Accepted |
+| 002 | GM-authoritative commands and patches | Plan decision | Accepted |
+| 003 | Official `supabase_flutter` client behind the transport interface | H2 | Proposed |
+| 004 | Transport interface with a loopback adapter | H3 tests | Proposed |
+| 005 | Records as versioned JSON dictionaries | H3, save and load | Proposed |
+| 006 | Images in Storage, named by SHA-256 hash | H4 | Proposed |
+| 007 | Fog as ordered operations drawn into a mask layer, as in Atlas | H5 | Proposed |
+| 008 | Flutter web renderer (CanvasKit or skwasm) picked by POC measurements | H1 | Proposed |
+| 009 | `dart test` for pure-Dart packages, `flutter_test` for widgets | First test run | Proposed |
+| 010 | Campaigns in Postgres after the POC, JSON files during it | Phase 1 | Proposed |
+| 011 | Tactical engine as a separate, system-agnostic pure-Dart package, kept in the monorepo until a second consumer exists | System-agnostic goal | Accepted (revised 2026-09-29: was its own repository) |
+| 012 | Tag effects as a small set of data building blocks, with rules text for the rest | First two packs (Solaris, D&D 5e) | Proposed |
+| 013 | Tiered customization: data building blocks, then expressions, then hooks that return commands | Phase 4 expression spike | Not yet logged |
+
+---
+
+## Risks and fallbacks
+
+| Risk | Sign it's happening | Fallback |
+| --- | --- | --- |
+| Large maps stutter in the web build | Under 60 fps with a 4096 px map and 50 tokens on a laptop | Tile the map image, cache token layers as pictures, try Flame's renderer |
+| Web build too heavy for phones | First load over 10 s on mid-range phones | Deferred loading, compressed assets, a lighter player layout |
+| Free-tier message limits | Token drags exceed the quota in a test session | Throttle drags to about 15 updates/s and send the final position reliably |
+| GM closes the tab mid-session | Players lose the host | Players keep the last state, read-only. The GM rejoins and resumes from the saved campaign |
+| Scope creep in cinematic mode | Phase 5 grows past its plan | Ship phases 1–4 as a usable VTT first |
+
+---
+
+## Repository review
+
+A review of `~/Documents/dev/chimera_vtt` as created (Flutter 3.47.4, Dart SDK `^3.13.3`, the default counter app), updated as items are resolved.
+
+1. **Git — done.** The repository is initialized, with no commits yet.
+2. **Layout — done 2026-09-29.** The app moved into `app/`. The root `pubspec.yaml` is now the workspace root, listing `app`. `app/pubspec.yaml` declares `resolution: workspace`, and `.gitignore` paths were adjusted. `flutter analyze` and `flutter test` pass from `app/`. The core package is `packages/chimera_core/` (folder created, package not yet).
+3. **Linting is looser than principle 8.** Only `flutter_lints` is included. Turn on `strict-casts`, `strict-inference` and `strict-raw-types` under `analyzer: language:`, and either add a stricter rule set (for example `very_good_analysis`) or list extra rules yourself. Decide once, at the root.
+4. **Platforms.** All six platform folders exist, but the POC needs only macOS and web. Keep the others, or remove them and add them back with `flutter create --platforms=...` later.
+5. **Leftovers.** The `pubspec.yaml` description is fixed. `.idea/` and `chimera_vtt.iml` sit at the root, and both are already ignored (`.idea/` and `*.iml`). The IDE project still points at the old root layout, so re-open `app/` or the workspace root in the IDE.
+6. **The engine package doesn't exist yet.** `tactical_engine` isn't needed for the POC, only the boundary to it. It will live in `packages/` (ADR 011).
+
+---
+
+## Open questions
+
+- [ ] Engine package name (the app is Chimera VTT)
+- [x] App at the repository root or in `app/`: in `app/`, as a monorepo (2026-09-29)
+- [ ] How strict the lints are
+- [ ] Where the web build is hosted (it may need COOP/COEP headers for skwasm)
+- [ ] Import scope: Atlas `.atlasmap` scenes, Fantasy Statblocks notes, or both
+- [ ] Hex grids in scope, or square only at first
+- [ ] Patch size: whole records (simple) or only changed fields (smaller drags)?
+- [ ] Fog history grows with every stroke: when is it compacted into one mask image for new players?
+- [ ] Remote drags: send every throttled position, or only the path when dropped, plus interpolation?
+- [ ] Access control: is a secret room code enough for the POC, or private channels with row-level security from day one?
+- [ ] GM disconnects: do players stay read-only until the GM returns, with no host migration?
+- [ ] Protocol versioning: refuse mismatched clients, or support one version back?
