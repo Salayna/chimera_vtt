@@ -74,6 +74,7 @@ class TokenPainter extends CustomPainter {
     required this.images,
     required this.gm,
     required this.self,
+    this.imagesRevision = 0,
     // Owners' colours come from the member directory, which loads later.
   }) : super(repaint: Listenable.merge([drag, selected, members]));
 
@@ -83,6 +84,10 @@ class TokenPainter extends CustomPainter {
   final ui.Image? Function(AssetId) images;
   final bool gm;
   final PlayerId self;
+
+  /// Changes when an image [images] returns arrives, so the layer repaints
+  /// with it.
+  final int imagesRevision;
 
   /// Laid-out names, so a drag doesn't lay text out again every frame.
   final _labels = <TokenId, (String, double, TextPainter)>{};
@@ -218,7 +223,10 @@ class TokenPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(TokenPainter old) =>
-      !identical(old.tokens, tokens) || old.gm != gm || old.self != self;
+      !identical(old.tokens, tokens) ||
+      old.imagesRevision != imagesRevision ||
+      old.gm != gm ||
+      old.self != self;
 }
 
 /// The fog stroke being painted, before it becomes a fog op.

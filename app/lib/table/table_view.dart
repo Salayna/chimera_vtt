@@ -165,6 +165,7 @@ class _TableViewState extends State<TableView> {
   /// Uploaded token images, by asset id, as they arrive.
   final _tokenImages = <AssetId, ui.Image>{};
   final _loadingTokenImages = <AssetId>{};
+  int _tokenImagesRevision = 0;
 
   /// Pending fog ops bake after this long without a new one.
   static const bakeAfter = Duration(seconds: 1);
@@ -226,7 +227,12 @@ class _TableViewState extends State<TableView> {
         continue;
       }
       widget.loadAsset?.call(id).then((image) {
-        if (mounted) setState(() => _tokenImages[id] = image);
+        if (mounted) {
+          setState(() {
+            _tokenImages[id] = image;
+            _tokenImagesRevision++;
+          });
+        }
       }, onError: (Object e) {
         _loadingTokenImages.remove(id); // The next scene change retries.
         debugPrint('Token image $id failed to load: $e');
@@ -285,6 +291,7 @@ class _TableViewState extends State<TableView> {
               drag: _c.drag,
               selected: _c.selected,
               images: (id) => widget.images(id) ?? _tokenImages[id],
+              imagesRevision: _tokenImagesRevision,
               gm: widget.gm,
               self: widget.self,
             ),
