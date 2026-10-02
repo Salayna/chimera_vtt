@@ -175,7 +175,7 @@ void main() {
         ),
       ),
     ));
-    await tester.enterText(find.byType(EditableText), 'Goblin 1');
+    await tester.enterText(find.byType(EditableText).first, 'Goblin 1');
     await tester.pump();
     expect(host.store.scene.tokens[id]!.name, 'Goblin 1');
     expect(find.text('Goblin 1'), findsWidgets); // The card's title too.
@@ -194,5 +194,90 @@ void main() {
     await tester.tap(find.text('Aria').last);
     await tester.pumpAndSettle();
     expect(host.store.scene.tokens[id]!.owner, aria);
+
+    await tester.enterText(find.byType(EditableText).last, 'Darkness 2');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pump();
+    expect(host.store.scene.tokens[id]!.conditions, {'Darkness': 2});
+    expect(find.text('Darkness 2'), findsOneWidget); // The chip.
+    await tester.tap(find.bySemanticsLabel('Remove Darkness'));
+    await tester.pump();
+    expect(host.store.scene.tokens[id]!.conditions, isEmpty);
+  });
+
+  testWidgets("a player's card offers only conditions", (tester) async {
+    tester.view.physicalSize = const Size(1440, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    const id = TokenId('t');
+    const me = PlayerId('me');
+    final host = HostSession(
+      LoopbackHub().connect(),
+      const PlayerId('gm'),
+      SceneStore(Scene(
+        settings: const SceneSettings(
+            width: 1000, height: 1000, grid: Grid(cellSize: 100)),
+        tokens: {
+          id: const Token(
+              id: id, position: (x: 50, y: 50), size: 100, owner: me),
+        },
+      )),
+    );
+    final controller = TableController();
+    addTearDown(controller.dispose);
+    controller.selected.value = id;
+    await tester.pumpWidget(cvApp(
+      title: 'test',
+      home: TokenCardLayer(
+        store: host.store,
+        session: host,
+        controller: controller,
+        // What the player's session checks before asking the GM.
+        send: (c) => host.store.execute(const Player(me), c),
+        gm: false,
+      ),
+    ));
+    expect(find.text('Owner'), findsNothing);
+    expect(find.text('Remove'), findsNothing);
+    expect(find.byType(EditableText), findsOneWidget);
+    await tester.enterText(find.byType(EditableText), 'Prone');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pump();
+    expect(host.store.scene.tokens[id]!.conditions, {'Prone': null});
+  });
+
+  testWidgets('rulers are shared, at most every 100 ms, and go on release',
+      (tester) async {
+    final hub = LoopbackHub();
+    final host = HostSession(hub.connect(), const PlayerId('gm'),
+        SceneStore(Scene(settings: const SceneSettings(width: 100, height: 100,
+            grid: Grid(cellSize: 10)))));
+    final player = ClientSession(hub.connect(), const PlayerId('p'));
+    final gmView = TableController();
+    final playerView = TableController();
+    addTearDown(gmView.dispose);
+    addTearDown(playerView.dispose);
+    final stops = [shareRulers(host, gmView), shareRulers(player, playerView)];
+    addTearDown(() {
+      for (final stop in stops) {
+        stop();
+      }
+    });
+
+    const a = (x: 5.0, y: 5.0), b = (x: 35.0, y: 5.0), c = (x: 55.0, y: 5.0);
+    playerView.ruler.value = (a, b);
+    await tester.pump();
+    expect(gmView.otherRulers.value.single.$1, (a, b));
+    expect(playerView.otherRulers.value, isEmpty); // Not your own twice.
+
+    playerView.ruler.value = (a, c); // Too soon: held back.
+    await tester.pump();
+    expect(gmView.otherRulers.value.single.$1, (a, b));
+    await tester.pump(const Duration(milliseconds: 150));
+    expect(gmView.otherRulers.value.single.$1, (a, c));
+
+    playerView.ruler.value = null;
+    await tester.pump();
+    expect(gmView.otherRulers.value, isEmpty);
   });
 }

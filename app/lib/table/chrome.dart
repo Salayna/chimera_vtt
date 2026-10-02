@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:chimera_core/chimera_core.dart';
@@ -44,6 +45,55 @@ CvAvatar avatarFor(Presence p, {double size = CvSizes.avatar}) {
     size: size,
     label: p.gm ? 'GM' : name,
   );
+}
+
+/// Shows [session]'s pings on [controller]'s map, in the pinger's colour.
+StreamSubscription<TableEvent> showPings(
+        Session session, TableController controller) =>
+    session.events.listen((e) {
+      if (e case PingEvent(:final point, :final by, :final gm)) {
+        controller.ping(point, gm ? CvColors.amber500 : playerColor(by));
+      }
+    });
+
+/// Shares [controller]'s ruler through [session]'s presence while it's
+/// dragged, and shows everyone else's. Call the result to stop.
+VoidCallback shareRulers(
+    Session session, TableController controller) {
+  // Each update is a presence message (H6): at most one per [every], and
+  // the last position always goes out.
+  const every = Duration(milliseconds: 100);
+  Timer? pending;
+  var last = DateTime.fromMillisecondsSinceEpoch(0);
+  void send() {
+    pending = null;
+    last = DateTime.now();
+    session.setRuler(controller.ruler.value).ignore();
+  }
+
+  void changed() {
+    final wait = every - DateTime.now().difference(last);
+    if (controller.ruler.value == null || wait <= Duration.zero) {
+      pending?.cancel();
+      send();
+    } else {
+      pending ??= Timer(wait, send);
+    }
+  }
+
+  controller.ruler.addListener(changed);
+  final others = session.peers.listen((peers) {
+    controller.otherRulers.value = [
+      for (final p in peers)
+        if (p.ruler case final r? when p.player != session.self.value)
+          (r, p.gm ? CvColors.amber500 : playerColor(PlayerId(p.player))),
+    ];
+  });
+  return () {
+    others.cancel();
+    pending?.cancel();
+    controller.ruler.removeListener(changed);
+  };
 }
 
 /// The undo key's modifier, as the GM's platform writes it.
@@ -121,6 +171,8 @@ class GmRail extends StatelessWidget {
                 onPressed: onRedo),
             const CvToolbarSeparator(),
             tool(Tool.move, Lucide.mousePointer2, 'Move', 'V'),
+            tool(Tool.ruler, Lucide.ruler, 'Ruler', 'L'),
+            tool(Tool.ping, Lucide.radio, 'Ping', 'P'),
             const CvToolbarSeparator(),
             tool(Tool.fogBrush, Lucide.paintbrush, 'Fog brush', 'B'),
             tool(Tool.fogRect, Lucide.squareDashed, 'Fog rectangle', 'R'),
@@ -156,6 +208,32 @@ class GmRail extends StatelessWidget {
                 onPressed: onImport),
           ]);
         },
+      );
+}
+
+/// A player's tools, a rail on the left edge: move, ruler, ping.
+class PlayerRail extends StatelessWidget {
+  const PlayerRail({super.key, required this.controller});
+
+  final TableController controller;
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+        listenable: controller,
+        builder: (context, _) => CvToolbar(children: [
+          for (final (t, icon, label, key) in const [
+            (Tool.move, Lucide.mousePointer2, 'Move', 'V'),
+            (Tool.ruler, Lucide.ruler, 'Ruler', 'L'),
+            (Tool.ping, Lucide.radio, 'Ping', 'P'),
+          ])
+            CvToolButton(
+              icon: icon,
+              label: label,
+              shortcut: key,
+              active: controller.tool == t,
+              onPressed: () => controller.tool = t,
+            ),
+        ]),
       );
 }
 
@@ -576,8 +654,9 @@ class YourTokens extends StatelessWidget {
       );
 }
 
-/// The selected token's card, floating beside it: owner, hidden, remove.
-/// Fill the table's stack with it; it follows the token as the view moves.
+/// The selected token's card, floating beside it: conditions and, for the
+/// GM, owner, hidden, remove. Fill the table's stack with it; it follows the
+/// token as the view moves.
 class TokenCardLayer extends StatelessWidget {
   const TokenCardLayer({
     super.key,
@@ -585,7 +664,8 @@ class TokenCardLayer extends StatelessWidget {
     required this.session,
     required this.controller,
     required this.send,
-    required this.onRemove,
+    this.gm = true,
+    this.onRemove,
     this.onDuplicate,
     this.onSetImage,
   });
@@ -594,7 +674,10 @@ class TokenCardLayer extends StatelessWidget {
   final Session session;
   final TableController controller;
   final Outcome Function(Command) send;
-  final void Function(TokenId) onRemove;
+
+  /// A player's card shows only what they may change: conditions.
+  final bool gm;
+  final void Function(TokenId)? onRemove;
   final void Function(TokenId)? onDuplicate;
 
   /// Picks and uploads a new image for the token; null while one uploads.
@@ -603,7 +686,7 @@ class TokenCardLayer extends StatelessWidget {
   static const width = 280.0;
 
   /// For keeping the card on screen; near enough to its real height.
-  static const height = 420.0;
+  static const height = 520.0;
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
@@ -643,7 +726,10 @@ class TokenCardLayer extends StatelessWidget {
                     snap: controller.snap,
                     session: session,
                     send: send,
-                    onRemove: () => onRemove(token.id),
+                    gm: gm,
+                    onRemove: onRemove == null
+                        ? null
+                        : () => onRemove!(token.id),
                     onDuplicate: onDuplicate == null
                         ? null
                         : () => onDuplicate!(token.id),
@@ -671,6 +757,7 @@ class _TokenCard extends StatelessWidget {
     required this.snap,
     required this.session,
     required this.send,
+    required this.gm,
     required this.onRemove,
     required this.onDuplicate,
     required this.onSetImage,
@@ -687,7 +774,8 @@ class _TokenCard extends StatelessWidget {
   final bool snap;
   final Session session;
   final Outcome Function(Command) send;
-  final VoidCallback onRemove;
+  final bool gm;
+  final VoidCallback? onRemove;
   final VoidCallback? onDuplicate;
   final VoidCallback? onSetImage;
   final VoidCallback onClose;
@@ -747,114 +835,118 @@ class _TokenCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 spacing: 6,
                 children: [
-                  _NameField(
-                    name: token.name,
-                    onChanged: (name) =>
-                        send(UpdateToken(token.copyWith(name: name))),
-                  ),
-                  Text('Size',
-                      style: CvTypography.label
-                          .copyWith(color: CvColors.textSecondary)),
-                  CvSegmentedControl<int>(
-                    value: (token.size / grid.cellSize).round(),
-                    onChanged: (cells) {
-                      final size = cells * grid.cellSize;
-                      send(UpdateToken(token.copyWith(
-                          size: size,
-                          position:
-                              snap ? grid.snap(token.position, size) : null)));
-                    },
-                    segments: [
-                      for (var n = 1; n <= 4; n++)
-                        (value: n, label: '$n×$n', icon: null, checked: null),
-                    ],
-                  ),
-                  StreamBuilder(
-                    stream: session.peers,
-                    initialData: session.currentPeers,
-                    builder: (context, snapshot) => ValueListenableBuilder(
-                      valueListenable: members,
-                      builder: (context, all, _) {
-                        // Every member, connected or not, so tokens can be
-                        // handed out before a session; and anyone connected
-                        // who isn't a member yet.
-                        final owners = {
-                          ...all.keys,
-                          for (final p in snapshot.requireData)
-                            if (!p.gm) PlayerId(p.player),
-                          ?token.owner,
-                        };
-                        return CvDropdown<PlayerId?>(
-                          label: 'Owner',
-                          value: token.owner,
-                          above: menuAbove,
-                          onChanged: (owner) => send(AssignOwner(token.id, owner)),
-                          entries: [
-                            const CvMenuItem(null, 'No owner',
-                                leading: CvIcon(Lucide.circleDashed,
-                                    size: CvSizes.iconSm,
-                                    color: CvColors.textSecondary)),
-                            if (owners.isNotEmpty) ...[
-                              const CvMenuDivider(),
-                              const CvMenuHeading('Players'),
-                            ],
-                            for (final p in owners)
-                              CvMenuItem(p, playerName(p),
-                                  leading: avatarFor(
-                                      (player: p.value, gm: false, cursor: null),
-                                      size: 24)),
-                          ],
-                        );
-                      },
+                  if (gm) ...[
+                    _NameField(
+                      name: token.name,
+                      onChanged: (name) =>
+                          send(UpdateToken(token.copyWith(name: name))),
                     ),
-                  ),
-                  CvButton(
-                    label: 'Change image',
-                    icon: Lucide.imageUp,
-                    small: true,
-                    block: true,
-                    onPressed: onSetImage,
-                  ),
-                  CvSwitch(
-                    value: token.hidden,
-                    onChanged: (hidden) =>
-                        send(SetTokenHidden(token.id, hidden)),
-                    label: const Row(spacing: 8, children: [
-                      CvIcon(Lucide.eyeOff,
-                          size: CvSizes.iconSm, color: CvColors.textSecondary),
-                      Flexible(
-                        child: Text('Hidden from players',
-                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                    Text('Size',
+                        style: CvTypography.label
+                            .copyWith(color: CvColors.textSecondary)),
+                    CvSegmentedControl<int>(
+                      value: (token.size / grid.cellSize).round(),
+                      onChanged: (cells) {
+                        final size = cells * grid.cellSize;
+                        send(UpdateToken(token.copyWith(
+                            size: size,
+                            position:
+                                snap ? grid.snap(token.position, size) : null)));
+                      },
+                      segments: [
+                        for (var n = 1; n <= 4; n++)
+                          (value: n, label: '$n×$n', icon: null, checked: null),
+                      ],
+                    ),
+                    StreamBuilder(
+                      stream: session.peers,
+                      initialData: session.currentPeers,
+                      builder: (context, snapshot) => ValueListenableBuilder(
+                        valueListenable: members,
+                        builder: (context, all, _) {
+                          // Every member, connected or not, so tokens can be
+                          // handed out before a session; and anyone connected
+                          // who isn't a member yet.
+                          final owners = {
+                            ...all.keys,
+                            for (final p in snapshot.requireData)
+                              if (!p.gm) PlayerId(p.player),
+                            ?token.owner,
+                          };
+                          return CvDropdown<PlayerId?>(
+                            label: 'Owner',
+                            value: token.owner,
+                            above: menuAbove,
+                            onChanged: (owner) => send(AssignOwner(token.id, owner)),
+                            entries: [
+                              const CvMenuItem(null, 'No owner',
+                                  leading: CvIcon(Lucide.circleDashed,
+                                      size: CvSizes.iconSm,
+                                      color: CvColors.textSecondary)),
+                              if (owners.isNotEmpty) ...[
+                                const CvMenuDivider(),
+                                const CvMenuHeading('Players'),
+                              ],
+                              for (final p in owners)
+                                CvMenuItem(p, playerName(p),
+                                    leading: avatarFor(
+                                        (player: p.value, gm: false, cursor: null, ruler: null),
+                                        size: 24)),
+                            ],
+                          );
+                        },
                       ),
-                    ]),
-                  ),
+                    ),
+                    CvButton(
+                      label: 'Change image',
+                      icon: Lucide.imageUp,
+                      small: true,
+                      block: true,
+                      onPressed: onSetImage,
+                    ),
+                    CvSwitch(
+                      value: token.hidden,
+                      onChanged: (hidden) =>
+                          send(SetTokenHidden(token.id, hidden)),
+                      label: const Row(spacing: 8, children: [
+                        CvIcon(Lucide.eyeOff,
+                            size: CvSizes.iconSm, color: CvColors.textSecondary),
+                        Flexible(
+                          child: Text('Hidden from players',
+                              maxLines: 1, overflow: TextOverflow.ellipsis),
+                        ),
+                      ]),
+                    ),
+                  ],
+                  _Conditions(token: token, send: send),
                 ],
               ),
             ),
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: const BoxDecoration(border: Border(top: border)),
-              // Wraps rather than overflows with large text.
-              child: Wrap(
-                alignment: WrapAlignment.spaceBetween,
-                children: [
-                  CvButton(
-                    label: 'Duplicate',
-                    icon: Lucide.copy,
-                    variant: CvButtonVariant.ghost,
-                    small: true,
-                    onPressed: onDuplicate,
-                  ),
-                  CvButton(
-                    label: 'Remove',
-                    icon: Lucide.trash2,
-                    variant: CvButtonVariant.dangerGhost,
-                    small: true,
-                    onPressed: onRemove,
-                  ),
-                ],
+            if (gm)
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: const BoxDecoration(border: Border(top: border)),
+                // Wraps rather than overflows with large text.
+                child: Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  children: [
+                    CvButton(
+                      label: 'Duplicate',
+                      icon: Lucide.copy,
+                      variant: CvButtonVariant.ghost,
+                      small: true,
+                      onPressed: onDuplicate,
+                    ),
+                    CvButton(
+                      label: 'Remove',
+                      icon: Lucide.trash2,
+                      variant: CvButtonVariant.dangerGhost,
+                      small: true,
+                      onPressed: onRemove,
+                    ),
+                  ],
+                ),
               ),
-            ),
           ],
         ),
       ),
@@ -891,7 +983,8 @@ class _TokenCard extends StatelessWidget {
   }
 }
 
-/// The table's single-key shortcuts. GM: V B R tools, T add token, D duplicate, M map, G grid,
+/// The table's single-key shortcuts. Everyone: V L P tools (move, ruler,
+/// ping). GM: B R tools, T add token, D duplicate, M map, G grid,
 /// E export, I import, X cover/reveal, S snap, Del remove, Cmd/Ctrl+Z undo,
 /// Cmd/Ctrl+Shift+Z redo. Everyone:
 /// + − 0 zoom, Esc deselect.
@@ -942,8 +1035,10 @@ class TableShortcuts extends StatelessWidget {
           c.selected.value = null;
           c.tool = Tool.move;
         },
+        const CharacterActivator('v'): () => c.tool = Tool.move,
+        const CharacterActivator('l'): () => c.tool = Tool.ruler,
+        const CharacterActivator('p'): () => c.tool = Tool.ping,
         if (gm) ...{
-          const CharacterActivator('v'): () => c.tool = Tool.move,
           const CharacterActivator('b'): () => c.tool = Tool.fogBrush,
           const CharacterActivator('r'): () => c.tool = Tool.fogRect,
           const CharacterActivator('x'): () => c.fogMode =
@@ -1037,4 +1132,94 @@ class _NameFieldState extends State<_NameField> {
           onChanged: widget.onChanged,
         ),
       );
+}
+
+/// A token's conditions as chips, each removable, and a line to add one:
+/// "Prone", or "Darkness 2" for one with a value.
+class _Conditions extends StatefulWidget {
+  const _Conditions({required this.token, required this.send});
+
+  final Token token;
+  final Outcome Function(Command) send;
+
+  @override
+  State<_Conditions> createState() => _ConditionsState();
+}
+
+class _ConditionsState extends State<_Conditions> {
+  final _text = TextEditingController();
+  bool _invalid = false;
+
+  @override
+  void dispose() {
+    _text.dispose();
+    super.dispose();
+  }
+
+  void _add(String line) {
+    final m = RegExp(r'^(.*?)(?:\s+(\d{1,2}))?$').firstMatch(line.trim())!;
+    final name = m[1]!;
+    if (name.isEmpty) return;
+    final value = m[2] == null ? null : int.parse(m[2]!);
+    final outcome = widget.send(SetCondition(widget.token.id, name, value));
+    setState(() {
+      _invalid = outcome is Refused;
+      if (!_invalid) _text.clear();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final token = widget.token;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      spacing: 6,
+      children: [
+        Text('Conditions',
+            style: CvTypography.label.copyWith(color: CvColors.textSecondary)),
+        if (token.conditions.isNotEmpty)
+          Wrap(spacing: 6, runSpacing: 6, children: [
+            for (final MapEntry(key: name, :value) in token.conditions.entries)
+              Container(
+                height: 28,
+                padding: const EdgeInsets.only(left: 10),
+                decoration: BoxDecoration(
+                  color: CvColors.slate800,
+                  borderRadius: BorderRadius.circular(CvRadii.pill),
+                  border: Border.all(color: CvColors.borderStrong),
+                ),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Text(value == null ? name : '$name $value',
+                      style: CvTypography.bodySm),
+                  CvPressable(
+                    onTap: () =>
+                        widget.send(RemoveCondition(token.id, name)),
+                    label: 'Remove $name',
+                    radius: CvRadii.pill,
+                    builder: (s) => SizedBox(
+                      width: 28,
+                      height: 28,
+                      child: CvIcon(Lucide.x,
+                          size: 14,
+                          color: s.hover
+                              ? CvColors.textPrimary
+                              : CvColors.textSecondary),
+                    ),
+                  ),
+                ]),
+              ),
+          ]),
+        TextKeysOnly(
+          child: CvTextInput(
+            controller: _text,
+            placeholder: 'Add: Prone, Darkness 2…',
+            maxLength: maxConditionName + 3,
+            error: _invalid ? 'Up to 30 letters, and a value up to 99.' : null,
+            keepFocus: true,
+            onSubmitted: _add,
+          ),
+        ),
+      ],
+    );
+  }
 }

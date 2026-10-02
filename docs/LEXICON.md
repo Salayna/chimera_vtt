@@ -98,6 +98,14 @@ Otherwise it's a field of some entity.
 | **Resync** | `RequestSnapshot` | A player asking for a fresh snapshot after a gap or a reconnect. |
 | **Presence** | `Presence` | Who is connected, their role and their cursor, as `({String player, bool gm, Point? cursor})`. Comes from Realtime presence. |
 | **Optimistic move** | `ClientSession.request` | A player's own command, shown at once and snapped back if refused, or if no answer comes within two heartbeats. |
+| **Event** | `TableEvent` (sealed) | Something that happened at the table, made by the GM session from an accepted command: a roll, a chat message, a condition change or a ping. Sent in batches. Token moves and the GM's scene edits make none. |
+| **Log** | `Session.currentLog`, `log_entries` | The room's last 200 logged events, oldest first, shown as its chat. Stored with the campaign in Postgres, and sent to players with every snapshot. Pings aren't logged. |
+| **Secret entry** | `TableEvent.secret` | A log entry only the GM sees, live and stored: a secret roll (`RollDice.secret`), or a condition change on a hidden token. Never sent to players. |
+| **Roll** | `RollDice`, `Roll` | A dice roll: the command carries the formula, and the event the faces and total. The GM rolls, never the player. |
+| **Dice formula** | `DiceFormula` | Dice and constants added or subtracted: `2d6+3`, `d20`, `1d8+1d4-1`. Bounded, since players type it. |
+| **Ping** | `Ping`, `PingEvent` | A ripple on the map for a moment, to draw everyone's eye to a point. The ping tool (P) or a double-click makes one. |
+| **Ruler** | `Tool.ruler`, `rulerCells`, `Presence.ruler` | Measures in cells between two cell centres, a diagonal counting one. Shared with everyone through presence while it's dragged. |
+| **Player rail** | `PlayerRail` | A player's tools on the left edge: move, ruler, ping. |
 | **Asset** | `AssetId` | An uploaded file, usually an image. Its id is the SHA-256 of its bytes (ADR 006). |
 
 ## Rules
@@ -114,7 +122,7 @@ Otherwise it's a field of some entity.
 | **Zone** | — | A freeform region used by zone-based systems. |
 | **Tag** | `Tag` | A named property on a region or entity, with an optional value, as the record `({String name, int? value})`, for example Heavy Cover or Darkness (2). Defined in a pack by a `TagDef`. |
 | **Sector tag** | — | A tag whose definition has the `sector` flag, so it applies to a sector. |
-| **Condition** | — | A tag on a token, optionally with a value, for example Darkness (2). |
+| **Condition** | `Token.conditions` | A tag on a token, optionally with a value, for example Darkness (2). Free text until system packs define them (phase 4). A player may set and remove conditions on their own tokens. |
 | **Tag effect** | `Effect` (sealed) | What a tag does, built from data building blocks (ADR 012): `RollModifier`, `MoveCost`, `BlocksSight`, `OccupantLimit`, `EntryCheck`. Anything the blocks can't express stays as rules text. |
 | **Shape** | `Shape` (sealed) | A region's area: `Polygon` or `Circle`. |
 | **Sight** | `canSee` | Line of sight. A region with `BlocksSight` stops sight through it, not into or out of it, and grazing its edge doesn't count. |
@@ -138,7 +146,8 @@ Otherwise it's a field of some entity.
 | --- | --- | --- |
 | record (for scene state) | **entity** | "Record" is a Dart language feature (`(1, 2)`, `({x, y})`). Use "record" only for that. |
 | object, item, element | **entity** | Too vague. |
-| event (for a player's request) | **intent** or **command** | "Event" suggests something that already happened. A request can be refused. |
+| event (for a player's request) | **intent** or **command** | "Event" suggests something that already happened. A request can be refused. An **event** is what an accepted command made. |
+| chat (for the panel) | **log** | It holds rolls and condition changes too. A chat message is one kind of entry. |
 | update (for a change on the wire) | **patch** | "Update" is used for too many things. |
 | user | **GM** or **player** | Roles matter more than accounts. "User" is fine when talking about Supabase Auth. |
 | server | **authority** or **GM session** | There is no server of our own. Supabase only relays. |

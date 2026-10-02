@@ -56,15 +56,28 @@ void main() {
       settings: settings,
       tokens: {const TokenId('a'): token('a')},
     );
+    const events = <TableEvent>[
+      Roll(alice, 1, formula: '2d6 + 1', faces: [[3, 4], []], total: 8),
+      Roll(gmId, 1, formula: '1d20', faces: [[7]], total: 7, gm: true,
+          secret: true),
+      Chat(bob, 2, 'Hi'),
+      ConditionChange(alice, 3,
+          token: 'Goblin', condition: 'Darkness', value: 2, removed: false),
+      ConditionChange(gmId, 3,
+          token: 'Ghost', condition: 'Prone', value: null, removed: true,
+          gm: true, secret: true),
+      PingEvent(gmId, 4, (x: 1.5, y: 2), gm: true),
+    ];
     final messages = <Message>[
       const RequestSnapshot(alice),
-      Snapshot(to: alice, epoch: 'e', seq: 3, scene: scene),
+      Snapshot(to: alice, epoch: 'e', seq: 3, scene: scene, log: events),
       Snapshot(epoch: 'e', seq: 4, scene: scene),
       PatchBatch(
         epoch: 'e',
         seq: 5,
         patches: [Upsert(token('a')), Delete.token(const TokenId('b'))],
         requestId: 'r1',
+        events: events,
       ),
       const Heartbeat('e', 5),
       Intent(
@@ -255,6 +268,119 @@ void main() {
     table.hub.flush();
     expect(host.store.scene.tokens[const TokenId('t')]!.hidden, isTrue);
     table.expectConverged();
+  });
+
+  test('rolls, chat and conditions reach everyone\'s log; moves don\'t',
+      () async {
+    final table = Table(
+      Scene(
+        settings: settings,
+        tokens: {
+          const TokenId('t'): token('t', owner: alice).copyWith(name: 'Ayla'),
+          const TokenId('h'): token('h', hidden: true),
+        },
+      ),
+    );
+    await table.join();
+    final pings = <TableEvent>[];
+    table.clients[bob]!.events
+        .where((e) => e is PingEvent)
+        .listen(pings.add);
+    final alices = table.clients[alice]!;
+    alices.request(const MoveToken(TokenId('t'), (x: 64, y: 64)));
+    alices.request(const RollDice('2d6+3'));
+    alices.request(const Say('  Hello  '));
+    alices.request(const SetCondition(TokenId('t'), 'Darkness', 2));
+    alices.request(const Ping((x: 5, y: 5)));
+    table.hub.flush();
+    table.host.execute(const SetCondition(TokenId('h'), 'Secret'));
+    table.host.execute(const RemoveCondition(TokenId('t'), 'Darkness'));
+    table.hub.flush();
+    await Future<void>.delayed(Duration.zero); // Stream deliveries.
+
+    // The hidden token's condition is logged for the GM alone.
+    final secret = table.host.currentLog.where((e) => e.secret).toList();
+    expect(secret.single,
+        isA<ConditionChange>().having((c) => c.condition, 'condition', 'Secret'));
+    final log = [for (final e in table.host.currentLog) if (!e.secret) e];
+    expect(log.map((e) => e.runtimeType),
+        [Roll, Chat, ConditionChange, ConditionChange]);
+    final roll = log[0] as Roll;
+    expect(roll.by, alice);
+    expect(roll.formula, '2d6 + 3');
+    expect(roll.faces.first, hasLength(2));
+    expect(roll.total, roll.faces.first.reduce((a, b) => a + b) + 3);
+    expect((log[1] as Chat).text, 'Hello');
+    expect((log[2] as ConditionChange).token, 'Ayla');
+    expect((log[3] as ConditionChange).removed, isTrue);
+    expect([for (final e in log) e.gm], [false, false, false, true]);
+    expect(pings, hasLength(1));
+    for (final c in table.clients.values) {
+      expect([for (final e in c.currentLog) e.toJson()],
+          [for (final e in log) e.toJson()], reason: '${c.self}');
+    }
+
+    // Someone who joins late gets the log with the scene.
+    final carol = ClientSession(table.hub.connect(), const PlayerId('carol'));
+    final joined = carol.join();
+    table.hub.flush();
+    await joined;
+    expect(carol.currentLog, hasLength(log.length));
+    table.expectConverged();
+  });
+
+  test('a ruler travels in presence, and goes when cleared', () async {
+    final hub = LoopbackHub(manual: true);
+    final host = HostSession(
+        hub.connect(), gmId, SceneStore(Scene(settings: settings)));
+    final player = ClientSession(hub.connect(), alice);
+    await player.setCursor(null);
+    await player.setRuler(((x: 1, y: 2), (x: 3, y: 4)));
+    hub.flush();
+    await Future<void>.delayed(Duration.zero);
+    Presence alices() =>
+        host.currentPeers.singleWhere((p) => p.player == alice.value);
+    expect(alices().ruler, ((x: 1.0, y: 2.0), (x: 3.0, y: 4.0)));
+    await player.setRuler(null);
+    hub.flush();
+    await Future<void>.delayed(Duration.zero);
+    expect(alices().ruler, isNull);
+  });
+
+  test('the stored log carries over; secret rolls stay with the GM',
+      () async {
+    final stored = <TableEvent>[];
+    final hub = LoopbackHub(manual: true);
+    final host = HostSession(
+      hub.connect(),
+      gmId,
+      SceneStore(Scene(settings: settings)),
+      log: const [Chat(alice, 1, 'From last session')],
+      onLogged: stored.add,
+    );
+    final player = ClientSession(hub.connect(), alice);
+    final joined = player.join();
+    hub.flush();
+    await joined;
+    expect(player.currentLog.map((e) => e.toJson()),
+        [const Chat(alice, 1, 'From last session').toJson()]);
+
+    host.execute(const RollDice('d20', secret: true));
+    host.execute(const RollDice('d6'));
+    host.execute(const Ping((x: 0, y: 0)));
+    hub.flush();
+    await Future<void>.delayed(Duration.zero);
+    expect([for (final e in host.currentLog) e.secret], [false, true, false]);
+    expect([for (final e in player.currentLog) e.secret], [false, false]);
+    expect([for (final e in stored) (e as Roll).secret], [true, false]);
+
+    // Nor does a snapshot carry it.
+    final late = ClientSession(hub.connect(), bob);
+    final lateJoined = late.join();
+    hub.flush();
+    await lateJoined;
+    expect(late.currentLog.where((e) => e.secret), isEmpty);
+    expect(late.currentLog, hasLength(2));
   });
 
   test('loading a scene reaches every player', () async {

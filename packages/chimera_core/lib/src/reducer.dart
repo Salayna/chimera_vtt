@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'actor.dart';
 import 'commands.dart';
+import 'dice.dart';
 import 'entities.dart';
 import 'geometry.dart';
 import 'ids.dart';
@@ -32,8 +33,15 @@ final class Refused extends Outcome {
 /// Checks [command] against [scene] and returns the patches it produces.
 /// Pure: it changes no state itself.
 Outcome reduce(Scene scene, Actor actor, Command command) {
-  // Players may only move tokens they own. Everything else is GM-only.
-  if (actor is Player && command is! MoveToken) {
+  // Players may move and mark tokens they own, roll, chat and ping.
+  // Everything else is GM-only.
+  if (actor is Player &&
+      command is! MoveToken &&
+      command is! SetCondition &&
+      command is! RemoveCondition &&
+      command is! RollDice &&
+      command is! Say &&
+      command is! Ping) {
     return const Refused(Refusal.gmOnly);
   }
   return switch (command) {
@@ -46,7 +54,32 @@ Outcome reduce(Scene scene, Actor actor, Command command) {
         : !token.position.isFinite || !(token.size > 0 && token.size.isFinite)
             ? const Refused(Refusal.invalid)
             : Accepted([Upsert(token)]),
-    MoveToken(:final id, :final to) => _move(scene, actor, id, to),
+    // Player input crosses a trust boundary, and NaN would break every
+    // client.
+    MoveToken(:final id, :final to) => _own(scene, actor, id,
+        (t) => to.isFinite ? Accepted([Upsert(t.moveTo(to))]) : null),
+    SetCondition(:final id, :final name, :final value) =>
+      _own(scene, actor, id, (t) => _setCondition(t, name, value)),
+    RemoveCondition(:final id, :final name) => _own(
+        scene,
+        actor,
+        id,
+        (t) => t.conditions.containsKey(name)
+            ? Accepted([
+                Upsert(t.withConditions({...t.conditions}..remove(name))),
+              ])
+            : const Refused(Refusal.notFound)),
+    RollDice(:final secret) when secret && actor is Player =>
+      const Refused(Refusal.gmOnly),
+    RollDice(:final formula) => DiceFormula.tryParse(formula) == null
+        ? const Refused(Refusal.invalid)
+        : const Accepted([]),
+    Say(:final text) =>
+      text.trim().isEmpty || text.length > Say.maxLength
+          ? const Refused(Refusal.invalid)
+          : const Accepted([]),
+    Ping(:final at) =>
+      at.isFinite ? const Accepted([]) : const Refused(Refusal.invalid),
     AssignOwner(:final id, :final owner) =>
       _editToken(scene, id, (t) => t.withOwner(owner)),
     SetTokenHidden(:final id, :final hidden) =>
@@ -82,7 +115,10 @@ Outcome _settings(Scene scene, SceneSettings settings) {
   ]);
 }
 
-Outcome _move(Scene scene, Actor actor, TokenId id, Point to) {
+/// Edits a token [actor] may change: any for the GM, their own for a
+/// player. A null from [edit] means invalid input.
+Outcome _own(
+    Scene scene, Actor actor, TokenId id, Outcome? Function(Token) edit) {
   final token = scene.tokens[id];
   // A hidden token doesn't exist for players: answer notFound, leak nothing.
   if (token == null || (actor is Player && token.hidden)) {
@@ -91,9 +127,26 @@ Outcome _move(Scene scene, Actor actor, TokenId id, Point to) {
   if (actor case Player(id: final player) when token.owner != player) {
     return const Refused(Refusal.notOwner);
   }
-  // Player input crosses a trust boundary, and NaN would break every client.
-  if (!to.isFinite) return const Refused(Refusal.invalid);
-  return Accepted([Upsert(token.moveTo(to))]);
+  return edit(token) ?? const Refused(Refusal.invalid);
+}
+
+/// Condition names are typed by people and shown to everyone: bounded.
+const maxConditionName = 30;
+const maxConditions = 20;
+
+Outcome? _setCondition(Token token, String name, int? value) {
+  final had = token.conditions.containsKey(name);
+  if (name.trim().isEmpty ||
+      name.trim() != name ||
+      name.length > maxConditionName ||
+      (value != null && (value < 0 || value > 99)) ||
+      (!had && token.conditions.length >= maxConditions)) {
+    return null;
+  }
+  if (had && token.conditions[name] == value) return const Accepted([]);
+  return Accepted([
+    Upsert(token.withConditions({...token.conditions, name: value})),
+  ]);
 }
 
 Outcome _editToken(Scene scene, TokenId id, Token Function(Token) edit) {

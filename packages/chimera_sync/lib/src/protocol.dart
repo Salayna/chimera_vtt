@@ -1,8 +1,10 @@
 import 'package:chimera_core/chimera_core.dart';
 
+import 'events.dart';
+
 /// Bumped on any incompatible message change. Clients on another version
 /// can't decode messages and report [ProtocolMismatch].
-const protocolVersion = 1;
+const protocolVersion = 2;
 
 final class ProtocolMismatch implements Exception {
   const ProtocolMismatch(this.version);
@@ -37,6 +39,10 @@ sealed class Message {
           epoch: json['epoch'] as String,
           seq: json['seq'] as int,
           scene: Scene.fromJson(json['scene'] as Json),
+          log: [
+            for (final e in json['log'] as List? ?? const [])
+              TableEvent.fromJson(e as Json),
+          ],
         ),
       'batch' => PatchBatch(
           epoch: json['epoch'] as String,
@@ -45,6 +51,10 @@ sealed class Message {
             for (final p in json['patches'] as List) Patch.fromJson(p as Json),
           ],
           requestId: json['requestId'] as String?,
+          events: [
+            for (final e in json['events'] as List? ?? const [])
+              TableEvent.fromJson(e as Json),
+          ],
         ),
       'heartbeat' => Heartbeat(json['epoch'] as String, json['seq'] as int),
       'intent' => Intent(
@@ -79,7 +89,11 @@ final class RequestSnapshot extends Message {
 /// every player should take it, for example after the GM loads a scene.
 final class Snapshot extends Message {
   const Snapshot(
-      {this.to, required this.epoch, required this.seq, required this.scene});
+      {this.to,
+      required this.epoch,
+      required this.seq,
+      required this.scene,
+      this.log = const []});
 
   final PlayerId? to;
 
@@ -90,6 +104,9 @@ final class Snapshot extends Message {
   final int seq;
   final Scene scene;
 
+  /// The latest logged events, oldest first.
+  final List<TableEvent> log;
+
   @override
   String get _type => 'snapshot';
 
@@ -99,22 +116,26 @@ final class Snapshot extends Message {
         'epoch': epoch,
         'seq': seq,
         'scene': scene.toJson(),
+        if (log.isNotEmpty) 'log': [for (final e in log) e.toJson()],
       };
 }
 
-/// The player-filtered patches of one accepted command. [requestId] names
-/// the intent it answers, so its sender can drop the optimistic copy.
+/// The player-filtered patches of one accepted command, and the events it
+/// made. [requestId] names the intent it answers, so its sender can drop the
+/// optimistic copy.
 final class PatchBatch extends Message {
   const PatchBatch(
       {required this.epoch,
       required this.seq,
       required this.patches,
-      this.requestId});
+      this.requestId,
+      this.events = const []});
 
   final String epoch;
   final int seq;
   final List<Patch> patches;
   final String? requestId;
+  final List<TableEvent> events;
 
   @override
   String get _type => 'batch';
@@ -125,6 +146,7 @@ final class PatchBatch extends Message {
         'seq': seq,
         'patches': [for (final p in patches) p.toJson()],
         if (requestId != null) 'requestId': requestId,
+        if (events.isNotEmpty) 'events': [for (final e in events) e.toJson()],
       };
 }
 
@@ -178,17 +200,26 @@ final class RefusalMessage extends Message {
       {'to': to.value, 'requestId': requestId, 'reason': reason.name};
 }
 
-/// Who is connected, from Realtime presence.
-typedef Presence = ({String player, bool gm, Point? cursor});
+/// A ruler being dragged: from, to, in scene units.
+typedef Ruler = (Point, Point);
+
+/// Who is connected, from Realtime presence, and the ruler they're
+/// dragging, if any.
+typedef Presence = ({String player, bool gm, Point? cursor, Ruler? ruler});
 
 Json presenceToJson(Presence p) => {
       'player': p.player,
       'gm': p.gm,
       if (p.cursor != null) 'cursor': p.cursor!.toJson(),
+      if (p.ruler case (final a, final b)) 'ruler': [a.toJson(), b.toJson()],
     };
 
 Presence presenceFromJson(Json json) => (
       player: json['player'] as String,
       gm: json['gm'] as bool,
       cursor: json['cursor'] == null ? null : pointFromJson(json['cursor']),
+      ruler: switch (json['ruler']) {
+        [final a, final b] => (pointFromJson(a), pointFromJson(b)),
+        _ => null,
+      },
     );

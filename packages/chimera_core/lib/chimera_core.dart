@@ -3,6 +3,7 @@ library;
 
 export 'src/actor.dart';
 export 'src/commands.dart';
+export 'src/dice.dart';
 export 'src/entities.dart';
 export 'src/geometry.dart';
 export 'src/ids.dart';

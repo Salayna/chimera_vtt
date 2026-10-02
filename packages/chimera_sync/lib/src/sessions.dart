@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:chimera_core/chimera_core.dart';
 
+import 'events.dart';
 import 'protocol.dart';
 import 'transport.dart';
 
@@ -25,6 +27,38 @@ sealed class Session {
   late final StreamSubscription<List<Json>> _presenceSubscription;
   final _peersController = StreamController<List<Presence>>.broadcast();
   List<Presence> _peers = const [];
+  final _eventsController = StreamController<TableEvent>.broadcast();
+  List<TableEvent> _log = const [];
+  final _logController = StreamController<List<TableEvent>>.broadcast();
+
+  /// How many logged events the GM keeps and sends to someone joining.
+  // ponytail: the log lives in the GM's session and goes when they reload;
+  // store it with the campaign if it should outlast that.
+  static const logLimit = 200;
+
+  /// The room's log, oldest first: rolls, chat, condition changes.
+  List<TableEvent> get currentLog => _log;
+
+  /// [currentLog] on every change.
+  Stream<List<TableEvent>> get log => _logController.stream;
+
+  /// Every new event as it arrives, pings included.
+  Stream<TableEvent> get events => _eventsController.stream;
+
+  void _receive(List<TableEvent> events) {
+    if (events.isEmpty) return;
+    events.forEach(_eventsController.add);
+    if (events.any((e) => e.logged)) {
+      _setLog([..._log, ...events.where((e) => e.logged)]);
+    }
+  }
+
+  void _setLog(List<TableEvent> log) {
+    _log = List.unmodifiable(log.length > logLimit
+        ? log.sublist(log.length - logLimit)
+        : log);
+    _logController.add(_log);
+  }
 
   /// Everyone connected now, from presence, this client included once it
   /// called [setCursor].
@@ -33,13 +67,30 @@ sealed class Session {
   /// [currentPeers] on every change.
   Stream<List<Presence>> get peers => _peersController.stream;
 
-  Future<void> setCursor(Point? cursor) => transport
-      .track(presenceToJson((player: self.value, gm: gm, cursor: cursor)));
+  Point? _cursor;
+  Ruler? _ruler;
+
+  Future<void> setCursor(Point? cursor) {
+    _cursor = cursor;
+    return _track();
+  }
+
+  /// Shows everyone the ruler this client is dragging, or none. Each call
+  /// is a presence message: throttle a drag.
+  Future<void> setRuler(Ruler? ruler) {
+    _ruler = ruler;
+    return _track();
+  }
+
+  Future<void> _track() => transport.track(presenceToJson(
+      (player: self.value, gm: gm, cursor: _cursor, ruler: _ruler)));
 
   Future<void> close() async {
     await _subscription.cancel();
     await _presenceSubscription.cancel();
     await _peersController.close();
+    await _eventsController.close();
+    await _logController.close();
     await transport.close();
   }
 
@@ -62,9 +113,29 @@ Presence? _tryPresence(Json json) {
 /// The GM's session: the authority. It reduces every command, applies it,
 /// and sends players their filtered patches.
 final class HostSession extends Session {
-  HostSession(super.transport, super.self, this.store) : super(gm: true);
+  /// [log] is the stored log to start from, oldest first. [onLogged] gets
+  /// every new logged event, secret ones included, to store it.
+  HostSession(super.transport, super.self, this.store,
+      {math.Random? random,
+      int Function()? clock,
+      List<TableEvent> log = const [],
+      this.onLogged})
+      : _random = random ?? math.Random.secure(),
+        _clock = clock ?? (() => DateTime.now().millisecondsSinceEpoch),
+        super(gm: true) {
+    _setLog(log);
+  }
 
   final SceneStore store;
+  final void Function(TableEvent event)? onLogged;
+
+  /// The log players may see: everything but the GM's secret rolls.
+  List<TableEvent> get _playersLog =>
+      [for (final e in currentLog) if (!e.secret) e];
+
+  /// Rolls every die at the table, the players' included.
+  final math.Random _random;
+  final int Function() _clock;
 
   /// This run of the session. See [Snapshot.epoch].
   final String epoch = newId();
@@ -138,7 +209,11 @@ final class HostSession extends Session {
     store.replace(scene);
     // A new seq, so a stale snapshot of the old scene can't win.
     _seq++;
-    _send(Snapshot(epoch: epoch, seq: _seq, scene: visibleTo(scene, _players)));
+    _send(Snapshot(
+        epoch: epoch,
+        seq: _seq,
+        scene: visibleTo(scene, _players),
+        log: _playersLog));
   }
 
   /// Call periodically (every few seconds) so players notice a missed last
@@ -151,7 +226,12 @@ final class HostSession extends Session {
     final outcome = store.execute(actor, command);
     switch (outcome) {
       case Accepted(:final patches):
-        _broadcast(before, patches, requestId: requestId);
+        final event = _eventFor(from ?? self, before, command);
+        _broadcast(before, patches,
+            requestId: requestId,
+            events: [if (event != null && !event.secret) event]);
+        _receive([?event]);
+        if (event != null && event.logged) onLogged?.call(event);
       case Refused(:final reason):
         if (from != null && requestId != null) {
           _send(RefusalMessage(to: from, requestId: requestId, reason: reason));
@@ -161,13 +241,60 @@ final class HostSession extends Session {
   }
 
   /// Sends players their part of [patches], applied to [before].
-  void _broadcast(Scene before, List<Patch> patches, {String? requestId}) {
+  void _broadcast(Scene before, List<Patch> patches,
+      {String? requestId, List<TableEvent> events = const []}) {
     final visible = patchesFor(before, patches, _players);
     // An empty batch still answers an intent.
-    if (visible.isNotEmpty || requestId != null) {
+    if (visible.isNotEmpty || requestId != null || events.isNotEmpty) {
       _seq++;
       _send(PatchBatch(
-          epoch: epoch, seq: _seq, patches: visible, requestId: requestId));
+          epoch: epoch,
+          seq: _seq,
+          patches: visible,
+          requestId: requestId,
+          events: events));
+    }
+  }
+
+  /// What an accepted [command] by [by] tells the table. Moves and the
+  /// GM's scene edits tell nothing.
+  TableEvent? _eventFor(PlayerId by, Scene before, Command command) {
+    final at = _clock();
+    final gm = by == self;
+    switch (command) {
+      case RollDice(:final formula, :final secret):
+        final dice = DiceFormula.tryParse(formula)!; // The reducer checked.
+        final faces = dice.roll(_random);
+        return Roll(by, at,
+            formula: '$dice',
+            faces: faces,
+            total: dice.total(faces),
+            gm: gm,
+            secret: secret);
+      case Say(:final text):
+        return Chat(by, at, text.trim(), gm: gm);
+      case Ping(at: final point):
+        return PingEvent(by, at, point, gm: gm);
+      case SetCondition(:final id, :final name) ||
+            RemoveCondition(:final id, :final name):
+        final token = before.tokens[id]!; // The reducer checked.
+        final value = command is SetCondition ? command.value : null;
+        final removed = command is RemoveCondition;
+        if (!removed &&
+            token.conditions.containsKey(name) &&
+            token.conditions[name] == value) {
+          return null; // No change.
+        }
+        return ConditionChange(by, at,
+            token: token.name,
+            condition: name,
+            value: value,
+            removed: removed,
+            gm: gm,
+            // Players don't know a hidden token exists.
+            secret: token.hidden);
+      default:
+        return null;
     }
   }
 
@@ -185,7 +312,8 @@ final class HostSession extends Session {
             to: from,
             epoch: epoch,
             seq: _seq,
-            scene: visibleTo(store.scene, _players)));
+            scene: visibleTo(store.scene, _players),
+            log: _playersLog));
       case Intent(:final from, :final requestId, :final command):
         final Command decoded;
         try {
@@ -263,15 +391,29 @@ final class ClientSession extends Session {
       return;
     }
     switch (message) {
-      case Snapshot(:final to, :final epoch, :final seq, :final scene)
+      case Snapshot(
+              :final to,
+              :final epoch,
+              :final seq,
+              :final scene,
+              :final log
+            )
           when (to == null || to == self) && (epoch != _epoch || seq >= _seq):
         _epoch = epoch;
         _seq = seq;
         _confirmed = scene;
+        // Events missed during a gap come back in the log; pings are gone.
+        _setLog(log);
         _resyncing = false;
         // Anything in flight is answered by a later batch or expires.
         _publish();
-      case PatchBatch(:final epoch, :final seq, :final patches, :final requestId):
+      case PatchBatch(
+          :final epoch,
+          :final seq,
+          :final patches,
+          :final requestId,
+          :final events
+        ):
         if (_resyncing) return;
         if (epoch != _epoch) return _resync(); // The GM restarted.
         if (seq <= _seq) return; // A late duplicate.
@@ -280,6 +422,7 @@ final class ClientSession extends Session {
         _confirmed = _confirmed!.applyPatches(patches);
         if (requestId != null) _settle(requestId);
         _publish();
+        _receive(events);
       case Heartbeat(:final epoch, :final seq):
         _beats++;
         final before = _pending.length;

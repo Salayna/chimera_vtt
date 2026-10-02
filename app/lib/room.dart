@@ -18,6 +18,7 @@ import 'campaigns.dart';
 import 'library.dart';
 import 'members.dart';
 import 'table/chrome.dart';
+import 'table/log_panel.dart';
 import 'table/table_view.dart';
 import 'theme.dart';
 import 'ui/cv.dart';
@@ -457,6 +458,8 @@ class _GmRoomState extends State<GmRoom> {
   bool _scenesOpen = false;
   bool _membersOpen = false;
   StreamSubscription<Set<String>>? _peers;
+  StreamSubscription<TableEvent>? _pings;
+  VoidCallback? _stopRulers;
 
   /// The save waiting for [saveAfter] to pass, already bound to its scene.
   Future<void> Function()? _pendingSave;
@@ -471,8 +474,22 @@ class _GmRoomState extends State<GmRoom> {
     setState(() => _error = null);
     try {
       final scene = await _loadScene();
+      final log = LogEntries(widget.client, widget.campaign);
+      final stored = await log.recent();
       final transport = await SupabaseTransport.join(widget.client, widget.code);
-      final host = HostSession(transport, widget.me, SceneStore(scene));
+      final host = HostSession(
+        transport,
+        widget.me,
+        SceneStore(scene),
+        log: stored,
+        onLogged: (e) => log.add(e,
+            onError: (Object error) {
+              if (mounted) {
+                _toasts.show('A log entry failed to save: $error',
+                    tone: CvTone.danger);
+              }
+            }),
+      );
       // Tell players already waiting, or still holding a previous run's
       // scene, about this one.
       host.load(scene);
@@ -489,6 +506,8 @@ class _GmRoomState extends State<GmRoom> {
       });
       // Someone new at the table may be a new member: reload the names.
       _peers = host.peers.map(peerIds).distinct(sameIds).listen((_) => _loadMembers());
+      _pings = showPings(host, _controller);
+      _stopRulers = shareRulers(host, _controller);
       await _loadMembers();
       if (mounted) setState(() => _host = host);
     } on Object catch (e) {
@@ -927,6 +946,8 @@ class _GmRoomState extends State<GmRoom> {
     _heartbeat?.cancel();
     _autosave?.cancel();
     _peers?.cancel();
+    _pings?.cancel();
+    _stopRulers?.call();
     members.value = {};
     _flushSave();
     _host?.close();
@@ -981,6 +1002,7 @@ class _GmRoomState extends State<GmRoom> {
             gm: true,
             self: widget.me,
             send: host.execute,
+            onPing: (at) => host.execute(Ping(at)),
             map: widget.art.map,
             loadAsset: widget.assets.image,
             images: (id) => widget.art.tokens[id],
@@ -1148,6 +1170,11 @@ class _GmRoomState extends State<GmRoom> {
           bottom: pad,
           child: ZoomCluster(controller: _controller, snap: true),
         ),
+        Positioned(
+          right: pad,
+          bottom: pad + CvSizes.hit + 8 + CvSpacing.s4,
+          child: LogPanel(session: host, send: host.execute, gm: true),
+        ),
         if (_uploading case final name?)
           Positioned.fill(
             child: ColoredBox(
@@ -1220,6 +1247,8 @@ class _PlayerRoomState extends State<PlayerRoom> {
   String? _error;
   bool _mismatch = false;
   StreamSubscription<Set<String>>? _peers;
+  StreamSubscription<TableEvent>? _pings;
+  VoidCallback? _stopRulers;
 
   Future<void> _loadMembers() async {
     if (widget.campaign case final campaign?) {
@@ -1247,6 +1276,8 @@ class _PlayerRoomState extends State<PlayerRoom> {
       }
       setState(() => _session = session);
       _peers = session.peers.map(peerIds).distinct(sameIds).listen((_) => _loadMembers());
+      _pings = showPings(session, _controller);
+      _stopRulers = shareRulers(session, _controller);
       await _loadMembers();
       await session.setCursor(null);
       // Completes when the GM answers, now or once they open the room.
@@ -1262,6 +1293,8 @@ class _PlayerRoomState extends State<PlayerRoom> {
   @override
   void dispose() {
     _peers?.cancel();
+    _pings?.cancel();
+    _stopRulers?.call();
     members.value = {};
     _session?.close();
     _controller.dispose();
@@ -1322,22 +1355,36 @@ class _PlayerRoomState extends State<PlayerRoom> {
             gm: false,
             self: widget.me,
             send: session.request,
+            onPing: (at) => session.request(Ping(at)),
             map: widget.art.map,
             loadAsset: widget.assets.image,
             images: (id) => widget.art.tokens[id],
           ),
         ),
+        Positioned.fill(
+          child: TokenCardLayer(
+            store: store,
+            session: session,
+            controller: _controller,
+            send: session.request,
+            gm: false,
+          ),
+        ),
         Positioned(
           left: pad,
           top: pad,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            spacing: CvSpacing.s4,
-            children: [
-              CvRoomCodeChip(code: widget.code),
-              YourTokens(store: store, self: widget.me, controller: _controller),
-            ],
-          ),
+          child: CvRoomCodeChip(code: widget.code),
+        ),
+        Positioned(
+          left: pad,
+          top: 0,
+          bottom: 0,
+          child: Center(child: PlayerRail(controller: _controller)),
+        ),
+        Positioned(
+          left: pad + CvSizes.rail + CvSpacing.s4,
+          top: pad + CvSizes.hit + CvSpacing.s4,
+          child: YourTokens(store: store, self: widget.me, controller: _controller),
         ),
         Positioned(
           right: pad,
@@ -1348,6 +1395,11 @@ class _PlayerRoomState extends State<PlayerRoom> {
           right: pad,
           bottom: pad,
           child: ZoomCluster(controller: _controller),
+        ),
+        Positioned(
+          right: pad,
+          bottom: pad + CvSizes.hit + 8 + CvSpacing.s4,
+          child: LogPanel(session: session, send: session.request),
         ),
       ]),
     );

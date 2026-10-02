@@ -12,7 +12,8 @@ import '../theme.dart';
 import 'fog_mask.dart';
 import 'layers.dart';
 
-enum Tool { move, fogBrush, fogRect, gridFit }
+/// Move, ruler and ping are everyone's; the rest are the GM's.
+enum Tool { move, ruler, ping, fogBrush, fogRect, gridFit }
 
 /// The view's fast-changing state, outside the widget tree so it can change
 /// every frame without rebuilds. Owned by whoever creates it. Notifies when
@@ -25,6 +26,25 @@ class TableController extends ChangeNotifier {
   /// The grid fitted to the box being drawn with [Tool.gridFit].
   final gridFit = ValueNotifier<Grid?>(null);
   final selected = ValueNotifier<TokenId?>(null);
+
+  /// The ruler being dragged, from and to, in scene units.
+  final ruler = ValueNotifier<(Point, Point)?>(null);
+
+  /// Everyone else's rulers, in their colours.
+  final otherRulers = ValueNotifier<List<((Point, Point), Color)>>(const []);
+
+  /// Pings showing on the map now.
+  final pings = ValueNotifier<List<MapPing>>(const []);
+  bool _disposed = false;
+
+  /// Shows a ping at [at] for [pingDuration].
+  void ping(Point at, Color color) {
+    final ping = (at: at, color: color, key: UniqueKey());
+    pings.value = [...pings.value, ping];
+    Timer(pingDuration, () {
+      if (!_disposed) pings.value = [...pings.value]..remove(ping);
+    });
+  }
 
   Tool get tool => _tool;
   Tool _tool = Tool.move;
@@ -112,6 +132,10 @@ class TableController extends ChangeNotifier {
     fogPreview.dispose();
     gridFit.dispose();
     selected.dispose();
+    pings.dispose();
+    ruler.dispose();
+    otherRulers.dispose();
+    _disposed = true;
     super.dispose();
   }
 }
@@ -130,6 +154,7 @@ class TableView extends StatefulWidget {
     this.map,
     this.loadAsset,
     this.images = _noImages,
+    this.onPing,
   });
 
   final SceneStore store;
@@ -137,6 +162,9 @@ class TableView extends StatefulWidget {
   final bool gm;
   final PlayerId self;
   final Outcome Function(Command) send;
+
+  /// A double-click on the map, at this scene point.
+  final void Function(Point)? onPing;
   /// Shown while the scene has no map of its own.
   final ui.Image? map;
 
@@ -158,6 +186,9 @@ class _TableViewState extends State<TableView>
 
   /// The token this view just dropped, until the scene answers the drop.
   TokenId? _dropped;
+
+  /// The last click, to spot a double-click.
+  (DateTime, Offset)? _lastClick;
   late final Ticker _glideTicker = createTicker((elapsed) {
     _glides.tick(elapsed);
     if (!_glides.active) _glideTicker.stop();
@@ -337,6 +368,33 @@ class _TableViewState extends State<TableView>
             ),
           ),
         ),
+        // Above the fog, so players can measure into it.
+        RepaintBoundary(
+          child: CustomPaint(
+            size: size,
+            painter: RulerPainter(_c.ruler, _c.otherRulers, settings.grid),
+          ),
+        ),
+        // Above the fog: a ping under it still shows where to look.
+        IgnorePointer(
+          child: ValueListenableBuilder(
+            valueListenable: _c.pings,
+            builder: (context, pings, _) {
+              final r = settings.grid.cellSize * 1.5;
+              return Stack(children: [
+                for (final p in pings)
+                  Positioned(
+                    key: p.key,
+                    left: p.at.x - r,
+                    top: p.at.y - r,
+                    width: 2 * r,
+                    height: 2 * r,
+                    child: PingRipple(color: p.color),
+                  ),
+              ]);
+            },
+          ),
+        ),
       ]),
     );
 
@@ -388,7 +446,8 @@ class _TableViewState extends State<TableView>
     final p = _toScene(e.localPosition);
     _downAt = e.localPosition;
     _moved = false;
-    final tool = widget.gm ? _c.tool : Tool.move;
+    // Players have no buttons for the GM's tools.
+    final tool = _c.tool;
     if (e.buttons != kPrimaryButton || tool == Tool.move) {
       final token = e.buttons == kPrimaryButton ? _tokenAt(p) : null;
       if (token == null) {
@@ -398,6 +457,11 @@ class _TableViewState extends State<TableView>
         _grab = center - p;
         _c.drag.value = (id: token.id, position: center);
       }
+    } else if (tool == Tool.ruler) {
+      final at = _rulerPoint(p);
+      _c.ruler.value = (at, at);
+    } else if (tool == Tool.ping) {
+      widget.onPing?.call((x: p.dx, y: p.dy));
     } else if (tool == Tool.fogBrush) {
       _strokePoints = [(x: p.dx, y: p.dy)];
       _previewStroke();
@@ -413,7 +477,9 @@ class _TableViewState extends State<TableView>
     if (_downAt != null && (e.localPosition - _downAt!).distance > 4) {
       _moved = true;
     }
-    if (_c.drag.value case (:final id, position: _)) {
+    if (_c.ruler.value case (final from, _)) {
+      _c.ruler.value = (from, _rulerPoint(p));
+    } else if (_c.drag.value case (:final id, position: _)) {
       // Only the drop is sent: the drag is this client's alone (H6).
       _c.drag.value = (id: id, position: p + _grab!);
     } else if (_panning) {
@@ -438,6 +504,29 @@ class _TableViewState extends State<TableView>
     }
   }
 
+  /// A ruler end: the middle of the cell under [p], or [p] itself with Alt.
+  Point _rulerPoint(Offset p) {
+    final at = (x: p.dx, y: p.dy);
+    if (HardwareKeyboard.instance.isAltPressed) return at;
+    final grid = _scene.settings.grid;
+    return grid.snap(at, grid.cellSize / 2);
+  }
+
+  /// Two clicks within 350 ms and a few pixels of each other ping.
+  void _click() {
+    final now = DateTime.now();
+    final at = _downAt!;
+    if (_lastClick case (final t, final p)
+        when now.difference(t) < const Duration(milliseconds: 350) &&
+            (at - p).distance < 8) {
+      _lastClick = null;
+      final s = _toScene(at);
+      widget.onPing?.call((x: s.dx, y: s.dy));
+    } else {
+      _lastClick = (now, at);
+    }
+  }
+
   void _up({required bool send}) {
     // Clicking the map gives keyboard focus back to the table, so keys are
     // its shortcuts again. On release: a text field being left unfocuses on
@@ -456,10 +545,12 @@ class _TableViewState extends State<TableView>
                 : to));
       } else if (send) {
         _c.selected.value = id; // A click, not a drag.
+        _click();
       }
       _c.drag.value = null;
     } else if (_panning && send && !_moved) {
       _c.selected.value = null;
+      _click();
     } else if (_c.fogPreview.value case (:final shape, :final mode) when send) {
       widget.send(AddFogOp(FogOpId(newId()), mode, shape));
     } else if (_c.gridFit.value case final grid? when send && grid.valid) {
@@ -468,6 +559,7 @@ class _TableViewState extends State<TableView>
     }
     _c.fogPreview.value = null;
     _c.gridFit.value = null;
+    _c.ruler.value = null;
     _fitStart = null;
     _panning = false;
     _downAt = null;

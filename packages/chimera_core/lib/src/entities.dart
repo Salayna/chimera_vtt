@@ -173,6 +173,7 @@ final class Token extends Entity {
     this.owner,
     this.hidden = false,
     this.name = '',
+    this.conditions = const {},
   });
 
   final TokenId id;
@@ -193,6 +194,10 @@ final class Token extends Entity {
   /// Shown under the token. Empty for none.
   final String name;
 
+  /// Conditions by name, each with an optional value: Poisoned, Darkness (2).
+  /// Saving to Postgres (jsonb) may reorder them.
+  final Map<String, int?> conditions;
+
   @override
   EntityKind get kind => EntityKind.token;
 
@@ -203,7 +208,8 @@ final class Token extends Entity {
       image: image,
       owner: owner,
       hidden: hidden,
-      name: name);
+      name: name,
+      conditions: conditions);
 
   Token withOwner(PlayerId? owner) => Token(
       id: id,
@@ -212,7 +218,8 @@ final class Token extends Entity {
       image: image,
       owner: owner,
       hidden: hidden,
-      name: name);
+      name: name,
+      conditions: conditions);
 
   Token withHidden(bool hidden) => Token(
       id: id,
@@ -221,7 +228,8 @@ final class Token extends Entity {
       image: image,
       owner: owner,
       hidden: hidden,
-      name: name);
+      name: name,
+      conditions: conditions);
 
   /// The owner can't be cleared here: use [withOwner].
   Token copyWith(
@@ -237,7 +245,18 @@ final class Token extends Entity {
           image: image ?? this.image,
           owner: owner,
           hidden: hidden,
-          name: name ?? this.name);
+          name: name ?? this.name,
+          conditions: conditions);
+
+  Token withConditions(Map<String, int?> conditions) => Token(
+      id: id,
+      position: position,
+      size: size,
+      image: image,
+      owner: owner,
+      hidden: hidden,
+      name: name,
+      conditions: Map.unmodifiable(conditions));
 
   @override
   Json _fields() => {
@@ -248,6 +267,7 @@ final class Token extends Entity {
         if (owner != null) 'owner': owner!.value,
         'hidden': hidden,
         if (name.isNotEmpty) 'name': name,
+        if (conditions.isNotEmpty) 'conditions': conditions,
       };
 
   factory Token._fromJson(Json json) => Token(
@@ -258,6 +278,11 @@ final class Token extends Entity {
         owner: json['owner'] == null ? null : PlayerId(json['owner'] as String),
         hidden: json['hidden'] as bool,
         name: json['name'] as String? ?? '',
+        conditions: Map.unmodifiable({
+          for (final MapEntry(:key, :value)
+              in (json['conditions'] as Map? ?? const {}).entries)
+            key as String: value as int?,
+        }),
       );
 }
 

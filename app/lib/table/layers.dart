@@ -2,7 +2,9 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:chimera_core/chimera_core.dart';
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/widgets.dart';
+import 'package:tactical_engine/tactical_engine.dart' show SquareGrid;
 
 import '../theme.dart';
 import '../members.dart' show members;
@@ -58,6 +60,127 @@ class GridPainter extends CustomPainter {
 
 /// The token being dragged, drawn at [position] instead of its stored one.
 typedef TokenDrag = ({TokenId id, Offset position});
+
+/// Cells from [a] to [b], each diagonal counting one.
+// ponytail: the diagonal rule and the unit (feet, metres) belong to the
+// system pack, in phase 4. Until then: cells, D&D 5e's default diagonals.
+int rulerCells(Grid grid, Point a, Point b) =>
+    SquareGrid(cellSize: grid.cellSize, offset: grid.offset).steps(a, b).round();
+
+/// Rulers being dragged, this client's and everyone else's: a line between
+/// the ends, and the distance.
+class RulerPainter extends CustomPainter {
+  RulerPainter(this.ruler, this.others, this.grid)
+      : super(repaint: Listenable.merge([ruler, others]));
+
+  final ValueListenable<(Point, Point)?> ruler;
+  final ValueListenable<List<((Point, Point), Color)>> others;
+  final Grid grid;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    for (final (r, color) in others.value) {
+      _paint(canvas, r.$1, r.$2, color);
+    }
+    if (ruler.value case (final from, final to)) {
+      _paint(canvas, from, to, CvColors.bone100);
+    }
+  }
+
+  void _paint(Canvas canvas, Point from, Point to, Color color) {
+    final u = grid.cellSize / CvSizes.token; // One design pixel.
+    final a = Offset(from.x, from.y), b = Offset(to.x, to.y);
+    final paint = Paint()
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+    canvas
+      ..drawLine(a, b, paint
+        ..color = const Color(0xB3101216)
+        ..strokeWidth = 6 * u)
+      ..drawLine(a, b, paint
+        ..color = color
+        ..strokeWidth = 3 * u);
+    final dot = Paint()..color = color;
+    canvas
+      ..drawCircle(a, 5 * u, dot)
+      ..drawCircle(b, 5 * u, dot);
+
+    final cells = rulerCells(grid, from, to);
+    final label = TextPainter(
+      text: TextSpan(
+          text: cells == 1 ? '1 cell' : '$cells cells',
+          style: CvTypography.label.copyWith(
+              fontSize: 14 * u,
+              fontFamily: CvTypography.mono,
+              color: CvColors.textPrimary)),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    final pill = Rect.fromCenter(
+      center: b - Offset(0, 22 * u),
+      width: label.width + 16 * u,
+      height: label.height + 8 * u,
+    );
+    canvas.drawRRect(RRect.fromRectAndRadius(pill, Radius.circular(8 * u)),
+        Paint()..color = CvColors.surfacePanelSolid);
+    label.paint(canvas, pill.center - Offset(label.width / 2, label.height / 2));
+  }
+
+  @override
+  bool shouldRepaint(RulerPainter old) =>
+      old.ruler != ruler || old.others != others || old.grid != grid;
+}
+
+/// A ping on the map: where, in whose colour, and a key for its ripple.
+typedef MapPing = ({Point at, Color color, Key key});
+
+/// How long a ping shows.
+const pingDuration = Duration(milliseconds: 1600);
+
+/// One ping: a ring spreading out and fading, around a dot.
+class PingRipple extends StatelessWidget {
+  const PingRipple({super.key, required this.color});
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => TweenAnimationBuilder<double>(
+        tween: Tween(begin: 0, end: 1),
+        duration: pingDuration,
+        builder: (context, t, _) =>
+            CustomPaint(painter: _RipplePainter(color, t)),
+      );
+}
+
+class _RipplePainter extends CustomPainter {
+  _RipplePainter(this.color, this.t);
+
+  final Color color;
+  final double t;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final c = size.center(Offset.zero);
+    final r = size.shortestSide / 2;
+    final fade = 1 - t;
+    // Two rings, the second half a beat behind.
+    for (final lag in [0.0, 0.35]) {
+      final k = ((t - lag) / (1 - lag)).clamp(0.0, 1.0);
+      if (k == 0) continue;
+      canvas.drawCircle(
+          c,
+          r * Curves.easeOutCubic.transform(k),
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = r * 0.06
+            ..color = color.withValues(alpha: fade));
+    }
+    canvas.drawCircle(
+        c, r * 0.12, Paint()..color = color.withValues(alpha: fade));
+  }
+
+  @override
+  bool shouldRepaint(_RipplePainter old) => old.t != t || old.color != color;
+}
 
 /// Tokens gliding to where they were dropped. Only drops are sent, so
 /// everyone but the one dragging sees a token jump; this eases it over
@@ -127,27 +250,47 @@ class TokenPainter extends CustomPainter {
   /// with it.
   final int imagesRevision;
 
-  /// Laid-out names, so a drag doesn't lay text out again every frame.
+  /// Laid-out labels, so a drag doesn't lay text out again every frame.
   final _labels = <TokenId, (String, double, TextPainter)>{};
 
-  TextPainter _label(Token token, double u) {
-    if (_labels[token.id] case (final name, final size, final painter)
-        when name == token.name && size == token.size) {
+  /// The name, and the conditions on a second line: "Darkness 2 · Prone".
+  /// Empty for neither.
+  static String labelText(Token token) {
+    final conditions = [
+      for (final MapEntry(:key, :value) in token.conditions.entries)
+        value == null ? key : '$key $value',
+    ].join(' · ');
+    return [
+      if (token.name.isNotEmpty) token.name,
+      if (conditions.isNotEmpty) conditions,
+    ].join('\n');
+  }
+
+  TextPainter _label(Token token, String text, double u) {
+    if (_labels[token.id] case (final cached, final size, final painter)
+        when cached == text && size == token.size) {
       return painter;
     }
+    final base = CvTypography.caption.copyWith(fontSize: 12 * u, height: 1.2);
     final painter = TextPainter(
-      text: TextSpan(
-          text: token.name,
-          style: CvTypography.caption.copyWith(
-              fontSize: 12 * u,
-              height: 1.2,
-              fontWeight: FontWeight.w600,
-              color: CvColors.textPrimary)),
+      text: TextSpan(children: [
+        if (token.name.isNotEmpty)
+          TextSpan(
+              text: token.name,
+              style: base.copyWith(
+                  fontWeight: FontWeight.w600, color: CvColors.textPrimary)),
+        if (text.length > token.name.length)
+          TextSpan(
+              text: text.substring(token.name.length),
+              style: base.copyWith(
+                  fontSize: 11 * u, color: CvColors.amber300)),
+      ]),
       textDirection: TextDirection.ltr,
-      maxLines: 1,
+      textAlign: TextAlign.center,
+      maxLines: 2,
       ellipsis: '…',
     )..layout(maxWidth: token.size * 2.5);
-    _labels[token.id] = (token.name, token.size, painter);
+    _labels[token.id] = (text, token.size, painter);
     return painter;
   }
 
@@ -232,9 +375,10 @@ class TokenPainter extends CustomPainter {
         canvas.drawCircle(center, radius + 8 * u, stroke);
       }
 
-      // Name, on a dark pill under the ring.
-      if (token.name.isNotEmpty) {
-        final label = _label(token, u);
+      // Name and conditions, on a dark pill under the ring.
+      final text = labelText(token);
+      if (text.isNotEmpty) {
+        final label = _label(token, text, u);
         final pill = Rect.fromCenter(
           center: center +
               Offset(0, ringRadius + ringWidth / 2 + 4 * u + label.height / 2 + 2 * u),
@@ -243,7 +387,7 @@ class TokenPainter extends CustomPainter {
         );
         fill.color = Color.fromARGB(token.hidden ? 0x73 : 0xD9, 0x10, 0x12, 0x16);
         canvas.drawRRect(
-            RRect.fromRectAndRadius(pill, Radius.circular(pill.height / 2)), fill);
+            RRect.fromRectAndRadius(pill, Radius.circular(10 * u)), fill);
         label.paint(canvas, pill.center - Offset(label.width / 2, label.height / 2));
       }
     }

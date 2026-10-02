@@ -431,6 +431,17 @@ Phases 1–4 alone make a usable VTT, and cinematic mode and the Solaris pack fo
 
 Phase 1 status 2026-10-03: map, grid, tokens, fog and save came with the POC. Undo was the last piece: the GM's own changes (not players' moves) can be undone and redone, up to 100 steps, with ⌘Z / ⇧⌘Z (Ctrl on other systems) or the rail's buttons, and players see the result like any other change. Loading a scene clears the history. Undo restores whole entities, so undoing a GM edit to a token also reverts a player's move of it made since.
 
+Phase 3 status 2026-10-03: players act.
+- **Own tokens:** players move only their own tokens (since the POC), and clicking one opens a card where they set its conditions.
+- **Tools:** players have their own rail: move (V), ruler (L) and ping (P). The GM's rail has the ruler and ping too. The ruler snaps to cell centres (Alt measures freely) and counts cells, a diagonal as one. Everyone sees it while it's dragged, in the measurer's colour: it travels in presence, at most 10 updates a second, and goes when they let go or leave.
+- **Dice:** typed in the log (`/r 2d6+3`, or `/roll`) or from its d4–d20 buttons. The GM's session rolls every die, players' included, so nobody picks their results.
+- **Pings:** a double-click on the map shows a ripple in the pinger's colour to everyone, above the fog. Pings aren't logged.
+- **Conditions:** free text with an optional value ("Darkness 2"), set and removed by the GM on any token and by players on their own. They show under the token's name.
+- **Log:** one panel at the bottom right that is also the chat. It holds rolls, messages and condition changes, never token moves. It's stored with the campaign (`log_entries`, readable only by the GM, like scenes), so it survives reloads and sessions. The room shows the last 200 entries, and players joining or resyncing get them with the snapshot.
+- **Secret entries:** the GM's "Roll in secret" switch, and condition changes on hidden tokens (marked "(hidden)"). They're logged and stored for the GM only, and never sent to players.
+
+Limits: the ruler counts cells only, with 5e diagonals, until system packs set the diagonal rule and unit (phase 4). Stored entries are never pruned. The protocol is now version 2, so clients on version 1 are refused.
+
 ---
 
 ## Architecture decision records

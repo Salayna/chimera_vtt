@@ -2,6 +2,7 @@
 /// loopback adapters, the protocol, and the host and client sessions.
 library;
 
+export 'src/events.dart';
 export 'src/protocol.dart';
 export 'src/sessions.dart';
 export 'src/supabase_transport.dart';

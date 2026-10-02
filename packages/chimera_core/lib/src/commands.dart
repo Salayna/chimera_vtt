@@ -28,6 +28,14 @@ sealed class Command {
             FogMode.values.byName(json['mode'] as String),
             FogShape.fromJson(json['shape'] as Json),
           ),
+        'setCondition' => SetCondition(TokenId(json['id'] as String),
+            json['name'] as String, json['value'] as int?),
+        'removeCondition' => RemoveCondition(
+            TokenId(json['id'] as String), json['name'] as String),
+        'rollDice' => RollDice(json['formula'] as String,
+            secret: json['secret'] as bool? ?? false),
+        'say' => Say(json['text'] as String),
+        'ping' => Ping(pointFromJson(json['at'])),
         final type => throw FormatException('Unknown command: $type'),
       };
 }
@@ -120,4 +128,75 @@ final class AddFogOp extends Command {
         'mode': mode.name,
         'shape': shape.toJson(),
       };
+}
+
+/// Adds a condition to a token, or changes its value. Players may, on their
+/// own tokens.
+final class SetCondition extends Command {
+  const SetCondition(this.id, this.name, [this.value]);
+
+  final TokenId id;
+  final String name;
+  final int? value;
+
+  @override
+  Json toJson() => {
+        'type': 'setCondition',
+        'id': id.value,
+        'name': name,
+        if (value != null) 'value': value,
+      };
+}
+
+final class RemoveCondition extends Command {
+  const RemoveCondition(this.id, this.name);
+
+  final TokenId id;
+  final String name;
+
+  @override
+  Json toJson() => {'type': 'removeCondition', 'id': id.value, 'name': name};
+}
+
+/// The following commands change nothing in the scene: the GM session turns
+/// them into events for the log (and, for a ping, the map).
+
+/// The GM rolls, so players can't pick their results.
+final class RollDice extends Command {
+  const RollDice(this.formula, {this.secret = false});
+
+  /// Checked with [DiceFormula.tryParse].
+  final String formula;
+
+  /// GM only: the roll is logged for the GM alone.
+  final bool secret;
+
+  @override
+  Json toJson() => {
+        'type': 'rollDice',
+        'formula': formula,
+        if (secret) 'secret': true,
+      };
+}
+
+/// A chat message.
+final class Say extends Command {
+  const Say(this.text);
+
+  static const maxLength = 500;
+
+  final String text;
+
+  @override
+  Json toJson() => {'type': 'say', 'text': text};
+}
+
+/// Draws everyone's eye to a point on the map for a moment.
+final class Ping extends Command {
+  const Ping(this.at);
+
+  final Point at;
+
+  @override
+  Json toJson() => {'type': 'ping', 'at': at.toJson()};
 }

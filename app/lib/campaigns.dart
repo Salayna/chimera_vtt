@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:chimera_core/chimera_core.dart';
+import 'package:chimera_sync/chimera_sync.dart' show Session, TableEvent;
 import 'package:flutter/widgets.dart';
 import 'package:supabase_flutter/supabase_flutter.dart'
     show PostgrestException, SupabaseClient;
@@ -117,6 +118,51 @@ class Scenes {
   Future<void> setLive(String id) =>
       _client.from('campaigns').update({'live_scene': id}).eq('id', campaign);
 }
+
+/// A campaign's log in Postgres, readable only by the campaign's GM, secret
+/// rolls included. Entries are events as JSON, the same as on the wire.
+// ponytail: entries are never pruned; trim old ones if a campaign's log
+// grows large enough to matter.
+class LogEntries {
+  LogEntries(this._client, this.campaign);
+
+  final SupabaseClient _client;
+  final String campaign;
+  Future<void> _last = Future.value();
+
+  /// The latest entries, oldest first. Entries this app can't read any more
+  /// are skipped.
+  Future<List<TableEvent>> recent() async {
+    final rows = await _client
+        .from('log_entries')
+        .select('event')
+        .eq('campaign', campaign)
+        .order('id', ascending: false)
+        .limit(Session.logLimit);
+    return [
+      for (final r in rows.reversed)
+        ?_tryEvent(r['event'] as Json),
+    ];
+  }
+
+  /// Stores [event] after any still being stored, so ids keep the log's
+  /// order. A failure is reported to [onError] and doesn't stop later ones.
+  void add(TableEvent event, {required void Function(Object) onError}) =>
+      _last = _last.then((_) => _client.from('log_entries').insert({
+            'campaign': campaign,
+            'event': event.toJson(),
+            'secret': event.secret,
+          })).catchError(onError);
+
+  static TableEvent? _tryEvent(Json json) {
+    try {
+      return TableEvent.fromJson(json);
+    } on Object {
+      return null;
+    }
+  }
+}
+
 
 /// The signed-in GM's campaigns: open one, start one, or change a code.
 class CampaignList extends StatefulWidget {

@@ -160,6 +160,61 @@ void main() {
           Refusal.invalid);
     });
 
+    test('players mark their own tokens with conditions', () {
+      final store = SceneStore(scene);
+      expect(store.execute(alice, const SetCondition(TokenId('mine'), 'Poisoned')),
+          isA<Accepted>());
+      store.execute(alice, const SetCondition(TokenId('mine'), 'Darkness', 2));
+      store.execute(gm, const SetCondition(TokenId('mine'), 'Poisoned', 1));
+      final mine = store.scene.tokens[const TokenId('mine')]!;
+      expect(mine.conditions, {'Poisoned': 1, 'Darkness': 2});
+      final decoded =
+          Entity.fromJson(jsonDecode(jsonEncode(mine.toJson())) as Json);
+      expect((decoded as Token).conditions, mine.conditions);
+      store.execute(alice, const RemoveCondition(TokenId('mine'), 'Poisoned'));
+      expect(store.scene.tokens[const TokenId('mine')]!.conditions,
+          {'Darkness': 2});
+
+      expect(refusal(alice, const SetCondition(TokenId('theirs'), 'Prone')),
+          Refusal.notOwner);
+      expect(refusal(alice, const SetCondition(TokenId('secret'), 'Prone')),
+          Refusal.notFound);
+      expect(refusal(alice, const RemoveCondition(TokenId('mine'), 'Prone')),
+          Refusal.notFound);
+      for (final bad in [
+        const SetCondition(TokenId('mine'), ''),
+        const SetCondition(TokenId('mine'), ' Prone'),
+        SetCondition(const TokenId('mine'), 'x' * 31),
+        const SetCondition(TokenId('mine'), 'Prone', -1),
+        const SetCondition(TokenId('mine'), 'Prone', 100),
+      ]) {
+        expect(refusal(alice, bad), Refusal.invalid, reason: '${bad.toJson()}');
+        expect(Command.fromJson(bad.toJson()).toJson(), bad.toJson());
+      }
+    });
+
+    test('anyone rolls, chats and pings; bad input is refused', () {
+      for (final ok in [
+        const RollDice('2d6+3'),
+        const Say('Hello'),
+        const Ping((x: 1, y: 2)),
+      ]) {
+        expect(refusal(alice, ok), isNull);
+        expect(reduce(scene, alice, ok),
+            isA<Accepted>().having((a) => a.patches, 'patches', isEmpty));
+        expect(Command.fromJson(ok.toJson()).toJson(), ok.toJson());
+      }
+      expect(refusal(alice, const RollDice('2d')), Refusal.invalid);
+      expect(refusal(alice, const RollDice('d20', secret: true)),
+          Refusal.gmOnly);
+      expect(refusal(gm, const RollDice('d20', secret: true)), isNull);
+      expect(Command.fromJson(const RollDice('d4', secret: true).toJson())
+          .toJson(), const RollDice('d4', secret: true).toJson());
+      expect(refusal(alice, const Say('  ')), Refusal.invalid);
+      expect(refusal(alice, Say('x' * 501)), Refusal.invalid);
+      expect(refusal(alice, const Ping((x: double.nan, y: 0))), Refusal.invalid);
+    });
+
     test('fog ops get increasing orders', () {
       final store = SceneStore(scene);
       for (final id in ['f1', 'f2']) {
@@ -168,6 +223,28 @@ void main() {
       }
       expect([for (final f in store.scene.fogInOrder) f.order], [1, 2]);
     });
+  });
+
+  test('dice formulas parse within limits, and roll within their faces', () {
+    String? canon(String s) => DiceFormula.tryParse(s)?.toString();
+    expect(canon('2d6+3'), '2d6 + 3');
+    expect(canon('D20'), '1d20');
+    expect(canon(' 1d8 + 1d4 - 1 '), '1d8 + 1d4 - 1');
+    expect(canon('-1+d4'), '-1 + 1d4');
+    for (final bad in [
+      '', '3', 'd', '2d', 'd1', '0d6', '101d6', '1d1001', '2d6+', '2d6 3',
+      '2d6*2', '1+2+3+4+5+6+7+8+9+10+1d4', 'abc', '1d6+20000',
+    ]) {
+      expect(DiceFormula.tryParse(bad), isNull, reason: bad);
+    }
+    final formula = DiceFormula.tryParse('3d6-2')!;
+    final random = Random(1);
+    for (var i = 0; i < 200; i++) {
+      final faces = formula.roll(random);
+      expect(faces.first, hasLength(3));
+      expect(faces.first.every((f) => f >= 1 && f <= 6), isTrue);
+      expect(formula.total(faces), faces.first.reduce((a, b) => a + b) - 2);
+    }
   });
 
   // The core half of hypothesis H3: a player who applies only their filtered

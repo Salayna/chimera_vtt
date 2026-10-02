@@ -16,6 +16,7 @@ import '../theme.dart';
 enum Lucide {
   check('<path d="M20 6 9 17l-5-5"/>'),
   chevronDown('<path d="m6 9 6 6 6-6"/>'),
+  chevronUp('<path d="m18 15-6-6-6 6"/>'),
   circleAlert(
       '<circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/>'),
   circleCheck('<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>'),
@@ -57,10 +58,14 @@ enum Lucide {
   paintbrush(
       '<path d="m14.622 17.897-10.68-2.913"/><path d="M18.376 2.622a1 1 0 1 1 3.002 3.002L17.36 9.643a.5.5 0 0 0 0 .707l.944.944a2.41 2.41 0 0 1 0 3.408l-.944.944a.5.5 0 0 1-.707 0L8.354 7.348a.5.5 0 0 1 0-.707l.944-.944a2.41 2.41 0 0 1 3.408 0l.944.944a.5.5 0 0 0 .707 0z"/><path d="M9 8c-1.804 2.71-3.97 3.46-6.583 3.948a.507.507 0 0 0-.302.819l7.32 8.883a1 1 0 0 0 1.185.204C12.735 20.405 16 16.792 16 15"/>'),
   plus('<path d="M5 12h14"/><path d="M12 5v14"/>'),
+  radio(
+      '<path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"/><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"/><path d="M19.1 4.9C23 8.8 23 15.1 19.1 19"/>'),
   redo2(
       '<path d="m15 14 5-5-5-5"/><path d="M20 9H9.5A5.5 5.5 0 0 0 4 14.5A5.5 5.5 0 0 0 9.5 20H13"/>'),
   refreshCw(
       '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>'),
+  ruler(
+      '<path d="M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.41 2.41 0 0 1 0-3.4l2.6-2.6a2.41 2.41 0 0 1 3.4 0Z"/><path d="m14.5 12.5 2-2"/><path d="m11.5 9.5 2-2"/><path d="m8.5 6.5 2-2"/><path d="m17.5 15.5 2-2"/>'),
   scan(
       '<path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/>'),
   squareDashed(
@@ -830,9 +835,13 @@ class CvTextInput extends StatefulWidget {
     this.maxLength,
     this.onChanged,
     this.onSubmitted,
+    this.keepFocus = false,
   });
 
   final TextEditingController controller;
+
+  /// Stays focused after Enter, for typing one line after another.
+  final bool keepFocus;
 
   /// Dots instead of the text: passwords.
   final bool obscure;
@@ -946,7 +955,17 @@ class _CvTextInputState extends State<CvTextInput> {
                         LengthLimitingTextInputFormatter(max),
                     ],
                     onChanged: widget.onChanged,
-                    onSubmitted: widget.onSubmitted,
+                    onSubmitted: (text) {
+                      widget.onSubmitted?.call(text);
+                      if (!widget.keepFocus) return;
+                      // On the web the browser's input closes on Enter even
+                      // when Flutter keeps focus: reopen it.
+                      _focus.unfocus();
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (mounted) _focus.requestFocus();
+                      });
+                    },
+                    onEditingComplete: widget.keepFocus ? () {} : null,
                   ),
                 ),
               ]),

@@ -58,6 +58,82 @@ void main() {
     expect(position.y, closeTo(192, 1));
   });
 
+  test('the ruler counts cells, a diagonal as one', () {
+    const grid = Grid(cellSize: 100);
+    expect(rulerCells(grid, (x: 50, y: 50), (x: 50, y: 50)), 0);
+    expect(rulerCells(grid, (x: 50, y: 50), (x: 350, y: 50)), 3);
+    expect(rulerCells(grid, (x: 50, y: 50), (x: 350, y: 250)), 3);
+  });
+
+  testWidgets("a player's ruler snaps to cell centres and goes on release",
+      (tester) async {
+    final store = SceneStore(Scene(
+        settings: const SceneSettings(
+            width: 1024, height: 1024, grid: Grid(cellSize: 128))));
+    final controller = TableController()..tool = Tool.ruler;
+    addTearDown(controller.dispose);
+    final pinged = <Point>[];
+    await tester.pumpWidget(Directionality(
+      textDirection: TextDirection.ltr,
+      child: TableView(
+        store: store,
+        controller: controller,
+        gm: false,
+        self: const PlayerId('p'),
+        send: (command) => store.execute(const Player(PlayerId('p')), command),
+        onPing: pinged.add,
+      ),
+    ));
+    await tester.pump();
+    // Scale 600/1024 with a 100 px margin: cell (1, 1) is around (212, 112).
+    final gesture = await tester.startGesture(const Offset(205, 105));
+    await gesture.moveTo(const Offset(100 + 600 * 4.4 / 8, 600 * 1.3 / 8));
+    await tester.pump();
+    final (from, to) = controller.ruler.value!;
+    expect(from, (x: 192.0, y: 192.0));
+    expect(to, (x: 576.0, y: 192.0));
+    expect(rulerCells(store.scene.settings.grid, from, to), 3);
+    await gesture.up();
+    await tester.pump();
+    expect(controller.ruler.value, isNull);
+    expect(store.scene.tokens, isEmpty); // Measuring changes nothing.
+
+    controller.tool = Tool.ping;
+    await tester.tapAt(const Offset(400, 300));
+    expect(pinged, hasLength(1));
+  });
+
+  testWidgets('a double-click pings where it lands; a single one does not',
+      (tester) async {
+    final store = SceneStore(Scene(
+        settings: const SceneSettings(
+            width: 1024, height: 1024, grid: Grid(cellSize: 128))));
+    final controller = TableController();
+    addTearDown(controller.dispose);
+    final pinged = <Point>[];
+    await tester.pumpWidget(Directionality(
+      textDirection: TextDirection.ltr,
+      child: TableView(
+        store: store,
+        controller: controller,
+        gm: false,
+        self: const PlayerId('p'),
+        send: (command) => store.execute(const Gm(), command),
+        onPing: pinged.add,
+      ),
+    ));
+    await tester.pump();
+    await tester.tapAt(const Offset(400, 300));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(pinged, isEmpty);
+    await tester.tapAt(const Offset(400, 300));
+    await tester.tapAt(const Offset(400, 300));
+    expect(pinged, hasLength(1));
+    // The middle of the fitted view is the middle of the map.
+    expect(pinged.single.x, closeTo(512, 1));
+    expect(pinged.single.y, closeTo(512, 1));
+  });
+
   testWidgets('pressing the map gives the table back its shortcuts',
       (tester) async {
     final store = SceneStore(Scene(
