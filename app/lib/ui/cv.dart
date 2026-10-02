@@ -908,26 +908,31 @@ class _CvTextInputState extends State<CvTextInput> {
                             style: style.copyWith(color: CvColors.slate400))
                         : const SizedBox.shrink(),
                   ),
-                EditableText(
-                  controller: widget.controller,
-                  focusNode: _focus,
-                  style: style,
-                  cursorColor: CvColors.amber500,
-                  backgroundCursorColor: CvColors.slate700,
-                  selectionColor: CvColors.selectionText,
-                  textCapitalization: widget.code
-                      ? TextCapitalization.characters
-                      : TextCapitalization.none,
-                  inputFormatters: [
-                    if (widget.code) ...[
-                      FilteringTextInputFormatter.allow(RegExp('[A-Za-z0-9]')),
-                      _UpperCase(),
+                // Without enabled, Flutter web renders the field's semantics
+                // <input> as disabled, so screen readers can't type into it.
+                Semantics(
+                  enabled: true,
+                  child: EditableText(
+                    controller: widget.controller,
+                    focusNode: _focus,
+                    style: style,
+                    cursorColor: CvColors.amber500,
+                    backgroundCursorColor: CvColors.slate700,
+                    selectionColor: CvColors.selectionText,
+                    textCapitalization: widget.code
+                        ? TextCapitalization.characters
+                        : TextCapitalization.none,
+                    inputFormatters: [
+                      if (widget.code) ...[
+                        FilteringTextInputFormatter.allow(RegExp('[A-Za-z0-9]')),
+                        _UpperCase(),
+                      ],
+                      if (widget.maxLength case final max?)
+                        LengthLimitingTextInputFormatter(max),
                     ],
-                    if (widget.maxLength case final max?)
-                      LengthLimitingTextInputFormatter(max),
-                  ],
-                  onChanged: widget.onChanged,
-                  onSubmitted: widget.onSubmitted,
+                    onChanged: widget.onChanged,
+                    onSubmitted: widget.onSubmitted,
+                  ),
                 ),
               ]),
             ),
