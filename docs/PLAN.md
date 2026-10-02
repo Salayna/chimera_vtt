@@ -259,10 +259,11 @@ All five built 2026-10-02, on the local stack. A hosted project needs `supabase 
 
 ### Library
 
-Decided 2026-10-02. The GM's account has one library of images, shared by all their campaigns, so a map or token picture is uploaded once and picked from then on. Entries are images only (maps and token pictures), not token templates. Built before the remaining POC measurements.
+Decided 2026-10-02. The GM's account has one library, shared by all their campaigns, so a map or token picture is uploaded once and picked from then on. Map and token entries are images only, not token templates. Scenes go in too, as copies: a library scene is a template that campaigns copy from, so playing a copy never changes it. Built before the remaining POC measurements.
 
 - **Shape:** a `library` table: owner, kind (`map` or `token`), name, the image's asset id, and a small thumbnail's asset id. One row per image and kind for each GM. Owner-only behind row-level security; anonymous users have none.
 - **Images** stay in Storage, named by content hash (ADR 006). A thumbnail (256 px) is made in the app at upload, so the library never downloads full maps to show them.
+- **Scenes** are a third kind, holding the scene's JSON (map, grid, tokens, fog) instead of an image; their thumbnail is their map's. Copying one into a campaign clears token owners, since owners are one campaign's members.
 
 Bricks:
 
@@ -270,6 +271,7 @@ Bricks:
 2. Change map picks from the library's maps, or uploads a new one.
 3. A token library on the rail: pick an image to place a token with it, or to change the selected token's image.
 4. Rename and delete library entries.
+5. Scenes: save a campaign's scene to the library, and start a new scene in any campaign as a copy of a library scene.
 
 ---
 

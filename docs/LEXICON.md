@@ -25,7 +25,7 @@ One word, one meaning. When code, docs and conversation disagree, this file wins
 | **Member** | — | A player who has entered a campaign's room at least once, with the name and colour they chose. Signed in or anonymous. The GM can remove one. A token's owner is a member. |
 | **Scene** | `Scene` | One map and everything on it. A set of entities keyed by id. |
 | **Map** | — | The background image of a scene. It's an asset, referenced from the scene settings. |
-| **Library** | — | A GM's images, shared by all their campaigns: maps and token pictures, each named, picked instead of uploaded again. |
+| **Library** | — | A GM's maps, token pictures and scenes, shared by all their campaigns, each named and picked instead of made again. A library scene is a template: campaigns get a copy. |
 | **Token** | `Token` | An entity standing for a creature or object on the map. It has a position, a size, an optional owner and a hidden flag. |
 | **Owner** | `Token.owner` | The player allowed to move a token. A token has no owner or exactly one. |
 | **Hidden** | `Token.hidden` | GM-only. A hidden token is never sent to players. Not the same as *under fog*. |
