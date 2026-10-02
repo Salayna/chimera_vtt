@@ -257,6 +257,20 @@ All five built 2026-10-02, on the local stack. A hosted project needs `supabase 
 - [x] A member's colour: the player picks it.
 - [x] Timing: starts now, alongside the remaining POC measurements, not after the go/no-go call (ADR 010 revised).
 
+### Library
+
+Decided 2026-10-02. The GM's account has one library of images, shared by all their campaigns, so a map or token picture is uploaded once and picked from then on. Entries are images only (maps and token pictures), not token templates. Built before the remaining POC measurements.
+
+- **Shape:** a `library` table: owner, kind (`map` or `token`), name, the image's asset id, and a small thumbnail's asset id. One row per image and kind for each GM. Owner-only behind row-level security; anonymous users have none.
+- **Images** stay in Storage, named by content hash (ADR 006). A thumbnail (256 px) is made in the app at upload, so the library never downloads full maps to show them.
+
+Bricks:
+
+1. Every upload by the GM (Change map, Change image) also goes into the library.
+2. Change map picks from the library's maps, or uploads a new one.
+3. A token library on the rail: pick an image to place a token with it, or to change the selected token's image.
+4. Rename and delete library entries.
+
 ---
 
 ## Tactical engine
