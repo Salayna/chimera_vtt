@@ -429,6 +429,8 @@ Phases 1–4 alone make a usable VTT, and cinematic mode and the Solaris pack fo
 | 6 | Solaris pack | Tags, trackers, threat cards, Atlas and Fantasy Statblocks importers | |
 | 7 | Hardening | Request checks, rate limits, private channels with row-level security, hosting, phone layout | |
 
+Phase 1 status 2026-10-03: map, grid, tokens, fog and save came with the POC. Undo was the last piece: the GM's own changes (not players' moves) can be undone and redone, up to 100 steps, with ⌘Z / ⇧⌘Z (Ctrl on other systems) or the rail's buttons, and players see the result like any other change. Loading a scene clears the history. Undo restores whole entities, so undoing a GM edit to a token also reverts a player's move of it made since.
+
 ---
 
 ## Architecture decision records

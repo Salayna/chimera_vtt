@@ -2,7 +2,8 @@ import 'dart:math' as math;
 
 import 'package:chimera_core/chimera_core.dart';
 import 'package:chimera_sync/chimera_sync.dart';
-import 'package:flutter/foundation.dart' show ValueListenable;
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, ValueListenable, defaultTargetPlatform;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
@@ -45,6 +46,9 @@ CvAvatar avatarFor(Presence p, {double size = CvSizes.avatar}) {
   );
 }
 
+/// The undo key's modifier, as the GM's platform writes it.
+String get _mod => defaultTargetPlatform == TargetPlatform.macOS ? '⌘' : 'Ctrl ';
+
 /// The GM's tools, a rail on the left edge.
 class GmRail extends StatelessWidget {
   const GmRail({
@@ -54,6 +58,8 @@ class GmRail extends StatelessWidget {
     this.onSetMap,
     this.onExport,
     this.onImport,
+    this.onUndo,
+    this.onRedo,
     this.onScenes,
     this.scenesOpen = false,
     this.onMembers,
@@ -73,6 +79,8 @@ class GmRail extends StatelessWidget {
   final VoidCallback? onSetMap;
   final VoidCallback? onExport;
   final VoidCallback? onImport;
+  final VoidCallback? onUndo;
+  final VoidCallback? onRedo;
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
@@ -101,6 +109,17 @@ class GmRail extends StatelessWidget {
                     onPressed: onMembers),
               const CvToolbarSeparator(),
             ],
+            CvToolButton(
+                icon: Lucide.undo2,
+                label: 'Undo',
+                shortcut: '${_mod}Z',
+                onPressed: onUndo),
+            CvToolButton(
+                icon: Lucide.redo2,
+                label: 'Redo',
+                shortcut: '$_mod⇧Z',
+                onPressed: onRedo),
+            const CvToolbarSeparator(),
             tool(Tool.move, Lucide.mousePointer2, 'Move', 'V'),
             const CvToolbarSeparator(),
             tool(Tool.fogBrush, Lucide.paintbrush, 'Fog brush', 'B'),
@@ -873,7 +892,8 @@ class _TokenCard extends StatelessWidget {
 }
 
 /// The table's single-key shortcuts. GM: V B R tools, T add token, D duplicate, M map, G grid,
-/// E export, I import, X cover/reveal, S snap, Del remove. Everyone:
+/// E export, I import, X cover/reveal, S snap, Del remove, Cmd/Ctrl+Z undo,
+/// Cmd/Ctrl+Shift+Z redo. Everyone:
 /// + − 0 zoom, Esc deselect.
 class TableShortcuts extends StatelessWidget {
   const TableShortcuts({
@@ -887,6 +907,8 @@ class TableShortcuts extends StatelessWidget {
     this.onImport,
     this.onRemove,
     this.onDuplicate,
+    this.onUndo,
+    this.onRedo,
   });
 
   final TableController controller;
@@ -898,10 +920,14 @@ class TableShortcuts extends StatelessWidget {
   final VoidCallback? onImport;
   final void Function(TokenId)? onRemove;
   final void Function(TokenId)? onDuplicate;
+  final VoidCallback? onUndo;
+  final VoidCallback? onRedo;
 
   @override
   Widget build(BuildContext context) {
     final c = controller;
+    void undo() => onUndo?.call();
+    void redo() => onRedo?.call();
     void remove() {
       if (c.selected.value case final id?) onRemove?.call(id);
     }
@@ -933,6 +959,12 @@ class TableShortcuts extends StatelessWidget {
           const CharacterActivator('i'): () => onImport?.call(),
           const SingleActivator(LogicalKeyboardKey.delete): remove,
           const SingleActivator(LogicalKeyboardKey.backspace): remove,
+          const SingleActivator(LogicalKeyboardKey.keyZ, meta: true): undo,
+          const SingleActivator(LogicalKeyboardKey.keyZ, control: true): undo,
+          const SingleActivator(LogicalKeyboardKey.keyZ, meta: true, shift: true):
+              redo,
+          const SingleActivator(LogicalKeyboardKey.keyZ,
+              control: true, shift: true): redo,
         },
       },
       child: Focus(autofocus: true, child: child),

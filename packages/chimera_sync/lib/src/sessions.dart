@@ -78,11 +78,63 @@ final class HostSession extends Session {
 
   int get seq => _seq;
 
-  /// The GM's own command. It never travels as an intent.
-  Outcome execute(Command command) => _run(const Gm(), command);
+  /// How many of the GM's own changes [undo] can take back.
+  static const historyLimit = 100;
+
+  // Each entry is the patches that take one change back (or redo it).
+  final _undo = <List<Patch>>[];
+  final _redo = <List<Patch>>[];
+  Command? _last;
+
+  bool get canUndo => _undo.isNotEmpty;
+  bool get canRedo => _redo.isNotEmpty;
+
+  /// The GM's own command. It never travels as an intent, and it is the only
+  /// thing that enters undo history: players' moves don't.
+  Outcome execute(Command command) {
+    final before = store.scene;
+    final outcome = _run(const Gm(), command);
+    if (outcome case Accepted(:final patches) when patches.isNotEmpty) {
+      // Typing a name sends one edit per key: keep them as one step.
+      // ponytail: any run of edits to one token is one step, size included.
+      final typing = command is UpdateToken &&
+          _last is UpdateToken &&
+          (_last! as UpdateToken).token.id == command.token.id &&
+          _undo.isNotEmpty;
+      if (!typing) {
+        _undo.add(invert(before, patches));
+        if (_undo.length > historyLimit) _undo.removeAt(0);
+      }
+      _redo.clear();
+      _last = command;
+    }
+    return outcome;
+  }
+
+  /// Takes back the GM's last change. False if there is nothing to undo.
+  bool undo() => _step(_undo, _redo);
+
+  /// Puts back the last change [undo] took back.
+  bool redo() => _step(_redo, _undo);
+
+  // ponytail: undo restores whole entities, so undoing the GM's edit to a
+  // token also reverts a player's move of it made since.
+  bool _step(List<List<Patch>> from, List<List<Patch>> to) {
+    if (from.isEmpty) return false;
+    final patches = from.removeLast();
+    final before = store.scene;
+    to.add(invert(before, patches));
+    store.apply(patches);
+    _broadcast(before, patches);
+    _last = null;
+    return true;
+  }
 
   /// Replaces the scene, for example a loaded save, and sends it to everyone.
   void load(Scene scene) {
+    _undo.clear();
+    _redo.clear();
+    _last = null;
     store.replace(scene);
     // A new seq, so a stale snapshot of the old scene can't win.
     _seq++;
@@ -99,19 +151,24 @@ final class HostSession extends Session {
     final outcome = store.execute(actor, command);
     switch (outcome) {
       case Accepted(:final patches):
-        final visible = patchesFor(before, patches, _players);
-        // An empty batch still answers an intent.
-        if (visible.isNotEmpty || requestId != null) {
-          _seq++;
-          _send(PatchBatch(
-              epoch: epoch, seq: _seq, patches: visible, requestId: requestId));
-        }
+        _broadcast(before, patches, requestId: requestId);
       case Refused(:final reason):
         if (from != null && requestId != null) {
           _send(RefusalMessage(to: from, requestId: requestId, reason: reason));
         }
     }
     return outcome;
+  }
+
+  /// Sends players their part of [patches], applied to [before].
+  void _broadcast(Scene before, List<Patch> patches, {String? requestId}) {
+    final visible = patchesFor(before, patches, _players);
+    // An empty batch still answers an intent.
+    if (visible.isNotEmpty || requestId != null) {
+      _seq++;
+      _send(PatchBatch(
+          epoch: epoch, seq: _seq, patches: visible, requestId: requestId));
+    }
   }
 
   @override

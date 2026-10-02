@@ -211,6 +211,52 @@ void main() {
     );
   });
 
+  test('the GM undoes and redoes their own changes, and players follow',
+      () async {
+    final table = Table(
+      Scene(
+        settings: settings,
+        tokens: {const TokenId('t'): token('t', owner: alice)},
+      ),
+    );
+    await table.join();
+    final host = table.host;
+    final start = host.store.scene.toJson();
+    host.execute(PlaceToken(token('new')));
+    host.execute(const SetTokenHidden(TokenId('t'), true));
+    host.execute(const AddFogOp(
+        FogOpId('f'), FogMode.cover, FogRect((x: 0, y: 0), (x: 1, y: 1))));
+    // Typing a name is one step, however many keys.
+    host.execute(UpdateToken(token('new').copyWith(name: 'O')));
+    host.execute(UpdateToken(token('new').copyWith(name: 'Ok')));
+    final end = host.store.scene.toJson();
+
+    for (var i = 0; i < 4; i++) {
+      expect(host.undo(), isTrue);
+    }
+    expect(host.undo(), isFalse);
+    expect(host.store.scene.toJson(), equals(start));
+    table.hub.flush();
+    table.expectConverged();
+
+    while (host.redo()) {}
+    expect(host.store.scene.toJson(), equals(end));
+    table.hub.flush();
+    table.expectConverged();
+
+    // A player's move is theirs: undo skips it and takes back the GM's last.
+    host.undo();
+    host.execute(const SetTokenHidden(TokenId('t'), false));
+    table.hub.flush();
+    table.clients[alice]!.request(const MoveToken(TokenId('t'), (x: 9, y: 9)));
+    table.hub.flush();
+    expect(host.canRedo, isFalse); // A new change clears redo.
+    host.undo();
+    table.hub.flush();
+    expect(host.store.scene.tokens[const TokenId('t')]!.hidden, isTrue);
+    table.expectConverged();
+  });
+
   test('loading a scene reaches every player', () async {
     final table = Table(Scene(settings: settings));
     await table.join();

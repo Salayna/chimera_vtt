@@ -1,5 +1,6 @@
 import 'entities.dart';
 import 'ids.dart';
+import 'scene.dart';
 
 /// One change to one entity.
 sealed class Patch {
@@ -38,3 +39,37 @@ final class Delete extends Patch {
   @override
   Json toJson() => {'op': 'delete', 'kind': kind.name, 'id': id};
 }
+
+/// The patches that turn `before.applyPatches(batch)` back into [before]:
+/// each entity's old value, or a delete if the batch created it.
+///
+/// Assumes at most one patch per entity, as [reduce] produces.
+List<Patch> invert(Scene before, List<Patch> batch) => [
+      for (final patch in batch)
+        switch (_old(before, patch)) {
+          final Entity old => Upsert(old),
+          null => switch (patch) {
+              Upsert(:final entity) => Delete(entity.kind, _id(entity)),
+              // Deleting what didn't exist: nothing to restore.
+              Delete() => patch,
+            },
+        },
+    ];
+
+Entity? _old(Scene before, Patch patch) {
+  final (kind, id) = switch (patch) {
+    Upsert(:final entity) => (entity.kind, _id(entity)),
+    Delete(:final kind, :final id) => (kind, id),
+  };
+  return switch (kind) {
+    EntityKind.settings => before.settings,
+    EntityKind.token => before.tokens[TokenId(id)],
+    EntityKind.fogOp => before.fogOps[FogOpId(id)],
+  };
+}
+
+String _id(Entity entity) => switch (entity) {
+      SceneSettings() => '',
+      Token(:final id) => id.value,
+      FogOp(:final id) => id.value,
+    };

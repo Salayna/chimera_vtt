@@ -971,6 +971,8 @@ class _GmRoomState extends State<GmRoom> {
       onImport: _import,
       onRemove: _removeToken,
       onDuplicate: _duplicateToken,
+      onUndo: host.undo,
+      onRedo: host.redo,
       child: Stack(children: [
         Positioned.fill(
           child: TableView(
@@ -1021,6 +1023,8 @@ class _GmRoomState extends State<GmRoom> {
               tokensOpen: _libraryOpen == LibraryKind.token,
               onExport: _export,
               onImport: _import,
+              onUndo: host.undo,
+              onRedo: host.redo,
               scenesOpen: _scenesOpen,
               onScenes: () => setState(() => _scenesOpen = !_scenesOpen),
               membersOpen: _membersOpen,
