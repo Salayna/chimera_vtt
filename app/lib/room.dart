@@ -247,10 +247,14 @@ class _GmRoomState extends State<GmRoom> {
   void _addToken() {
     final host = _host!;
     final scene = host.store.scene;
+    final size = scene.settings.grid.cellSize;
+    final center = _controller.viewCenter;
     host.execute(PlaceToken(Token(
       id: TokenId(newId()),
-      position: _controller.viewCenter,
-      size: scene.settings.grid.cellSize,
+      position: _controller.snap
+          ? scene.settings.grid.snap(center, size)
+          : center,
+      size: size,
       image: AssetId('token${scene.tokens.length % widget.art.tokens.length}'),
     )));
   }

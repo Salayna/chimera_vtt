@@ -45,6 +45,12 @@ class _GmToolbarState extends State<GmToolbar> {
           selected: {c.fogMode},
           onSelectionChanged: (s) => setState(() => c.fogMode = s.single),
         ),
+        FilterChip(
+          label: const Text('Snap'),
+          tooltip: 'Snap dropped tokens to the grid. Hold Alt to place freely.',
+          selected: c.snap,
+          onSelected: (snap) => setState(() => c.snap = snap),
+        ),
         if (widget.onAddToken != null)
           FilledButton.tonalIcon(
             onPressed: widget.onAddToken,

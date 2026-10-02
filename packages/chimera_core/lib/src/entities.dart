@@ -39,6 +39,21 @@ final class Grid {
   final double cellSize;
   final Point offset;
 
+  /// Where a token of [size] centred at [center] snaps to: its edges onto
+  /// the nearest grid lines, so a 2-cell token covers exactly 4 cells. A
+  /// token smaller than a cell snaps to the middle of the cell it's in.
+  Point snap(Point center, double size) {
+    double axis(double c, double origin) {
+      if (size < cellSize) {
+        return origin + (((c - origin) / cellSize).floor() + 0.5) * cellSize;
+      }
+      final edge = ((c - size / 2 - origin) / cellSize).round() * cellSize;
+      return origin + edge + size / 2;
+    }
+
+    return (x: axis(center.x, offset.x), y: axis(center.y, offset.y));
+  }
+
   Json toJson() => {'cellSize': cellSize, 'offset': offset.toJson()};
 
   factory Grid.fromJson(Json json) => Grid(

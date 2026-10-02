@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 
 import 'package:chimera_core/chimera_core.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import 'fog_mask.dart';
@@ -19,6 +20,9 @@ class TableController {
   final fogPreview = ValueNotifier<FogPreview?>(null);
   final selected = ValueNotifier<TokenId?>(null);
   Tool tool = Tool.move;
+
+  /// Dropped tokens snap to the grid. Holding Alt places one freely.
+  bool snap = true;
   FogMode fogMode = FogMode.cover;
   double brushRadius = 48;
   Size _viewport = Size.zero;
@@ -289,7 +293,14 @@ class _TableViewState extends State<TableView> {
   void _up({required bool send}) {
     if (_c.drag.value case (:final id, :final position)) {
       if (send && _moved) {
-        widget.send(MoveToken(id, (x: position.dx, y: position.dy)));
+        final Point to = (x: position.dx, y: position.dy);
+        final token = _scene.tokens[id];
+        final snap = _c.snap != HardwareKeyboard.instance.isAltPressed;
+        widget.send(MoveToken(
+            id,
+            snap && token != null
+                ? _scene.settings.grid.snap(to, token.size)
+                : to));
       } else if (send) {
         _c.selected.value = id; // A click, not a drag.
       }

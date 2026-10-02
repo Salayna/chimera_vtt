@@ -56,6 +56,16 @@ void main() {
         throwsUnsupportedError);
   });
 
+  test('tokens snap to the grid by their edges, small ones to cell centres', () {
+    const grid = Grid(cellSize: 100, offset: (x: 10, y: 0));
+    expect(grid.snap((x: 160, y: 40), 100), (x: 160.0, y: 50.0)); // 1 cell
+    expect(grid.snap((x: 105, y: 40), 100), (x: 60.0, y: 50.0)); // left half
+    expect(grid.snap((x: 212, y: 190), 200), (x: 210.0, y: 200.0)); // 2x2
+    expect(grid.snap((x: 290, y: 180), 300), (x: 260.0, y: 150.0)); // 3x3
+    expect(grid.snap((x: 105, y: 199), 50), (x: 60.0, y: 150.0)); // small
+    expect(grid.snap((x: -40, y: -60), 100), (x: -40.0, y: -50.0)); // off map
+  });
+
   group('reduce', () {
     final scene = sceneWith([
       token('mine', owner: alice.id),
