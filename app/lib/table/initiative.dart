@@ -132,6 +132,9 @@ class _Entry extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback? onRemove;
 
+  /// The GM's remove button shows on hover, to keep the bar quiet.
+  bool removable(CvStates s) => onRemove != null && s.hover;
+
   @override
   Widget build(BuildContext context) {
     final name = token.name.isEmpty ? 'Token' : token.name;
@@ -141,7 +144,7 @@ class _Entry extends StatelessWidget {
       radius: CvRadii.md,
       builder: (s) => Container(
         height: CvSizes.controlSm,
-        padding: EdgeInsets.only(left: 8, right: onRemove == null ? 10 : 0),
+        padding: EdgeInsets.only(left: 8, right: removable(s) ? 0 : 10),
         decoration: BoxDecoration(
           color: current
               ? CvColors.amberTint
@@ -175,7 +178,7 @@ class _Entry extends StatelessWidget {
           Text('$value',
               style: CvTypography.label.copyWith(
                   fontFamily: CvTypography.mono, color: CvColors.textSecondary)),
-          if (onRemove case final remove?)
+          if (onRemove case final remove? when removable(s))
             CvToolButton(
               icon: Lucide.x,
               label: 'Take $name out',

@@ -450,7 +450,17 @@ Phase 3 status 2026-10-03: players act.
 - **Log:** one panel at the bottom right that is also the chat. It holds rolls, messages and condition changes, never token moves. It's stored with the campaign (`log_entries`, readable only by the GM, like scenes), so it survives reloads and sessions. The room shows the last 200 entries, and players joining or resyncing get them with the snapshot.
 - **Secret entries:** the GM's "Roll in secret" switch, and condition changes on hidden tokens (marked "(hidden)"). They're logged and stored for the GM only, and never sent to players.
 
-Limits: the ruler counts cells only, with 5e diagonals, until system packs set the diagonal rule and unit (phase 4). Stored entries are never pruned. The protocol is now version 2, so clients on version 1 are refused.
+Limits: condition changes on hidden tokens aren't logged. Stored entries are never pruned. The protocol is now version 2, so clients on version 1 are refused.
+
+Phase 4 status 2026-10-03: tactical rules, through the tactical engine.
+- **System packs:** a scene names its pack, picked by the GM in the grid panel. Two ship built in: Generic (cells, free-text conditions) and D&D 5e (5 ft cells, the SRD conditions and terrain, summarised). A new scene keeps the live scene's pack. Solaris Arcanum stays phase 6.
+- **Measuring:** the ruler speaks the pack: "15 ft", "3 cells", a range band when the pack has bands, and "no sight" through a region that blocks it.
+- **Conditions:** the token card offers the pack's conditions from a menu and shows their rules text on hover. Typed ones still work.
+- **Regions (sectors and zones):** the GM's region tool (A) marks whole cells (Alt for exact), and its panel gives them the pack's tags or typed ones, hides them from players, or deletes them. Regions show their tags on the map; the token card names the terrain under a token.
+- **Moves:** dragging a token shows the move's cost in the pack's unit, with the entry checks of the regions it enters (Traversal) and whether one is full. It informs; it doesn't refuse.
+- **Initiative:** the GM rolls the pack's formula for everyone on the map, steps through turns and rounds, takes tokens out, rolls again or ends the fight. A player ends their own token's turn. Hidden tokens stay out of the players' order.
+
+Limits: regions are rectangles; freeform zones need polygons. Move cost counts the destination's terrain, not the path. Occupant limits and entry checks are shown, not enforced. Initiative values can't be edited by hand, rolls don't go to the log, and tokens added mid-fight join only on a new roll. Protocol is version 3.
 
 ---
 

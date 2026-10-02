@@ -45,17 +45,17 @@ One word, one meaning. When code, docs and conversation disagree, this file wins
 | Term | Code | Meaning |
 | --- | --- | --- |
 | **Entity** | `Entity` (sealed) | A piece of scene state with its own identity that changes independently. It's the unit of sync, visibility, permission and persistence. It has an id, a kind and a schema version. See [Entity or field?](#entity-or-field). |
-| **Kind** | `EntityKind` | Which type of entity: `token`, `fogOp`, `settings`… Sent on the wire so a bare id can be resolved. |
+| **Kind** | `EntityKind` | Which type of entity: `settings`, `token`, `fogOp`, `region`, `initiative`. Sent on the wire so a bare id can be resolved. |
 | **Field** | — | A value inside an entity with no identity of its own, for example a token's position or the grid. |
 | **Id** | `TokenId`, `FogOpId`… | An entity's identity. It never changes and is never reused. Typed per kind with extension types. |
-| **Scene settings** | `SceneSettings` | The single-instance entity holding the map asset, map size, grid, whether grid lines show, and default fog. It has no id: its kind identifies it, and it can't be deleted. |
+| **Scene settings** | `SceneSettings` | The single-instance entity holding the map asset, map size, grid, whether grid lines show, default fog, and the scene's system pack (`pack`, an id such as `dnd5e`). It has no id: its kind identifies it, and it can't be deleted. |
 | **Fog op** | `FogOp` | One fog operation (`FogMode.cover` or `reveal`) with a shape and an `order`. |
 | **Fog shape** | `FogShape` (sealed) | `FogRect` (two opposite corners) or `FogBrush` (a polyline of points swept by a radius). |
 | **Order** | `FogOp.order` | A fog op's drawing position. Assigned by the reducer as the current maximum + 1, never by the client. |
 | **Point** | `Point` | A position in world coordinates (map pixels), as a Dart record `({double x, double y})`. JSON: `[x, y]`. |
 | **Token size** | `Token.size` | Width and height in world units, like positions, so it works on gridless maps. |
 | **Actor** | `Actor` (sealed) | Who issues a command: `Gm` or `Player(PlayerId)`. These are the same `Gm` and `Player` as under [At the table](#at-the-table). Permissions follow the actor's role, not their id. |
-| **Command** | `Command` (sealed) | A request to change the scene: `UpdateSettings`, `PlaceToken`, `MoveToken`, `AssignOwner`, `SetTokenHidden`, `RemoveToken`, `AddFogOp`. Principle 2: nothing changes state except a command. Players may only send `MoveToken`. |
+| **Command** | `Command` (sealed) | A request to change the scene: `UpdateSettings`, `PlaceToken`, `UpdateToken`, `MoveToken`, `AssignOwner`, `SetTokenHidden`, `RemoveToken`, `AddFogOp`, `SetCondition`, `RemoveCondition`, `PlaceRegion`, `UpdateRegion`, `RemoveRegion`, `SetInitiative`, `EndInitiative`, `EndTurn`, and the event-only `RollDice`, `Say`, `Ping`. Principle 2: nothing changes state except a command. Players may send `MoveToken`, `SetCondition` and `RemoveCondition` for their own tokens, `EndTurn` on their own token's turn, and `RollDice`, `Say` and `Ping`. |
 | **New id** | `newId` | A random 128-bit hex id, minted by the GM session before the command, so the reducer stays pure. |
 | **Reducer** | `reduce` | The pure function `(scene, actor, command) → accepted patches or refusal`. It changes no state itself. |
 | **Outcome** | `Outcome` (sealed) | What the reducer returns: `Accepted(patches)` or `Refused(refusal)`. |
@@ -105,7 +105,8 @@ Otherwise it's a field of some entity.
 | **Roll** | `RollDice`, `Roll` | A dice roll: the command carries the formula, and the event the faces and total. The GM rolls, never the player. |
 | **Dice formula** | `DiceFormula` | Dice and constants added or subtracted: `2d6+3`, `d20`, `1d8+1d4-1`. Bounded, since players type it. |
 | **Ping** | `Ping`, `PingEvent` | A ripple on the map for a moment, to draw everyone's eye to a point. The ping tool (P) or a double-click makes one. |
-| **Ruler** | `Tool.ruler`, `rulerCells`, `Presence.ruler` | Measures in cells between two cell centres, a diagonal counting one. Shared with everyone through presence while it's dragged. |
+| **Ruler** | `Tool.ruler`, `rulerLabel`, `Presence.ruler` | Measures between two cell centres in the scene pack's unit and diagonal rule, names the range band if the pack has bands, and says when sight is blocked. Shared with everyone through presence while it's dragged. |
+| **Move cost** | `MovePainter`, `checkMove` | What a dragged token's move costs in the pack's unit, with the checks its destination's regions ask for and whether one is full. Shown to whoever drags. |
 | **Player rail** | `PlayerRail` | A player's tools on the left edge: move, ruler, ping. |
 | **Asset** | `AssetId` | An uploaded file, usually an image. Its id is the SHA-256 of its bytes (ADR 006). |
 
@@ -114,20 +115,23 @@ Otherwise it's a field of some entity.
 | Term | Code | Meaning |
 | --- | --- | --- |
 | **Tactical engine** | `tactical_engine` | The pure-Dart rules package: topology, regions, measurement, sight and tag effects. It knows no game system. |
-| **System pack** | `SystemPack` | A data file defining a game system: conditions, tags, range bands, trackers, sheet fields. |
+| **System pack** | `SystemPack` | A data file defining a game system: conditions, tags, range bands, trackers, sheet fields. A scene names the one it's played with. |
+| **Built-in pack** | `builtInPacks`, `packFor` | A pack that ships with the app: `generic` (cells, free-text conditions) and `dnd5e` (feet, the SRD conditions and terrain). An unknown id plays as Generic. |
 | **Topology** | `Topology` (sealed) | How space is divided: `SquareGrid` or `Gridless` today; hex grids and freeform zones later. The pack picks the kind, the scene supplies the scale. |
 | **Step** | `Topology.steps` | The topology's unit of distance: one cell, or one cell size on a gridless map. A pack converts steps to its own unit with `unitsPerStep`. |
 | **Diagonal rule** | `DiagonalRule` | How a square grid counts diagonals: `chebyshev` (all 1), `manhattan` (all 2), `alternating` (1, 2, 1…). |
-| **Region** | `Region` | An area that carries tags: a sector, zone, or spell area. |
+| **Region** | `Region` | An area that carries tags: a sector, zone, or spell area. In core, an entity: a rectangle on the map with tags and a hidden flag, placed with the region tool (A). The engine has its own `Region` with any shape. |
 | **Sector** | — | A region holding sector tags. In Solaris Arcanum, one 20 ft grid cell. |
 | **Zone** | — | A freeform region used by zone-based systems. |
 | **Tag** | `Tag` | A named property on a region or entity, with an optional value, as the record `({String name, int? value})`, for example Heavy Cover or Darkness (2). Defined in a pack by a `TagDef`. |
 | **Sector tag** | — | A tag whose definition has the `sector` flag, so it applies to a sector. |
-| **Condition** | `Token.conditions` | A tag on a token, optionally with a value, for example Darkness (2). Free text until system packs define them (phase 4). A player may set and remove conditions on their own tokens. |
+| **Condition** | `Token.conditions` | A tag on a token, optionally with a value, for example Darkness (2). The scene's pack offers its conditions and explains them; any name can still be typed. A player may set and remove conditions on their own tokens. |
 | **Tag effect** | `Effect` (sealed) | What a tag does, built from data building blocks (ADR 012): `RollModifier`, `MoveCost`, `BlocksSight`, `OccupantLimit`, `EntryCheck`. Anything the blocks can't express stays as rules text. |
 | **Shape** | `Shape` (sealed) | A region's area: `Polygon` or `Circle`. |
 | **Sight** | `canSee` | Line of sight. A region with `BlocksSight` stops sight through it, not into or out of it, and grazing its edge doesn't count. |
 | **Range band** | `RangeBand` | A named distance bracket defined by a pack, for example Point Blank or Far. |
+| **Initiative** | `Initiative` | The turn order while a fight is on: a single-instance entity listing tokens from highest value to lowest, the round, and whose turn it is. The GM rolls the pack's formula for everyone on the map. Players don't see hidden tokens in it, nor their turns. |
+| **Turn** | `Initiative.current`, `EndTurn` | One token's go. Ending it passes to the next in the order, and after the last a new **round** starts. |
 | **Precise movement** | — | Solaris' option to use exact positions inside sectors. |
 
 ## Project

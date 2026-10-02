@@ -490,14 +490,18 @@ class FogPainter extends CustomPainter {
 /// A label pill, as the ruler draws it, centred on [center]. [u] is one
 /// design pixel in scene units.
 void _pill(Canvas canvas, String text, Offset center, double u,
-    {Color color = CvColors.textPrimary}) {
+    {Color color = CvColors.textPrimary, bool mono = true, double? maxWidth}) {
   final label = TextPainter(
     text: TextSpan(
         text: text,
         style: CvTypography.label.copyWith(
-            fontSize: 14 * u, fontFamily: CvTypography.mono, color: color)),
+            fontSize: (mono ? 14 : 12) * u,
+            fontFamily: mono ? CvTypography.mono : null,
+            color: color)),
     textDirection: TextDirection.ltr,
-  )..layout();
+    maxLines: 1,
+    ellipsis: '…',
+  )..layout(maxWidth: maxWidth ?? double.infinity);
   final pill = Rect.fromCenter(
     center: center,
     width: label.width + 16 * u,
@@ -552,7 +556,9 @@ class RegionPainter extends CustomPainter {
       final text = [if (r.hidden) 'Hidden', ...tags].join(' · ');
       if (text.isNotEmpty) {
         _pill(canvas, text, Offset(rect.center.dx, rect.top + 14 * u), u,
-            color: r.hidden ? CvColors.textSecondary : CvColors.textPrimary);
+            color: r.hidden ? CvColors.textSecondary : CvColors.textPrimary,
+            mono: false,
+            maxWidth: rect.width - 24 * u);
       }
     }
     if (draft.value case (final a, final b)) {
