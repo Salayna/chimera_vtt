@@ -175,6 +175,22 @@ class FogOptions extends StatelessWidget {
       );
 }
 
+/// Keys typed in [child] (a text field) stay text: the table's single-key
+/// shortcuts above it don't see them.
+class TextKeysOnly extends StatelessWidget {
+  const TextKeysOnly({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Focus(
+        canRequestFocus: false,
+        skipTraversal: true,
+        onKeyEvent: (_, _) => KeyEventResult.skipRemainingHandlers,
+        child: child,
+      );
+}
+
 /// The grid's cell size, while the GM's grid panel is open. Applies each
 /// valid value as it's typed, so the GM sees the grid move over the map.
 /// Fit draws one cell over the map instead ([Tool.gridFit]).
@@ -253,11 +269,7 @@ class _GridOptionsState extends State<GridOptions> {
               const Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [CvOverline('Grid'), CvKbd('G')]),
-              // Keys typed here are text, not the table's shortcuts.
-              Focus(
-                canRequestFocus: false,
-                skipTraversal: true,
-                onKeyEvent: (_, _) => KeyEventResult.skipRemainingHandlers,
+              TextKeysOnly(
                 child: CvTextInput(
                   controller: _text,
                   label: 'Cell size (px)',
@@ -536,7 +548,7 @@ class TokenCardLayer extends StatelessWidget {
   static const width = 280.0;
 
   /// For keeping the card on screen; near enough to its real height.
-  static const height = 290.0;
+  static const height = 360.0;
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
@@ -643,7 +655,9 @@ class _TokenCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Token',
+                      Text(token.name.isEmpty ? 'Token' : token.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: CvTypography.weight(CvTypography.body, 600)),
                       Text(cellName(token.position, grid),
                           style: CvTypography.caption.copyWith(
@@ -668,6 +682,11 @@ class _TokenCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 spacing: 6,
                 children: [
+                  _NameField(
+                    name: token.name,
+                    onChanged: (name) =>
+                        send(UpdateToken(token.copyWith(name: name))),
+                  ),
                   StreamBuilder(
                     stream: session.peers,
                     initialData: session.currentPeers,
@@ -866,4 +885,42 @@ class _GroundPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_GroundPainter old) => false;
+}
+
+/// The token's name, applied as it's typed.
+class _NameField extends StatefulWidget {
+  const _NameField({required this.name, required this.onChanged});
+
+  final String name;
+  final ValueChanged<String> onChanged;
+
+  @override
+  State<_NameField> createState() => _NameFieldState();
+}
+
+class _NameFieldState extends State<_NameField> {
+  late final _text = TextEditingController(text: widget.name);
+
+  @override
+  void didUpdateWidget(_NameField old) {
+    super.didUpdateWidget(old);
+    if (widget.name != _text.text) _text.text = widget.name;
+  }
+
+  @override
+  void dispose() {
+    _text.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => TextKeysOnly(
+        child: CvTextInput(
+          controller: _text,
+          label: 'Name',
+          placeholder: 'Goblin 1',
+          maxLength: 40,
+          onChanged: widget.onChanged,
+        ),
+      );
 }

@@ -1,4 +1,5 @@
 import 'package:chimera_core/chimera_core.dart';
+import 'package:chimera_sync/chimera_sync.dart';
 import 'package:chimera_vtt/room.dart';
 import 'package:chimera_vtt/table/chrome.dart';
 import 'package:chimera_vtt/table/table_view.dart';
@@ -121,5 +122,42 @@ void main() {
 
     await tester.tap(find.text('Show grid lines'));
     expect(visible, [false]);
+  });
+
+  testWidgets('the token card names the token as it is typed', (tester) async {
+    tester.view.physicalSize = const Size(1440, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    const id = TokenId('t');
+    final host = HostSession(
+      LoopbackHub().connect(),
+      const PlayerId('gm'),
+      SceneStore(Scene(
+        settings: const SceneSettings(
+            width: 1000, height: 1000, grid: Grid(cellSize: 100)),
+        tokens: {id: const Token(id: id, position: (x: 50, y: 50), size: 100)},
+      )),
+    );
+    final controller = TableController();
+    addTearDown(controller.dispose);
+    controller.selected.value = id;
+    await tester.pumpWidget(cvApp(
+      title: 'test',
+      home: TableShortcuts(
+        controller: controller,
+        gm: true,
+        child: TokenCardLayer(
+          store: host.store,
+          session: host,
+          controller: controller,
+          send: host.execute,
+          onRemove: (_) {},
+        ),
+      ),
+    ));
+    await tester.enterText(find.byType(EditableText), 'Goblin 1');
+    await tester.pump();
+    expect(host.store.scene.tokens[id]!.name, 'Goblin 1');
+    expect(find.text('Goblin 1'), findsWidgets); // The card's title too.
   });
 }

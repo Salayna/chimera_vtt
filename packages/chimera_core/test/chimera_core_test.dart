@@ -123,7 +123,8 @@ void main() {
 
     test('the GM updates a token whole; bad sizes are refused', () {
       final mine = scene.tokens[const TokenId('mine')]!;
-      final pictured = mine.copyWith(image: const AssetId('face'));
+      final pictured =
+          mine.copyWith(image: const AssetId('face'), name: 'Goblin 1');
       expect(refusal(gm, UpdateToken(pictured)), isNull);
       expect(Command.fromJson(UpdateToken(pictured).toJson()).toJson(),
           UpdateToken(pictured).toJson());

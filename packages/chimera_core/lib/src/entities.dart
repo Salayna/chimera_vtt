@@ -151,6 +151,7 @@ final class Token extends Entity {
     this.image,
     this.owner,
     this.hidden = false,
+    this.name = '',
   });
 
   final TokenId id;
@@ -168,6 +169,9 @@ final class Token extends Entity {
   /// GM-only: a hidden token is never sent to players.
   final bool hidden;
 
+  /// Shown under the token. Empty for none.
+  final String name;
+
   @override
   EntityKind get kind => EntityKind.token;
 
@@ -177,7 +181,8 @@ final class Token extends Entity {
       size: size,
       image: image,
       owner: owner,
-      hidden: hidden);
+      hidden: hidden,
+      name: name);
 
   Token withOwner(PlayerId? owner) => Token(
       id: id,
@@ -185,7 +190,8 @@ final class Token extends Entity {
       size: size,
       image: image,
       owner: owner,
-      hidden: hidden);
+      hidden: hidden,
+      name: name);
 
   Token withHidden(bool hidden) => Token(
       id: id,
@@ -193,17 +199,24 @@ final class Token extends Entity {
       size: size,
       image: image,
       owner: owner,
-      hidden: hidden);
+      hidden: hidden,
+      name: name);
 
   /// The owner can't be cleared here: use [withOwner].
-  Token copyWith({TokenId? id, Point? position, double? size, AssetId? image}) =>
+  Token copyWith(
+          {TokenId? id,
+          Point? position,
+          double? size,
+          AssetId? image,
+          String? name}) =>
       Token(
           id: id ?? this.id,
           position: position ?? this.position,
           size: size ?? this.size,
           image: image ?? this.image,
           owner: owner,
-          hidden: hidden);
+          hidden: hidden,
+          name: name ?? this.name);
 
   @override
   Json _fields() => {
@@ -213,6 +226,7 @@ final class Token extends Entity {
         if (image != null) 'image': image!.value,
         if (owner != null) 'owner': owner!.value,
         'hidden': hidden,
+        if (name.isNotEmpty) 'name': name,
       };
 
   factory Token._fromJson(Json json) => Token(
@@ -222,6 +236,7 @@ final class Token extends Entity {
         image: json['image'] == null ? null : AssetId(json['image'] as String),
         owner: json['owner'] == null ? null : PlayerId(json['owner'] as String),
         hidden: json['hidden'] as bool,
+        name: json['name'] as String? ?? '',
       );
 }
 

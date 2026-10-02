@@ -82,6 +82,30 @@ class TokenPainter extends CustomPainter {
   final bool gm;
   final PlayerId self;
 
+  /// Laid-out names, so a drag doesn't lay text out again every frame.
+  final _labels = <TokenId, (String, double, TextPainter)>{};
+
+  TextPainter _label(Token token, double u) {
+    if (_labels[token.id] case (final name, final size, final painter)
+        when name == token.name && size == token.size) {
+      return painter;
+    }
+    final painter = TextPainter(
+      text: TextSpan(
+          text: token.name,
+          style: CvTypography.caption.copyWith(
+              fontSize: 12 * u,
+              height: 1.2,
+              fontWeight: FontWeight.w600,
+              color: CvColors.textPrimary)),
+      textDirection: TextDirection.ltr,
+      maxLines: 1,
+      ellipsis: '…',
+    )..layout(maxWidth: token.size * 2.5);
+    _labels[token.id] = (token.name, token.size, painter);
+    return painter;
+  }
+
   @override
   void paint(Canvas canvas, Size size) {
     final visible = canvas.getLocalClipBounds();
@@ -97,7 +121,7 @@ class TokenPainter extends CustomPainter {
       final u = token.size / CvSizes.token; // One design pixel.
       final radius = token.size / 2;
       if (!visible.overlaps(
-          Rect.fromCircle(center: center, radius: radius + 12 * u))) {
+          Rect.fromCircle(center: center, radius: radius + 40 * u))) {
         continue;
       }
       final isSelected = selected.value == token.id;
@@ -161,6 +185,21 @@ class TokenPainter extends CustomPainter {
           ..color = CvColors.amber500
           ..strokeWidth = 2 * u;
         canvas.drawCircle(center, radius + 8 * u, stroke);
+      }
+
+      // Name, on a dark pill under the ring.
+      if (token.name.isNotEmpty) {
+        final label = _label(token, u);
+        final pill = Rect.fromCenter(
+          center: center +
+              Offset(0, ringRadius + ringWidth / 2 + 4 * u + label.height / 2 + 2 * u),
+          width: label.width + 12 * u,
+          height: label.height + 4 * u,
+        );
+        fill.color = Color.fromARGB(token.hidden ? 0x73 : 0xD9, 0x10, 0x12, 0x16);
+        canvas.drawRRect(
+            RRect.fromRectAndRadius(pill, Radius.circular(pill.height / 2)), fill);
+        label.paint(canvas, pill.center - Offset(label.width / 2, label.height / 2));
       }
     }
   }
