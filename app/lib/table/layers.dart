@@ -6,19 +6,28 @@ import 'package:flutter/widgets.dart';
 
 import '../theme.dart';
 import 'fog_mask.dart';
+import 'table_view.dart' show TableController;
 
-/// Grid lines. Repaints only when the grid or the map size changes.
+/// Grid lines. Repaints when the grid or the map size changes, and for the
+/// GM's [controller]: brighter while the grid panel is open, and following
+/// the grid being fitted.
 class GridPainter extends CustomPainter {
-  const GridPainter(this.settings);
+  GridPainter(this.settings, [this.controller])
+      : super(repaint: controller == null
+            ? null
+            : Listenable.merge([controller, controller.gridFit]));
 
   final SceneSettings settings;
+  final TableController? controller;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final grid = settings.grid;
+    final fitting = controller?.gridFit.value;
+    final grid = fitting != null && fitting.valid ? fitting : settings.grid;
+    final setup = controller?.gridOptions ?? false;
     final paint = Paint()
-      ..color = const Color(0x40FFFFFF)
-      ..strokeWidth = 1;
+      ..color = setup ? CvColors.amber500.withValues(alpha: 0.85) : const Color(0x40FFFFFF)
+      ..strokeWidth = setup ? 2 : 1;
     final lines = <Offset>[];
     for (var x = grid.offset.x % grid.cellSize; x <= settings.width; x += grid.cellSize) {
       lines
@@ -36,6 +45,7 @@ class GridPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(GridPainter old) =>
+      old.controller != controller ||
       old.settings.grid.cellSize != settings.grid.cellSize ||
       old.settings.grid.offset != settings.grid.offset ||
       old.settings.width != settings.width ||

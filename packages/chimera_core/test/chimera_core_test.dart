@@ -66,6 +66,23 @@ void main() {
     expect(grid.snap((x: -40, y: -60), 100), (x: -40.0, y: -50.0)); // off map
   });
 
+  test('a grid fitted to one drawn cell', () {
+    // A 70 px square drawn at (215, 148), from either corner.
+    for (final (a, b) in [
+      ((x: 215.0, y: 148.0), (x: 285.0, y: 218.0)),
+      ((x: 285.0, y: 218.0), (x: 215.0, y: 148.0)),
+    ]) {
+      final grid = Grid.fitted(a, b);
+      expect(grid.cellSize, 70);
+      expect(grid.offset, (x: 5.0, y: 8.0)); // 215 % 70, 148 % 70
+    }
+    // A box that isn't quite square: the mean side.
+    expect(Grid.fitted((x: 0, y: 0), (x: 68, y: 72)).cellSize, 70);
+    // A click, or a box too small, isn't a grid.
+    expect(Grid.fitted((x: 10, y: 10), (x: 10, y: 10)).valid, isFalse);
+    expect(Grid.fitted((x: 0, y: 0), (x: 8, y: 8)).valid, isFalse);
+  });
+
   group('reduce', () {
     final scene = sceneWith([
       token('mine', owner: alice.id),

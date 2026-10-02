@@ -459,13 +459,8 @@ class _GmRoomState extends State<GmRoom> {
   void _setCellSize(double size) {
     final host = _host!;
     final old = host.store.scene.settings;
-    host.execute(UpdateSettings(SceneSettings(
-      map: old.map,
-      width: old.width,
-      height: old.height,
-      grid: Grid(cellSize: size, offset: old.grid.offset),
-      fogByDefault: old.fogByDefault,
-    )));
+    host.execute(UpdateSettings(
+        old.withGrid(Grid(cellSize: size, offset: old.grid.offset))));
   }
 
   Future<void> _export() async {

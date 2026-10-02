@@ -89,8 +89,7 @@ class GmRail extends StatelessWidget {
                 label: 'Grid',
                 shortcut: 'G',
                 active: controller.gridOptions,
-                onPressed: () =>
-                    controller.gridOptions = !controller.gridOptions),
+                onPressed: controller.toggleGridOptions),
             const CvToolbarSeparator(),
             CvToolButton(
                 icon: Lucide.download,
@@ -119,7 +118,9 @@ class FogOptions extends StatelessWidget {
         listenable: controller,
         builder: (context, _) {
           final tool = controller.tool;
-          if (tool == Tool.move) return const SizedBox.shrink();
+          if (tool != Tool.fogBrush && tool != Tool.fogRect) {
+            return const SizedBox.shrink();
+          }
           // The brush is sized in cells across; the controller holds a radius.
           final cells = (controller.brushRadius * 2 / grid.cellSize)
               .round()
@@ -176,6 +177,7 @@ class FogOptions extends StatelessWidget {
 
 /// The grid's cell size, while the GM's grid panel is open. Applies each
 /// valid value as it's typed, so the GM sees the grid move over the map.
+/// Fit draws one cell over the map instead ([Tool.gridFit]).
 class GridOptions extends StatefulWidget {
   const GridOptions(
       {super.key,
@@ -186,9 +188,6 @@ class GridOptions extends StatefulWidget {
   final TableController controller;
   final Grid grid;
   final ValueChanged<double> onCellSize;
-
-  static const minCell = 16;
-  static const maxCell = 1024;
 
   @override
   State<GridOptions> createState() => _GridOptionsState();
@@ -221,22 +220,25 @@ class _GridOptionsState extends State<GridOptions> {
 
   void _changed(String value) {
     final size = double.tryParse(value.trim());
-    final valid = size != null &&
-        size >= GridOptions.minCell &&
-        size <= GridOptions.maxCell;
+    final valid = size != null && Grid(cellSize: size).valid;
     setState(() => _error = valid
         ? null
-        : 'From ${GridOptions.minCell} to ${GridOptions.maxCell} px.');
+        : 'From ${Grid.minCellSize.round()} to ${Grid.maxCellSize.round()} px.');
     if (valid && size != widget.grid.cellSize) widget.onCellSize(size);
   }
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
         listenable: widget.controller,
-        builder: (context, child) => widget.controller.gridOptions
-            ? CvPopIn(child: child!)
+        builder: (context, _) => widget.controller.gridOptions
+            ? CvPopIn(child: _panel())
             : const SizedBox.shrink(),
-        child: CvPanel(
+      );
+
+  Widget _panel() {
+    final c = widget.controller;
+    final fitting = c.tool == Tool.gridFit;
+    return CvPanel(
           width: 220,
           padding: const EdgeInsets.all(CvSpacing.s5),
           child: Column(
@@ -260,13 +262,24 @@ class _GridOptionsState extends State<GridOptions> {
                 ),
               ),
               if (_error == null)
-                Text('Match one square of the map image.',
+                Text(
+                    fitting
+                        ? 'Drag a box over one square of the map. Zoom in first to be exact.'
+                        : 'Match one square of the map image, or fit it on the map.',
                     style: CvTypography.caption
                         .copyWith(color: CvColors.textSecondary)),
+              CvButton(
+                label: fitting ? 'Cancel fit' : 'Fit on map',
+                icon: fitting ? Lucide.x : Lucide.squareDashed,
+                small: true,
+                block: true,
+                variant: fitting ? CvButtonVariant.ghost : CvButtonVariant.secondary,
+                onPressed: () => c.tool = fitting ? Tool.move : Tool.gridFit,
+              ),
             ],
           ),
-        ),
-      );
+        );
+  }
 }
 
 /// Snap, zoom and fit, at the bottom right. [snap] shows the snap toggle
@@ -789,7 +802,7 @@ class TableShortcuts extends StatelessWidget {
           const CharacterActivator('s'): () => c.snap = !c.snap,
           const CharacterActivator('t'): () => onAddToken?.call(),
           const CharacterActivator('m'): () => onSetMap?.call(),
-          const CharacterActivator('g'): () => c.gridOptions = !c.gridOptions,
+          const CharacterActivator('g'): c.toggleGridOptions,
           const CharacterActivator('e'): () => onExport?.call(),
           const CharacterActivator('i'): () => onImport?.call(),
           const SingleActivator(LogicalKeyboardKey.delete): remove,

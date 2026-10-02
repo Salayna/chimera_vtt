@@ -39,6 +39,22 @@ final class Grid {
   final double cellSize;
   final Point offset;
 
+  static const minCellSize = 16.0;
+  static const maxCellSize = 1024.0;
+
+  /// The grid with one cell over the box from [a] to [b]: the box's mean
+  /// side, in whole pixels, with lines through its top-left corner.
+  // ponytail: one cell drawn by hand is off by a pixel or so, which adds up
+  // across a big map. Fit over several cells if that shows.
+  factory Grid.fitted(Point a, Point b) {
+    final size = (((a.x - b.x).abs() + (a.y - b.y).abs()) / 2).roundToDouble();
+    if (size == 0) return const Grid(cellSize: 0);
+    double origin(double u, double v) => (u < v ? u : v).round() % size;
+    return Grid(cellSize: size, offset: (x: origin(a.x, b.x), y: origin(a.y, b.y)));
+  }
+
+  bool get valid => cellSize >= minCellSize && cellSize <= maxCellSize;
+
   /// Where a token of [size] centred at [center] snaps to: its edges onto
   /// the nearest grid lines, so a 2-cell token covers exactly 4 cells. A
   /// token smaller than a cell snaps to the middle of the cell it's in.
@@ -80,6 +96,9 @@ final class SceneSettings extends Entity {
 
   /// Whether the whole map starts covered, so fog ops reveal it.
   final bool fogByDefault;
+
+  SceneSettings withGrid(Grid grid) => SceneSettings(
+      map: map, width: width, height: height, grid: grid, fogByDefault: fogByDefault);
 
   @override
   EntityKind get kind => EntityKind.settings;

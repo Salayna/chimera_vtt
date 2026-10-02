@@ -11,7 +11,7 @@ import '../theme.dart';
 import 'fog_mask.dart';
 import 'layers.dart';
 
-enum Tool { move, fogBrush, fogRect }
+enum Tool { move, fogBrush, fogRect, gridFit }
 
 /// The view's fast-changing state, outside the widget tree so it can change
 /// every frame without rebuilds. Owned by whoever creates it. Notifies when
@@ -20,6 +20,9 @@ class TableController extends ChangeNotifier {
   final view = ValueNotifier<Matrix4>(Matrix4.identity());
   final drag = ValueNotifier<TokenDrag?>(null);
   final fogPreview = ValueNotifier<FogPreview?>(null);
+
+  /// The grid fitted to the box being drawn with [Tool.gridFit].
+  final gridFit = ValueNotifier<Grid?>(null);
   final selected = ValueNotifier<TokenId?>(null);
 
   Tool get tool => _tool;
@@ -35,10 +38,13 @@ class TableController extends ChangeNotifier {
   FogMode _fogMode = FogMode.cover;
   set fogMode(FogMode value) => _set(() => _fogMode = value);
 
-  /// The GM's grid panel is open.
+  /// The GM's grid panel is open. Closing it puts away the fit tool.
   bool get gridOptions => _gridOptions;
   bool _gridOptions = false;
-  set gridOptions(bool value) => _set(() => _gridOptions = value);
+  void toggleGridOptions() => _set(() {
+        _gridOptions = !_gridOptions;
+        if (!_gridOptions && _tool == Tool.gridFit) _tool = Tool.move;
+      });
 
   double get brushRadius => _brushRadius;
   double _brushRadius = 48;
@@ -103,6 +109,7 @@ class TableController extends ChangeNotifier {
     view.dispose();
     drag.dispose();
     fogPreview.dispose();
+    gridFit.dispose();
     selected.dispose();
     super.dispose();
   }
@@ -166,6 +173,7 @@ class _TableViewState extends State<TableView> {
   Offset? _downAt;
   bool _moved = false;
   Offset? _fogStart;
+  Offset? _fitStart;
   List<Point> _strokePoints = [];
   double _lastPanZoomScale = 1;
 
@@ -246,7 +254,9 @@ class _TableViewState extends State<TableView> {
           },
         ),
         RepaintBoundary(
-          child: CustomPaint(size: size, painter: GridPainter(settings)),
+          child: CustomPaint(
+              size: size,
+              painter: GridPainter(settings, widget.gm ? _c : null)),
         ),
         RepaintBoundary(
           child: CustomPaint(
@@ -341,8 +351,10 @@ class _TableViewState extends State<TableView> {
     } else if (tool == Tool.fogBrush) {
       _strokePoints = [(x: p.dx, y: p.dy)];
       _previewStroke();
-    } else {
+    } else if (tool == Tool.fogRect) {
       _fogStart = p;
+    } else {
+      _fitStart = p;
     }
   }
 
@@ -361,6 +373,9 @@ class _TableViewState extends State<TableView> {
     } else if (_panning) {
       _c.view.value = Matrix4.translationValues(e.delta.dx, e.delta.dy, 0)
         ..multiply(_c.view.value);
+    } else if (_fitStart case final start?) {
+      _c.gridFit.value =
+          Grid.fitted((x: start.dx, y: start.dy), (x: p.dx, y: p.dy));
     } else if (_fogStart != null) {
       _c.fogPreview.value = (
         shape: FogRect((x: _fogStart!.dx, y: _fogStart!.dy), (x: p.dx, y: p.dy)),
@@ -396,8 +411,13 @@ class _TableViewState extends State<TableView> {
       _c.selected.value = null;
     } else if (_c.fogPreview.value case (:final shape, :final mode) when send) {
       widget.send(AddFogOp(FogOpId(newId()), mode, shape));
+    } else if (_c.gridFit.value case final grid? when send && grid.valid) {
+      widget.send(UpdateSettings(_scene.settings.withGrid(grid)));
+      _c.tool = Tool.move;
     }
     _c.fogPreview.value = null;
+    _c.gridFit.value = null;
+    _fitStart = null;
     _panning = false;
     _downAt = null;
     _fogStart = null;
