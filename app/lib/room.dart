@@ -417,6 +417,22 @@ class _GmRoomState extends State<GmRoom> {
       ..selected.value = id;
   }
 
+  /// Copies a token into the nearest free cell, numbered, and selects it.
+  void _duplicateToken(TokenId id) {
+    final host = _host!;
+    final scene = host.store.scene;
+    final token = scene.tokens[id];
+    if (token == null) return;
+    final copy = token.copyWith(
+      id: TokenId(newId()),
+      position: scene.settings.grid
+          .freeSpot(token.position, token.size, scene.tokens.values),
+      name: nextName(token.name, [for (final t in scene.tokens.values) t.name]),
+    );
+    host.execute(PlaceToken(copy));
+    _controller.selected.value = copy.id;
+  }
+
   void _removeToken(TokenId id) {
     _host!.execute(RemoveToken(id));
     _controller.selected.value = null;
@@ -601,6 +617,7 @@ class _GmRoomState extends State<GmRoom> {
       onExport: _export,
       onImport: _import,
       onRemove: _removeToken,
+      onDuplicate: _duplicateToken,
       child: Stack(children: [
         Positioned.fill(
           child: TableView(
@@ -621,6 +638,7 @@ class _GmRoomState extends State<GmRoom> {
             controller: _controller,
             send: host.execute,
             onRemove: _removeToken,
+            onDuplicate: _duplicateToken,
             onSetImage: _uploading == null ? _setTokenImage : null,
           ),
         ),
@@ -871,4 +889,18 @@ class _PlayerRoomState extends State<PlayerRoom> {
       ]),
     );
   }
+}
+
+/// The name for a copy: "Goblin 1" becomes the lowest free "Goblin N", and
+/// a name without a number stays as it is.
+String nextName(String name, Iterable<String> taken) {
+  final match = RegExp(r'^(.*?)(\d+)$').firstMatch(name);
+  if (match == null) return name;
+  final stem = match[1]!;
+  final used = taken.toSet();
+  var n = int.parse(match[2]!) + 1;
+  while (used.contains('$stem$n')) {
+    n++;
+  }
+  return '$stem$n';
 }

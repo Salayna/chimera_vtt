@@ -533,6 +533,7 @@ class TokenCardLayer extends StatelessWidget {
     required this.controller,
     required this.send,
     required this.onRemove,
+    this.onDuplicate,
     this.onSetImage,
   });
 
@@ -541,6 +542,7 @@ class TokenCardLayer extends StatelessWidget {
   final TableController controller;
   final Outcome Function(Command) send;
   final void Function(TokenId) onRemove;
+  final void Function(TokenId)? onDuplicate;
 
   /// Picks and uploads a new image for the token; null while one uploads.
   final void Function(TokenId)? onSetImage;
@@ -589,6 +591,9 @@ class TokenCardLayer extends StatelessWidget {
                     session: session,
                     send: send,
                     onRemove: () => onRemove(token.id),
+                    onDuplicate: onDuplicate == null
+                        ? null
+                        : () => onDuplicate!(token.id),
                     onSetImage: onSetImage == null
                         ? null
                         : () => onSetImage!(token.id),
@@ -614,6 +619,7 @@ class _TokenCard extends StatelessWidget {
     required this.session,
     required this.send,
     required this.onRemove,
+    required this.onDuplicate,
     required this.onSetImage,
     required this.onClose,
     required this.arrowOnLeft,
@@ -629,6 +635,7 @@ class _TokenCard extends StatelessWidget {
   final Session session;
   final Outcome Function(Command) send;
   final VoidCallback onRemove;
+  final VoidCallback? onDuplicate;
   final VoidCallback? onSetImage;
   final VoidCallback onClose;
   final bool arrowOnLeft;
@@ -768,15 +775,18 @@ class _TokenCard extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   CvButton(
-                    label: 'Remove token',
+                    label: 'Duplicate',
+                    icon: Lucide.copy,
+                    variant: CvButtonVariant.ghost,
+                    small: true,
+                    onPressed: onDuplicate,
+                  ),
+                  CvButton(
+                    label: 'Remove',
                     icon: Lucide.trash2,
                     variant: CvButtonVariant.dangerGhost,
                     small: true,
                     onPressed: onRemove,
-                  ),
-                  const Padding(
-                    padding: EdgeInsets.only(right: 6),
-                    child: CvKbd('Del'),
                   ),
                 ],
               ),
@@ -817,7 +827,7 @@ class _TokenCard extends StatelessWidget {
   }
 }
 
-/// The table's single-key shortcuts. GM: V B R tools, T add token, M map, G grid,
+/// The table's single-key shortcuts. GM: V B R tools, T add token, D duplicate, M map, G grid,
 /// E export, I import, X cover/reveal, S snap, Del remove. Everyone:
 /// + − 0 zoom, Esc deselect.
 class TableShortcuts extends StatelessWidget {
@@ -831,6 +841,7 @@ class TableShortcuts extends StatelessWidget {
     this.onExport,
     this.onImport,
     this.onRemove,
+    this.onDuplicate,
   });
 
   final TableController controller;
@@ -841,6 +852,7 @@ class TableShortcuts extends StatelessWidget {
   final VoidCallback? onExport;
   final VoidCallback? onImport;
   final void Function(TokenId)? onRemove;
+  final void Function(TokenId)? onDuplicate;
 
   @override
   Widget build(BuildContext context) {
@@ -867,6 +879,9 @@ class TableShortcuts extends StatelessWidget {
               c.fogMode == FogMode.cover ? FogMode.reveal : FogMode.cover,
           const CharacterActivator('s'): () => c.snap = !c.snap,
           const CharacterActivator('t'): () => onAddToken?.call(),
+          const CharacterActivator('d'): () {
+            if (c.selected.value case final id?) onDuplicate?.call(id);
+          },
           const CharacterActivator('m'): () => onSetMap?.call(),
           const CharacterActivator('g'): c.toggleGridOptions,
           const CharacterActivator('e'): () => onExport?.call(),

@@ -16,6 +16,13 @@ void main() {
     expect(cellName((x: 2650, y: 50), grid), 'AA1');
   });
 
+  test('copies are numbered after the lowest free number', () {
+    expect(nextName('Goblin 1', ['Goblin 1']), 'Goblin 2');
+    expect(nextName('Goblin 1', ['Goblin 1', 'Goblin 2', 'Goblin 4']), 'Goblin 3');
+    expect(nextName('Orc', ['Orc']), 'Orc');
+    expect(nextName('', []), '');
+  });
+
   testWidgets('the lobby renders and asks for 6 characters', (tester) async {
     tester.view.physicalSize = const Size(1440, 900);
     tester.view.devicePixelRatio = 1;
@@ -152,6 +159,7 @@ void main() {
           controller: controller,
           send: host.execute,
           onRemove: (_) {},
+          onDuplicate: (_) {},
         ),
       ),
     ));
@@ -159,5 +167,9 @@ void main() {
     await tester.pump();
     expect(host.store.scene.tokens[id]!.name, 'Goblin 1');
     expect(find.text('Goblin 1'), findsWidgets); // The card's title too.
+
+    await tester.tap(find.text('2×2'));
+    await tester.pump();
+    expect(host.store.scene.tokens[id]!.size, 200);
   });
 }
