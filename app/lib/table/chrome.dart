@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
+import '../members.dart';
 import '../theme.dart';
 import '../ui/cv.dart';
 import 'table_view.dart';
@@ -30,12 +31,17 @@ String cellName(Point p, Grid grid) {
 
 CvAvatar avatarFor(Presence p, {double size = CvSizes.avatar}) {
   final id = PlayerId(p.player);
+  final name = playerName(id);
   return CvAvatar(
-    initials: p.gm ? 'GM' : shortId(id).substring(0, 2).toUpperCase(),
+    initials: p.gm
+        ? 'GM'
+        : (members.value[id] == null ? shortId(id) : name)
+            .substring(0, math.min(2, name.length))
+            .toUpperCase(),
     color: playerColor(id),
     gm: p.gm,
     size: size,
-    label: p.gm ? 'GM' : 'Player ${shortId(id)}',
+    label: p.gm ? 'GM' : name,
   );
 }
 
@@ -50,11 +56,15 @@ class GmRail extends StatelessWidget {
     this.onImport,
     this.onScenes,
     this.scenesOpen = false,
+    this.onMembers,
+    this.membersOpen = false,
   });
 
   final TableController controller;
   final VoidCallback? onScenes;
   final bool scenesOpen;
+  final VoidCallback? onMembers;
+  final bool membersOpen;
   final VoidCallback? onAddToken;
   final VoidCallback? onSetMap;
   final VoidCallback? onExport;
@@ -79,6 +89,12 @@ class GmRail extends StatelessWidget {
                   label: 'Scenes',
                   active: scenesOpen,
                   onPressed: onScenes),
+              if (onMembers != null)
+                CvToolButton(
+                    icon: Lucide.userRound,
+                    label: 'Players',
+                    active: membersOpen,
+                    onPressed: onMembers),
               const CvToolbarSeparator(),
             ],
             tool(Tool.move, Lucide.mousePointer2, 'Move', 'V'),
@@ -752,7 +768,7 @@ class _TokenCard extends StatelessWidget {
                             const CvMenuHeading('Connected players'),
                           ],
                           for (final p in owners)
-                            CvMenuItem(p, 'Player ${shortId(p)}',
+                            CvMenuItem(p, playerName(p),
                                 leading: avatarFor(
                                     (player: p.value, gm: false, cursor: null),
                                     size: 24)),

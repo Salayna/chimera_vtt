@@ -84,15 +84,7 @@ class _ChimeraAppState extends State<ChimeraApp> {
     try {
       final auth = _client.auth;
       if (auth.currentSession == null) await auth.signInAnonymously();
-      var room = await loadSavedRoom();
-      // A join link: ?room=CODE.
-      if (room == null) {
-        final code = normalizeRoomCode(Uri.base.queryParameters['room'] ?? '');
-        if (code.length == 6) {
-          room = (code: code, gm: false, campaign: null);
-          await saveRoom(room);
-        }
-      }
+      final room = await loadSavedRoom();
       setState(() {
         _me = PlayerId(auth.currentUser!.id);
         _room = room;
@@ -139,11 +131,16 @@ class _ChimeraAppState extends State<ChimeraApp> {
             assets: _assets,
             me: me,
             code: room.code,
+            campaign: room.campaign,
             art: art,
             onLeave: _leave,
           ),
         // No room, or a GM room without a signed-in GM.
-        (_?, _?, _) => Lobby(client: _client, onEnter: _enter),
+        (_?, _?, _) => Lobby(
+            client: _client,
+            onEnter: _enter,
+            // A join link, ?room=CODE: the player still gives a name.
+            code: normalizeRoomCode(Uri.base.queryParameters['room'] ?? '')),
         _ when _error != null => StatusScreen(
             title: 'Could not sign in.',
             message: _error,

@@ -15,6 +15,7 @@ import 'package:supabase_flutter/supabase_flutter.dart' show SupabaseClient;
 import 'account.dart';
 import 'assets.dart';
 import 'campaigns.dart';
+import 'members.dart';
 import 'table/chrome.dart';
 import 'table/table_view.dart';
 import 'theme.dart';
@@ -86,32 +87,72 @@ typedef Art = ({ui.Image map, Map<AssetId, ui.Image> tokens});
 
 /// Open a room as the GM (signed in), or join one with a room code.
 class Lobby extends StatefulWidget {
-  const Lobby({super.key, required this.client, required this.onEnter});
+  const Lobby(
+      {super.key, required this.client, required this.onEnter, this.code});
 
   final SupabaseClient client;
   final void Function(SavedRoom room) onEnter;
+
+  /// From a join link: fills in the room code.
+  final String? code;
 
   @override
   State<Lobby> createState() => _LobbyState();
 }
 
 class _LobbyState extends State<Lobby> {
-  final _code = TextEditingController();
+  late final _code = TextEditingController(text: widget.code);
+  final _name = TextEditingController();
+  var _color = 0;
   String? _error;
+  String? _nameError;
+  bool _joining = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // The name and colour this player used last time.
+    _prefs.getString('playerName').then((name) {
+      if (name != null && mounted && _name.text.isEmpty) _name.text = name;
+    });
+    _prefs.getInt('playerColor').then((color) {
+      if (color != null && mounted) setState(() => _color = color);
+    });
+  }
 
   @override
   void dispose() {
     _code.dispose();
+    _name.dispose();
     super.dispose();
   }
 
-  void _join() {
+  Future<void> _join() async {
     final code = normalizeRoomCode(_code.text);
     if (code.length != 6) {
       setState(() => _error = 'Room codes have 6 characters.');
       return;
     }
-    widget.onEnter((code: code, gm: false, campaign: null));
+    final name = _name.text.trim();
+    if (name.isEmpty) {
+      setState(() => _nameError = 'Tell the table who you are.');
+      return;
+    }
+    setState(() => _joining = true);
+    try {
+      final campaign = await joinCampaign(widget.client, code, name, _color);
+      if (campaign == null) {
+        if (mounted) setState(() => _error = 'No campaign has this room code.');
+        return;
+      }
+      await _prefs.setString('playerName', name);
+      await _prefs.setInt('playerColor', _color);
+      widget.onEnter((code: code, gm: false, campaign: campaign));
+    } on Object catch (e) {
+      if (mounted) setState(() => _error = '$e');
+    } finally {
+      if (mounted) setState(() => _joining = false);
+    }
   }
 
   @override
@@ -201,6 +242,27 @@ class _LobbyState extends State<Lobby> {
                       onChanged: (_) => setState(() => _error = null),
                       onSubmitted: (_) => _join(),
                     ),
+                    CvTextInput(
+                      controller: _name,
+                      label: 'Your name',
+                      placeholder: 'Aria',
+                      maxLength: 40,
+                      error: _nameError,
+                      onChanged: (_) => setState(() => _nameError = null),
+                      onSubmitted: (_) => _join(),
+                    ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      spacing: 6,
+                      children: [
+                        Text('Your colour',
+                            style: CvTypography.label
+                                .copyWith(color: CvColors.textSecondary)),
+                        ColorPicker(
+                            value: _color,
+                            onChanged: (c) => setState(() => _color = c)),
+                      ],
+                    ),
                     ListenableBuilder(
                       listenable: _code,
                       builder: (context, _) => CvButton(
@@ -208,7 +270,7 @@ class _LobbyState extends State<Lobby> {
                         icon: Lucide.logIn,
                         variant: CvButtonVariant.player,
                         block: true,
-                        onPressed: _code.text.isEmpty ? null : _join,
+                        onPressed: _code.text.isEmpty || _joining ? null : _join,
                       ),
                     ),
                   ],
@@ -392,6 +454,8 @@ class _GmRoomState extends State<GmRoom> {
   String? _sceneId;
   List<SceneEntry> _sceneList = [];
   bool _scenesOpen = false;
+  bool _membersOpen = false;
+  StreamSubscription<Set<String>>? _peers;
 
   /// The save waiting for [saveAfter] to pass, already bound to its scene.
   Future<void> Function()? _pendingSave;
@@ -422,9 +486,55 @@ class _GmRoomState extends State<GmRoom> {
         _pendingSave = () => _scenes.save(id, scene);
         _saveTimer = Timer(saveAfter, _flushSave);
       });
+      // Someone new at the table may be a new member: reload the names.
+      _peers = host.peers.map(peerIds).distinct(sameIds).listen((_) => _loadMembers());
+      await _loadMembers();
       if (mounted) setState(() => _host = host);
     } on Object catch (e) {
       if (mounted) setState(() => _error = '$e');
+    }
+  }
+
+  Future<void> _loadMembers() async {
+    try {
+      await loadMembers(widget.client, widget.campaign);
+    } on Object catch (e) {
+      if (mounted) _toasts.show('Players failed to load: $e', tone: CvTone.danger);
+    }
+  }
+
+  // ponytail: a removed player still connected stays until they leave;
+  // changing the room code is what keeps them out.
+  Future<void> _removeMember(PlayerId player, Member member) async {
+    final confirmed = await showCvDialog<bool>(
+      context: context,
+      title: 'Remove ${member.name}?',
+      icon: Lucide.userRound,
+      tone: CvTone.danger,
+      body: const Text('They leave the players list, and their tokens lose '
+          'their owner. With the room code they can join again: change the '
+          'code from the lobby to keep them out.'),
+      actions: (context) => [
+        CvButton(
+            label: 'Cancel',
+            variant: CvButtonVariant.ghost,
+            onPressed: () => Navigator.pop(context, false)),
+        CvButton(
+            label: 'Remove',
+            variant: CvButtonVariant.danger,
+            onPressed: () => Navigator.pop(context, true)),
+      ],
+    );
+    if (!(confirmed ?? false)) return;
+    try {
+      await removeMember(widget.client, widget.campaign, player);
+      final host = _host!;
+      for (final t in host.store.scene.tokens.values) {
+        if (t.owner == player) host.execute(AssignOwner(t.id, null));
+      }
+      await _loadMembers();
+    } on Object catch (e) {
+      _toasts.show('${member.name} failed to remove: $e', tone: CvTone.danger);
     }
   }
 
@@ -724,6 +834,8 @@ class _GmRoomState extends State<GmRoom> {
   void dispose() {
     _heartbeat?.cancel();
     _autosave?.cancel();
+    _peers?.cancel();
+    members.value = {};
     _flushSave();
     _host?.close();
     _controller.dispose();
@@ -817,6 +929,8 @@ class _GmRoomState extends State<GmRoom> {
               onImport: _import,
               scenesOpen: _scenesOpen,
               onScenes: () => setState(() => _scenesOpen = !_scenesOpen),
+              membersOpen: _membersOpen,
+              onMembers: () => setState(() => _membersOpen = !_membersOpen),
             ),
           ),
         ),
@@ -836,6 +950,7 @@ class _GmRoomState extends State<GmRoom> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   spacing: CvSpacing.s4,
                   children: [
+                    if (_membersOpen) MembersPanel(onRemove: _removeMember),
                     if (_scenesOpen)
                       ScenesPanel(
                         scenes: _sceneList,
@@ -909,6 +1024,7 @@ class PlayerRoom extends StatefulWidget {
     required this.assets,
     required this.me,
     required this.code,
+    required this.campaign,
     required this.art,
     required this.onLeave,
   });
@@ -917,6 +1033,10 @@ class PlayerRoom extends StatefulWidget {
   final AssetStore assets;
   final PlayerId me;
   final String code;
+
+  /// The campaign joined, for its members' names; null for a room saved
+  /// before campaigns.
+  final String? campaign;
   final Art art;
   final VoidCallback onLeave;
 
@@ -930,6 +1050,16 @@ class _PlayerRoomState extends State<PlayerRoom> {
   SceneStore? _store;
   String? _error;
   bool _mismatch = false;
+  StreamSubscription<Set<String>>? _peers;
+
+  Future<void> _loadMembers() async {
+    if (widget.campaign case final campaign?) {
+      // Names are a nicety: the table works without them.
+      await loadMembers(widget.client, campaign).catchError((Object e) {
+        debugPrint('Players failed to load: $e');
+      });
+    }
+  }
 
   @override
   void initState() {
@@ -947,6 +1077,8 @@ class _PlayerRoomState extends State<PlayerRoom> {
         return;
       }
       setState(() => _session = session);
+      _peers = session.peers.map(peerIds).distinct(sameIds).listen((_) => _loadMembers());
+      await _loadMembers();
       await session.setCursor(null);
       // Completes when the GM answers, now or once they open the room.
       final store = await session.join();
@@ -960,6 +1092,8 @@ class _PlayerRoomState extends State<PlayerRoom> {
 
   @override
   void dispose() {
+    _peers?.cancel();
+    members.value = {};
     _session?.close();
     _controller.dispose();
     super.dispose();
@@ -1050,6 +1184,13 @@ class _PlayerRoomState extends State<PlayerRoom> {
     );
   }
 }
+
+/// Who is connected, without their cursors: a change here, not a cursor
+/// move, means someone arrived or left.
+Set<String> peerIds(List<Presence> peers) => {for (final p in peers) p.player};
+
+bool sameIds(Set<String> a, Set<String> b) =>
+    a.length == b.length && a.containsAll(b);
 
 /// The name for a copy: "Goblin 1" becomes the lowest free "Goblin N", and
 /// a name without a number stays as it is.

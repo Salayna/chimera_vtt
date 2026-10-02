@@ -5,6 +5,7 @@ import 'package:chimera_core/chimera_core.dart';
 import 'package:flutter/widgets.dart';
 
 import '../theme.dart';
+import '../members.dart' show members;
 import 'fog_mask.dart';
 import 'table_view.dart' show TableController;
 
@@ -73,7 +74,8 @@ class TokenPainter extends CustomPainter {
     required this.images,
     required this.gm,
     required this.self,
-  }) : super(repaint: Listenable.merge([drag, selected]));
+    // Owners' colours come from the member directory, which loads later.
+  }) : super(repaint: Listenable.merge([drag, selected, members]));
 
   final Map<TokenId, Token> tokens;
   final ValueNotifier<TokenDrag?> drag;

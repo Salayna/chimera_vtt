@@ -1,6 +1,8 @@
 import 'package:chimera_core/chimera_core.dart' show PlayerId;
 import 'package:flutter/widgets.dart';
 
+import 'members.dart' show memberColor, members;
+
 /// Design tokens from the Chimera VTT design system (Claude Design project
 /// 32b42cc6, tokens/*.css). Names follow the CSS custom properties.
 abstract final class CvColors {
@@ -217,11 +219,13 @@ abstract final class CvMotion {
   static const settle = Cubic(0.34, 1.4, 0.64, 1);
 }
 
-/// A player's identity hue, the same on their avatar and their tokens.
-// ponytail: hashed from the id, so two players can share a hue. Assign hues
-// in join order once players have names.
+/// A player's identity hue, the same on their avatar and their tokens: the
+/// colour they picked as a member, else one hashed from their id.
 // String.hashCode differs between the VM and the web, so hash by hand: the
 // GM on macOS and a player in a browser must agree.
-Color playerColor(PlayerId player) => CvColors.players[player.value.codeUnits
-        .fold(0, (h, c) => (h * 31 + c) & 0x3fffffff) %
-    CvColors.players.length];
+Color playerColor(PlayerId player) => switch (members.value[player]) {
+      (name: _, :final color) => memberColor(color),
+      null => CvColors.players[player.value.codeUnits
+              .fold(0, (h, c) => (h * 31 + c) & 0x3fffffff) %
+          CvColors.players.length],
+    };
