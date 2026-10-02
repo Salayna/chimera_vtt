@@ -345,8 +345,8 @@ class StatusScreen extends StatelessWidget {
       ]);
 }
 
-/// The GM's room: hosts the session and saves the scene as it changes, so
-/// a refresh resumes where it left off.
+/// The GM's room: hosts a campaign's session and saves its live scene to
+/// Postgres as it changes, so a refresh resumes where it left off.
 class GmRoom extends StatefulWidget {
   const GmRoom({
     super.key,
@@ -354,6 +354,7 @@ class GmRoom extends StatefulWidget {
     required this.assets,
     required this.me,
     required this.code,
+    required this.campaign,
     required this.art,
     required this.onLeave,
   });
@@ -362,6 +363,9 @@ class GmRoom extends StatefulWidget {
   final AssetStore assets;
   final PlayerId me;
   final String code;
+
+  /// The campaign's id: its scenes are this room's.
+  final String campaign;
   final Art art;
   final VoidCallback onLeave;
 
@@ -382,7 +386,15 @@ class _GmRoomState extends State<GmRoom> {
   Timer? _saveTimer;
   StreamSubscription<Scene>? _autosave;
 
-  String get _saveKey => 'scene:${widget.code}';
+  late final _scenes = Scenes(widget.client, widget.campaign);
+
+  /// The live scene, which autosave writes to.
+  String? _sceneId;
+  List<SceneEntry> _sceneList = [];
+  bool _scenesOpen = false;
+
+  /// The save waiting for [saveAfter] to pass, already bound to its scene.
+  Future<void> Function()? _pendingSave;
 
   @override
   void initState() {
@@ -402,12 +414,13 @@ class _GmRoomState extends State<GmRoom> {
       await host.setCursor(null);
       _heartbeat = Timer.periodic(heartbeatEvery, (_) => host.heartbeat());
       _autosave = host.store.changes.listen((scene) {
+        // Bound now: a switch before the timer fires mustn't send this
+        // scene's changes to the next one.
+        final id = _sceneId!;
         _saved.value = false;
         _saveTimer?.cancel();
-        _saveTimer = Timer(saveAfter, () async {
-          await _save(scene);
-          _saved.value = true;
-        });
+        _pendingSave = () => _scenes.save(id, scene);
+        _saveTimer = Timer(saveAfter, _flushSave);
       });
       if (mounted) setState(() => _host = host);
     } on Object catch (e) {
@@ -415,28 +428,125 @@ class _GmRoomState extends State<GmRoom> {
     }
   }
 
+  /// The live scene: the one set as live, else the first, else a new one.
   Future<Scene> _loadScene() async {
-    final saved = await _prefs.getString(_saveKey);
-    if (saved != null) {
-      try {
-        return Scene.fromJson(jsonDecode(saved) as Json);
-      } on Object {
-        // A save this version can't read: start fresh rather than not at all.
-      }
+    var list = await _scenes.list();
+    var id = await _scenes.live();
+    if (!list.any((s) => s.id == id)) id = list.firstOrNull?.id;
+    final Scene scene;
+    if (id == null) {
+      scene = _blankScene();
+      id = await _scenes.create('Scene 1', scene);
+      list = [(id: id, name: 'Scene 1')];
+    } else {
+      scene = await _scenes.load(id);
     }
-    return Scene(
-      settings: SceneSettings(
-        width: widget.art.map.width.toDouble(),
-        height: widget.art.map.height.toDouble(),
-        grid: const Grid(cellSize: 128),
-      ),
-    );
+    await _scenes.setLive(id);
+    _sceneId = id;
+    _sceneList = list;
+    return scene;
   }
+
+  Scene _blankScene() => Scene(
+        settings: SceneSettings(
+          width: widget.art.map.width.toDouble(),
+          height: widget.art.map.height.toDouble(),
+          grid: const Grid(cellSize: 128),
+        ),
+      );
 
   // ponytail: a refresh within [saveAfter] of the last change loses it.
   // Save on page hide (web) if that bites.
-  Future<void> _save(Scene scene) =>
-      _prefs.setString(_saveKey, jsonEncode(scene.toJson()));
+  Future<void> _flushSave() async {
+    _saveTimer?.cancel();
+    final save = _pendingSave;
+    _pendingSave = null;
+    if (save == null) return;
+    try {
+      await save();
+      if (mounted) _saved.value = _pendingSave == null;
+    } on Object catch (e) {
+      if (mounted) {
+        _toasts.show('The scene failed to save: $e', tone: CvTone.danger);
+      }
+    }
+  }
+
+  /// Makes [id] the live scene: saves this one, then shows that one to
+  /// everyone at the table.
+  Future<void> _switchScene(String id, {Scene? scene}) async {
+    if (id == _sceneId) return;
+    try {
+      await _flushSave();
+      final next = scene ?? await _scenes.load(id);
+      _sceneId = id;
+      _host!.load(next);
+      _controller.selected.value = null;
+      await _scenes.setLive(id);
+      if (mounted) setState(() {});
+    } on Object catch (e) {
+      _toasts.show('The scene failed to open: $e', tone: CvTone.danger);
+    }
+  }
+
+  Future<void> _newScene() async {
+    final names = {for (final s in _sceneList) s.name};
+    var n = _sceneList.length + 1;
+    while (names.contains('Scene $n')) {
+      n++;
+    }
+    final name = 'Scene $n';
+    try {
+      final scene = _blankScene();
+      final id = await _scenes.create(name, scene);
+      setState(() => _sceneList = [..._sceneList, (id: id, name: name)]);
+      await _switchScene(id, scene: scene);
+    } on Object catch (e) {
+      _toasts.show('The scene failed to create: $e', tone: CvTone.danger);
+    }
+  }
+
+  Future<void> _renameScene(String name) async {
+    final id = _sceneId;
+    if (id == null || name.isEmpty) return;
+    setState(() => _sceneList = [
+          for (final s in _sceneList) s.id == id ? (id: id, name: name) : s,
+        ]);
+    try {
+      await _scenes.rename(id, name);
+    } on Object catch (e) {
+      _toasts.show('The scene failed to rename: $e', tone: CvTone.danger);
+    }
+  }
+
+  Future<void> _deleteScene(SceneEntry scene) async {
+    final confirmed = await showCvDialog<bool>(
+      context: context,
+      title: 'Delete ${scene.name}?',
+      icon: Lucide.trash2,
+      tone: CvTone.danger,
+      body: const Text('Its map, tokens and fog are gone for good. '
+          'Export it first if you might want it back.'),
+      actions: (context) => [
+        CvButton(
+            label: 'Cancel',
+            variant: CvButtonVariant.ghost,
+            onPressed: () => Navigator.pop(context, false)),
+        CvButton(
+            label: 'Delete scene',
+            variant: CvButtonVariant.danger,
+            onPressed: () => Navigator.pop(context, true)),
+      ],
+    );
+    if (!(confirmed ?? false)) return;
+    try {
+      await _scenes.delete(scene.id);
+      setState(() =>
+          _sceneList = [for (final s in _sceneList) if (s.id != scene.id) s]);
+    } on Object catch (e) {
+      _toasts.show('The scene failed to delete: $e', tone: CvTone.danger);
+    }
+  }
 
   void _addToken() {
     final host = _host!;
@@ -613,12 +723,9 @@ class _GmRoomState extends State<GmRoom> {
   @override
   void dispose() {
     _heartbeat?.cancel();
-    _saveTimer?.cancel();
     _autosave?.cancel();
-    if (_host case final host?) {
-      _save(host.store.scene);
-      host.close();
-    }
+    _flushSave();
+    _host?.close();
     _controller.dispose();
     _toasts.dispose();
     _saved.dispose();
@@ -708,6 +815,8 @@ class _GmRoomState extends State<GmRoom> {
               onSetMap: _uploading == null ? _setMap : null,
               onExport: _export,
               onImport: _import,
+              scenesOpen: _scenesOpen,
+              onScenes: () => setState(() => _scenesOpen = !_scenesOpen),
             ),
           ),
         ),
@@ -727,6 +836,15 @@ class _GmRoomState extends State<GmRoom> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   spacing: CvSpacing.s4,
                   children: [
+                    if (_scenesOpen)
+                      ScenesPanel(
+                        scenes: _sceneList,
+                        live: _sceneId,
+                        onSwitch: _switchScene,
+                        onNew: _newScene,
+                        onRename: _renameScene,
+                        onDelete: _deleteScene,
+                      ),
                     GridOptions(
                         controller: _controller,
                         grid: grid,

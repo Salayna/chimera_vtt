@@ -1,8 +1,12 @@
+import 'dart:async';
+
+import 'package:chimera_core/chimera_core.dart';
 import 'package:flutter/widgets.dart';
 import 'package:supabase_flutter/supabase_flutter.dart'
     show PostgrestException, SupabaseClient;
 
 import 'room.dart' show newRoomCode;
+import 'table/chrome.dart' show TextKeysOnly;
 import 'theme.dart';
 import 'ui/cv.dart';
 
@@ -23,7 +27,7 @@ class Campaigns {
         for (final r in await _client
             .from('campaigns')
             .select('id, name, room_code')
-            .order('created_at'))
+            .order('created_at', ascending: true))
           _row(r),
       ];
 
@@ -53,6 +57,65 @@ class Campaigns {
       }
     }
   }
+}
+
+/// A scene in a campaign's list.
+typedef SceneEntry = ({String id, String name});
+
+/// A campaign's scenes in Postgres, readable only by the campaign's GM.
+/// [Scene]s are stored as the same JSON as a scene file.
+class Scenes {
+  Scenes(this._client, this.campaign);
+
+  final SupabaseClient _client;
+  final String campaign;
+
+  Future<List<SceneEntry>> list() async => [
+        for (final r in await _client
+            .from('scenes')
+            .select('id, name')
+            .eq('campaign', campaign)
+            .order('created_at', ascending: true))
+          (id: r['id'] as String, name: r['name'] as String),
+      ];
+
+  Future<Scene> load(String id) async {
+    final row =
+        await _client.from('scenes').select('data').eq('id', id).single();
+    return Scene.fromJson(row['data'] as Json);
+  }
+
+  Future<String> create(String name, Scene scene) async {
+    final row = await _client
+        .from('scenes')
+        .insert({'campaign': campaign, 'name': name, 'data': scene.toJson()})
+        .select('id')
+        .single();
+    return row['id'] as String;
+  }
+
+  Future<void> save(String id, Scene scene) => _client.from('scenes').update({
+        'data': scene.toJson(),
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
+      }).eq('id', id);
+
+  Future<void> rename(String id, String name) =>
+      _client.from('scenes').update({'name': name}).eq('id', id);
+
+  Future<void> delete(String id) => _client.from('scenes').delete().eq('id', id);
+
+  /// The scene reopening the campaign resumes, if one was set.
+  Future<String?> live() async {
+    final row = await _client
+        .from('campaigns')
+        .select('live_scene')
+        .eq('id', campaign)
+        .single();
+    return row['live_scene'] as String?;
+  }
+
+  Future<void> setLive(String id) =>
+      _client.from('campaigns').update({'live_scene': id}).eq('id', campaign);
 }
 
 /// The signed-in GM's campaigns: open one, start one, or change a code.
@@ -202,4 +265,135 @@ class _CampaignListState extends State<CampaignList> {
       ],
     );
   }
+}
+
+/// The campaign's scenes, beside the GM's rail: the live one is what the
+/// table sees. Pick another to show it, name the live one, add or delete.
+class ScenesPanel extends StatelessWidget {
+  const ScenesPanel({
+    super.key,
+    required this.scenes,
+    required this.live,
+    required this.onSwitch,
+    required this.onNew,
+    required this.onRename,
+    required this.onDelete,
+  });
+
+  final List<SceneEntry> scenes;
+  final String? live;
+  final void Function(String id) onSwitch;
+  final VoidCallback onNew;
+  final ValueChanged<String> onRename;
+  final void Function(SceneEntry scene) onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final current = scenes.where((s) => s.id == live).firstOrNull;
+    return CvPopIn(
+      child: CvPanel(
+        width: 260,
+        padding: const EdgeInsets.all(CvSpacing.s5),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          spacing: 6,
+          children: [
+            const CvOverline('Scenes'),
+            for (final s in scenes)
+              CvPressable(
+                onTap: s.id == live ? null : () => onSwitch(s.id),
+                label: s.id == live ? '${s.name}, live' : 'Show ${s.name}',
+                builder: (state) => Container(
+                  height: CvSizes.hit,
+                  padding: const EdgeInsets.only(left: 10),
+                  decoration: BoxDecoration(
+                    color: s.id == live
+                        ? CvColors.amberTint
+                        : state.hover
+                            ? CvColors.surfaceHover
+                            : const Color(0x00000000),
+                    borderRadius: BorderRadius.circular(CvRadii.md),
+                  ),
+                  child: Row(children: [
+                    Expanded(
+                      child: Text(s.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: CvTypography.label.copyWith(
+                              color: s.id == live
+                                  ? CvColors.amber300
+                                  : CvColors.textPrimary)),
+                    ),
+                    if (s.id == live)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 10),
+                        child: Text('Live',
+                            style: CvTypography.caption
+                                .copyWith(color: CvColors.amber400)),
+                      )
+                    else
+                      CvToolButton(
+                        icon: Lucide.trash2,
+                        label: 'Delete ${s.name}',
+                        danger: true,
+                        tooltipSide: AxisDirection.up,
+                        onPressed: () => onDelete(s),
+                      ),
+                  ]),
+                ),
+              ),
+            if (current != null)
+              _SceneNameField(
+                  key: ValueKey(current.id), name: current.name, onRename: onRename),
+            CvButton(
+              label: 'New scene',
+              icon: Lucide.plus,
+              small: true,
+              block: true,
+              onPressed: onNew,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The live scene's name, saved half a second after typing stops.
+// ponytail: closing the panel within that half second drops the last edit.
+class _SceneNameField extends StatefulWidget {
+  const _SceneNameField({super.key, required this.name, required this.onRename});
+
+  final String name;
+  final ValueChanged<String> onRename;
+
+  @override
+  State<_SceneNameField> createState() => _SceneNameFieldState();
+}
+
+class _SceneNameFieldState extends State<_SceneNameField> {
+  late final _text = TextEditingController(text: widget.name);
+  Timer? _debounce;
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _text.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => TextKeysOnly(
+        child: CvTextInput(
+          controller: _text,
+          label: 'Name',
+          maxLength: 80,
+          onChanged: (v) {
+            _debounce?.cancel();
+            _debounce = Timer(const Duration(milliseconds: 500),
+                () => widget.onRename(v.trim()));
+          },
+        ),
+      );
 }

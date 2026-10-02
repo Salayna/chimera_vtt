@@ -129,6 +129,7 @@ class _ChimeraAppState extends State<ChimeraApp> {
             assets: _assets,
             me: me,
             code: room.code,
+            campaign: room.campaign!,
             art: art,
             onLeave: _leave,
           ),

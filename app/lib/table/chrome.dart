@@ -48,9 +48,13 @@ class GmRail extends StatelessWidget {
     this.onSetMap,
     this.onExport,
     this.onImport,
+    this.onScenes,
+    this.scenesOpen = false,
   });
 
   final TableController controller;
+  final VoidCallback? onScenes;
+  final bool scenesOpen;
   final VoidCallback? onAddToken;
   final VoidCallback? onSetMap;
   final VoidCallback? onExport;
@@ -69,6 +73,14 @@ class GmRail extends StatelessWidget {
                 onPressed: () => controller.tool = t,
               );
           return CvToolbar(children: [
+            if (onScenes != null) ...[
+              CvToolButton(
+                  icon: Lucide.layers,
+                  label: 'Scenes',
+                  active: scenesOpen,
+                  onPressed: onScenes),
+              const CvToolbarSeparator(),
+            ],
             tool(Tool.move, Lucide.mousePointer2, 'Move', 'V'),
             const CvToolbarSeparator(),
             tool(Tool.fogBrush, Lucide.paintbrush, 'Fog brush', 'B'),
