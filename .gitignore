@@ -46,3 +46,6 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# Hosted Supabase config, kept local.
+/app/config/prod.json

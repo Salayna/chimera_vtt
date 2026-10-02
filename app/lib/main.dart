@@ -11,19 +11,20 @@ import 'room.dart';
 import 'theme.dart';
 import 'ui/cv.dart';
 
-/// Defaults point at the local stack from `supabase start`; its publishable
-/// key is the CLI's well-known local one, not a secret. Pass both with
-/// --dart-define for a hosted project.
-const _supabaseUrl =
-    String.fromEnvironment('SUPABASE_URL', defaultValue: 'http://127.0.0.1:54321');
-const _supabaseKey = String.fromEnvironment('SUPABASE_KEY',
-    defaultValue: 'sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH');
+/// From --dart-define-from-file: config/local.json for the `supabase start`
+/// stack, or a file per hosted project.
+const _supabaseUrl = String.fromEnvironment('SUPABASE_URL');
+const _supabaseKey = String.fromEnvironment('SUPABASE_KEY');
 
 Future<void> main() async {
   // Offline modes: the render benchmark, and GM and player side by side.
   if (const bool.fromEnvironment('BENCH')) return runApp(const BenchApp());
   if (const bool.fromEnvironment('LOOPBACK')) return runApp(const LoopbackDemo());
 
+  if (_supabaseUrl.isEmpty || _supabaseKey.isEmpty) {
+    throw StateError('No Supabase config: run with '
+        '--dart-define-from-file=config/local.json');
+  }
   WidgetsFlutterBinding.ensureInitialized();
   // For browser automation: exposes widgets to the DOM as accessibility nodes.
   if (const bool.fromEnvironment('SEMANTICS')) {
