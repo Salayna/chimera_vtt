@@ -412,6 +412,10 @@ class _TableViewState extends State<TableView> {
   }
 
   void _up({required bool send}) {
+    // Clicking the map gives keyboard focus back to the table, so keys are
+    // its shortcuts again. On release: a text field being left unfocuses on
+    // the press, which would undo this.
+    Focus.maybeOf(context)?.requestFocus();
     if (_c.drag.value case (:final id, :final position)) {
       if (send && _moved) {
         final Point to = (x: position.dx, y: position.dy);

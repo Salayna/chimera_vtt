@@ -1,5 +1,7 @@
 import 'package:chimera_core/chimera_core.dart';
+import 'package:chimera_vtt/table/chrome.dart';
 import 'package:chimera_vtt/table/table_view.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -51,5 +53,40 @@ void main() {
     final position = store.scene.tokens[id]!.position;
     expect(position.x, closeTo(192 + 100 / scale, 1));
     expect(position.y, closeTo(192, 1));
+  });
+
+  testWidgets('pressing the map gives the table back its shortcuts',
+      (tester) async {
+    final store = SceneStore(Scene(
+        settings: const SceneSettings(
+            width: 1024, height: 1024, grid: Grid(cellSize: 128))));
+    final controller = TableController();
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(Directionality(
+      textDirection: TextDirection.ltr,
+      child: TableShortcuts(
+        controller: controller,
+        gm: true,
+        child: TableView(
+          store: store,
+          controller: controller,
+          gm: true,
+          self: const PlayerId('gm'),
+          send: (command) => store.execute(const Gm(), command),
+        ),
+      ),
+    ));
+    // What a closed card's focused field leaves on the web: no focus at all.
+    FocusManager.instance.primaryFocus?.unfocus(
+        disposition: UnfocusDisposition.previouslyFocusedChild);
+    FocusManager.instance.rootScope.unfocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+    expect(controller.gridOptions, isFalse);
+
+    await tester.tapAt(const Offset(400, 300));
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+    expect(controller.gridOptions, isTrue);
   });
 }
