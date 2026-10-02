@@ -138,6 +138,14 @@ void main() {
           Refusal.invalid);
     });
 
+    test('a new cell size rescales tokens; a zero one is refused', () {
+      final store = SceneStore(scene); // Tokens are 64, one cell.
+      store.execute(gm, UpdateSettings(settings.copyWith(grid: const Grid(cellSize: 100))));
+      expect({for (final t in store.scene.tokens.values) t.size}, {100});
+      expect(refusal(gm, UpdateSettings(settings.copyWith(grid: const Grid(cellSize: 0)))),
+          Refusal.invalid);
+    });
+
     test('fog ops get increasing orders', () {
       final store = SceneStore(scene);
       for (final id in ['f1', 'f2']) {

@@ -37,7 +37,7 @@ Outcome reduce(Scene scene, Actor actor, Command command) {
     return const Refused(Refusal.gmOnly);
   }
   return switch (command) {
-    UpdateSettings(:final settings) => Accepted([Upsert(settings)]),
+    UpdateSettings(:final settings) => _settings(scene, settings),
     PlaceToken(:final token) => scene.tokens.containsKey(token.id)
         ? const Refused(Refusal.duplicateId)
         : Accepted([Upsert(token)]),
@@ -67,6 +67,19 @@ Outcome reduce(Scene scene, Actor actor, Command command) {
             )),
           ]),
   };
+}
+
+/// A new cell size rescales every token with it, so a 2×2 token stays 2×2.
+Outcome _settings(Scene scene, SceneSettings settings) {
+  final from = scene.settings.grid.cellSize;
+  final to = settings.grid.cellSize;
+  if (!(to > 0 && to.isFinite)) return const Refused(Refusal.invalid);
+  return Accepted([
+    Upsert(settings),
+    if (to != from)
+      for (final t in scene.tokens.values)
+        Upsert(t.copyWith(size: t.size * to / from)),
+  ]);
 }
 
 Outcome _move(Scene scene, Actor actor, TokenId id, Point to) {

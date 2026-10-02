@@ -548,7 +548,7 @@ class TokenCardLayer extends StatelessWidget {
   static const width = 280.0;
 
   /// For keeping the card on screen; near enough to its real height.
-  static const height = 360.0;
+  static const height = 420.0;
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
@@ -585,6 +585,7 @@ class TokenCardLayer extends StatelessWidget {
                     key: ValueKey(token.id),
                     token: token,
                     grid: scene.settings.grid,
+                    snap: controller.snap,
                     session: session,
                     send: send,
                     onRemove: () => onRemove(token.id),
@@ -609,6 +610,7 @@ class _TokenCard extends StatelessWidget {
     super.key,
     required this.token,
     required this.grid,
+    required this.snap,
     required this.session,
     required this.send,
     required this.onRemove,
@@ -621,6 +623,9 @@ class _TokenCard extends StatelessWidget {
 
   final Token token;
   final Grid grid;
+
+  /// Resizing snaps the token too, like a drop.
+  final bool snap;
   final Session session;
   final Outcome Function(Command) send;
   final VoidCallback onRemove;
@@ -686,6 +691,23 @@ class _TokenCard extends StatelessWidget {
                     name: token.name,
                     onChanged: (name) =>
                         send(UpdateToken(token.copyWith(name: name))),
+                  ),
+                  Text('Size',
+                      style: CvTypography.label
+                          .copyWith(color: CvColors.textSecondary)),
+                  CvSegmentedControl<int>(
+                    value: (token.size / grid.cellSize).round(),
+                    onChanged: (cells) {
+                      final size = cells * grid.cellSize;
+                      send(UpdateToken(token.copyWith(
+                          size: size,
+                          position:
+                              snap ? grid.snap(token.position, size) : null)));
+                    },
+                    segments: [
+                      for (var n = 1; n <= 4; n++)
+                        (value: n, label: '$n×$n', icon: null, checked: null),
+                    ],
                   ),
                   StreamBuilder(
                     stream: session.peers,
