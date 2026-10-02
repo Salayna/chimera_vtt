@@ -55,6 +55,27 @@ final class Grid {
 
   bool get valid => cellSize >= minCellSize && cellSize <= maxCellSize;
 
+  /// The spot nearest [near], a whole number of cells away, where a token of
+  /// [size] overlaps none of [tokens]. Tokens touching edge to edge is fine.
+  // ponytail: may land off the map near its edge; clamp if that bites.
+  Point freeSpot(Point near, double size, Iterable<Token> tokens) {
+    bool free(Point p) => tokens.every((t) {
+          final dx = t.position.x - p.x, dy = t.position.y - p.y;
+          final reach = (size + t.size) / 2 - 0.5;
+          return dx * dx + dy * dy >= reach * reach;
+        });
+    for (var ring = 0; ring <= 32; ring++) {
+      for (var i = -ring; i <= ring; i++) {
+        for (var j = -ring; j <= ring; j++) {
+          if (i.abs() != ring && j.abs() != ring) continue; // Inside the ring.
+          final p = (x: near.x + i * cellSize, y: near.y + j * cellSize);
+          if (free(p)) return p;
+        }
+      }
+    }
+    return near; // A full map: stack after all.
+  }
+
   /// Where a token of [size] centred at [center] snaps to: its edges onto
   /// the nearest grid lines, so a 2-cell token covers exactly 4 cells. A
   /// token smaller than a cell snaps to the middle of the cell it's in.

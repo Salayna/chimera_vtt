@@ -402,11 +402,13 @@ class _GmRoomState extends State<GmRoom> {
     final size = scene.settings.grid.cellSize;
     final center = _controller.viewCenter;
     final id = TokenId(newId());
+    final grid = scene.settings.grid;
     host.execute(PlaceToken(Token(
       id: id,
-      position: _controller.snap
-          ? scene.settings.grid.snap(center, size)
-          : center,
+      position: grid.freeSpot(
+          _controller.snap ? grid.snap(center, size) : center,
+          size,
+          scene.tokens.values),
       size: size,
       image: AssetId('token${scene.tokens.length % widget.art.tokens.length}'),
     )));

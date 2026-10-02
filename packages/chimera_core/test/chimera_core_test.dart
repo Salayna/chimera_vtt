@@ -91,6 +91,20 @@ void main() {
     expect(Grid.fitted((x: 0, y: 0), (x: 8, y: 8)).valid, isFalse);
   });
 
+  test('a free spot is the nearest cell no token overlaps', () {
+    const grid = Grid(cellSize: 100);
+    Token at(double x, double y, [double size = 100]) =>
+        Token(id: TokenId('$x,$y'), position: (x: x, y: y), size: size);
+    const near = (x: 150.0, y: 150.0);
+    expect(grid.freeSpot(near, 100, []), near);
+    // Taken: the next ring, starting top-left.
+    expect(grid.freeSpot(near, 100, [at(150, 150)]), (x: 50.0, y: 50.0));
+    // A 2×2 token around it blocks the whole first ring.
+    final big = at(200, 200, 200);
+    final spot = grid.freeSpot(near, 100, [big]);
+    expect(((spot.x - 200).abs() >= 150 || (spot.y - 200).abs() >= 150), isTrue);
+  });
+
   group('reduce', () {
     final scene = sceneWith([
       token('mine', owner: alice.id),
