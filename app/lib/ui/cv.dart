@@ -818,12 +818,16 @@ class CvTextInput extends StatefulWidget {
     this.placeholder,
     this.error,
     this.code = false,
+    this.obscure = false,
     this.maxLength,
     this.onChanged,
     this.onSubmitted,
   });
 
   final TextEditingController controller;
+
+  /// Dots instead of the text: passwords.
+  final bool obscure;
   final String? label;
   final String? placeholder;
   final String? error;
@@ -917,6 +921,7 @@ class _CvTextInputState extends State<CvTextInput> {
                   child: EditableText(
                     controller: widget.controller,
                     focusNode: _focus,
+                    obscureText: widget.obscure,
                     style: style,
                     cursorColor: CvColors.amber500,
                     backgroundCursorColor: CvColors.slate700,

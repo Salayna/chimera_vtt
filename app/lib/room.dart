@@ -12,6 +12,7 @@ import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show SupabaseClient;
 
+import 'account.dart';
 import 'assets.dart';
 import 'table/chrome.dart';
 import 'table/table_view.dart';
@@ -71,10 +72,11 @@ Scene sceneFromFile(Uint8List bytes) {
 /// Pictures shared by both roles until maps and tokens come from Storage.
 typedef Art = ({ui.Image map, Map<AssetId, ui.Image> tokens});
 
-/// Open a room as the GM, or join one with a room code.
+/// Open a room as the GM (signed in), or join one with a room code.
 class Lobby extends StatefulWidget {
-  const Lobby({super.key, required this.onEnter});
+  const Lobby({super.key, required this.client, required this.onEnter});
 
+  final SupabaseClient client;
   final void Function(SavedRoom room) onEnter;
 
   @override
@@ -152,18 +154,30 @@ class _LobbyState extends State<Lobby> {
                   title: 'Open a room',
                   subtitle: "You'll be the GM.",
                   children: [
-                    Text(
-                        'You get a 6-character room code to share with your '
-                        'players.',
-                        style: CvTypography.body
-                            .copyWith(color: CvColors.textSecondary)),
-                    CvButton(
-                      label: 'Create room',
-                      icon: Lucide.plus,
-                      variant: CvButtonVariant.primary,
-                      block: true,
-                      onPressed: () =>
-                          widget.onEnter((code: newRoomCode(), gm: true)),
+                    GmAccount(
+                      client: widget.client,
+                      builder: (context, gm) => gm == null
+                          ? GmSignIn(client: widget.client)
+                          : Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              spacing: CvSpacing.s4,
+                              children: [
+                                Text(
+                                    'You get a 6-character room code to share '
+                                    'with your players.',
+                                    style: CvTypography.body.copyWith(
+                                        color: CvColors.textSecondary)),
+                                CvButton(
+                                  label: 'Create room',
+                                  icon: Lucide.plus,
+                                  variant: CvButtonVariant.primary,
+                                  block: true,
+                                  onPressed: () => widget
+                                      .onEnter((code: newRoomCode(), gm: true)),
+                                ),
+                                _SignedInAs(client: widget.client, email: gm.email),
+                              ],
+                            ),
                     ),
                   ],
                 ),
@@ -202,6 +216,30 @@ class _LobbyState extends State<Lobby> {
       ),
     ]);
   }
+}
+
+/// "Signed in as …", with a way out.
+class _SignedInAs extends StatelessWidget {
+  const _SignedInAs({required this.client, required this.email});
+
+  final SupabaseClient client;
+  final String? email;
+
+  @override
+  Widget build(BuildContext context) => Row(children: [
+        Expanded(
+          child: Text('Signed in as ${email ?? 'GM'}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: CvTypography.caption.copyWith(color: CvColors.textSecondary)),
+        ),
+        CvButton(
+          label: 'Sign out',
+          variant: CvButtonVariant.ghost,
+          small: true,
+          onPressed: client.auth.signOut,
+        ),
+      ]);
 }
 
 /// Equal-height cards in a row when they fit, stacked when they don't.

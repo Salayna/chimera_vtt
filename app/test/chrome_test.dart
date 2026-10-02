@@ -7,6 +7,8 @@ import 'package:chimera_vtt/ui/cv.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:supabase_flutter/supabase_flutter.dart'
+    show AuthClientOptions, SupabaseClient;
 
 void main() {
   test('cells are named column letter, row number', () {
@@ -28,17 +30,22 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     SavedRoom? entered;
+    // Nobody signed in, and nothing to reach: the GM card asks to sign in.
+    final client = SupabaseClient('http://127.0.0.1:9', 'key',
+        authOptions: const AuthClientOptions(autoRefreshToken: false));
     await tester.pumpWidget(cvApp(
-        title: 'test', home: Lobby(onEnter: (room) => entered = room)));
-    await tester.enterText(find.byType(EditableText), 'k7q');
+        title: 'test',
+        home: Lobby(client: client, onEnter: (room) => entered = room)));
+    await tester.pump();
+    expect(find.text('Sign in'), findsOneWidget);
+    expect(find.text('Create room'), findsNothing);
+
+    await tester.enterText(find.widgetWithText(CvTextInput, 'Room code'), 'k7q');
     await tester.pump();
     await tester.tap(find.text('Join'));
     await tester.pump();
     expect(find.text('Room codes have 6 characters.'), findsOneWidget);
     expect(entered, isNull);
-
-    await tester.tap(find.text('Create room'));
-    expect(entered?.gm, isTrue);
   });
 
   testWidgets('the GM chrome follows the controller', (tester) async {

@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:chimera_core/chimera_core.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter/semantics.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'account.dart';
 import 'assets.dart';
 import 'bench.dart';
 import 'demo_assets.dart';
@@ -50,11 +53,30 @@ class _ChimeraAppState extends State<ChimeraApp> {
   SavedRoom? _room;
   Art? _art;
   String? _error;
+  StreamSubscription<AuthState>? _auth;
 
   @override
   void initState() {
     super.initState();
     _boot();
+    // A GM signing in or out changes who this client is. Signed out, it
+    // goes back to being an anonymous player.
+    _auth = _client.auth.onAuthStateChange.listen((state) async {
+      final user = _client.auth.currentUser;
+      if (user == null) {
+        await _client.auth.signInAnonymously();
+        return;
+      }
+      if (mounted && _me?.value != user.id) {
+        setState(() => _me = PlayerId(user.id));
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _auth?.cancel();
+    super.dispose();
   }
 
   Future<void> _boot() async {
@@ -99,7 +121,9 @@ class _ChimeraAppState extends State<ChimeraApp> {
     return cvApp(
       title: 'Chimera VTT',
       home: switch ((me, art, room)) {
-        (final me?, final art?, final room?) when room.gm => GmRoom(
+        (final me?, final art?, final room?)
+            when room.gm && signedInGm(_client) != null =>
+          GmRoom(
             key: ValueKey(room),
             client: _client,
             assets: _assets,
@@ -108,7 +132,7 @@ class _ChimeraAppState extends State<ChimeraApp> {
             art: art,
             onLeave: _leave,
           ),
-        (final me?, final art?, final room?) => PlayerRoom(
+        (final me?, final art?, final room?) when !room.gm => PlayerRoom(
             key: ValueKey(room),
             client: _client,
             assets: _assets,
@@ -117,7 +141,8 @@ class _ChimeraAppState extends State<ChimeraApp> {
             art: art,
             onLeave: _leave,
           ),
-        (_?, _?, null) => Lobby(onEnter: _enter),
+        // No room, or a GM room without a signed-in GM.
+        (_?, _?, _) => Lobby(client: _client, onEnter: _enter),
         _ when _error != null => StatusScreen(
             title: 'Could not sign in.',
             message: _error,
