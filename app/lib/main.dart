@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'assets.dart';
 import 'bench.dart';
 import 'demo_assets.dart';
 import 'loopback_demo.dart';
@@ -41,6 +42,7 @@ class ChimeraApp extends StatefulWidget {
 
 class _ChimeraAppState extends State<ChimeraApp> {
   final _client = Supabase.instance.client;
+  late final _assets = AssetStore(_client);
   PlayerId? _me;
   SavedRoom? _room;
   Art? _art;
@@ -98,6 +100,7 @@ class _ChimeraAppState extends State<ChimeraApp> {
         (final me?, final art?, final room?) when room.gm => GmRoom(
             key: ValueKey(room),
             client: _client,
+            assets: _assets,
             me: me,
             code: room.code,
             art: art,
@@ -106,6 +109,7 @@ class _ChimeraAppState extends State<ChimeraApp> {
         (final me?, final art?, final room?) => PlayerRoom(
             key: ValueKey(room),
             client: _client,
+            assets: _assets,
             me: me,
             code: room.code,
             art: art,

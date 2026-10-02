@@ -10,14 +10,18 @@ const bob = PlayerId('bob');
 const players = Player(PlayerId(''));
 
 final settings = SceneSettings(
-    width: 4096, height: 4096, grid: const Grid(cellSize: 64));
+  width: 4096,
+  height: 4096,
+  grid: const Grid(cellSize: 64),
+);
 
 Token token(String id, {PlayerId? owner, bool hidden = false}) => Token(
-    id: TokenId(id),
-    position: (x: 0, y: 0),
-    size: 64,
-    owner: owner,
-    hidden: hidden);
+  id: TokenId(id),
+  position: (x: 0, y: 0),
+  size: 64,
+  owner: owner,
+  hidden: hidden,
+);
 
 /// A GM and two players on a manual loopback hub.
 class Table {
@@ -48,28 +52,50 @@ class Table {
 
 void main() {
   test('every message survives JSON', () {
-    final scene = Scene(settings: settings, tokens: {
-      const TokenId('a'): token('a'),
-    });
+    final scene = Scene(
+      settings: settings,
+      tokens: {const TokenId('a'): token('a')},
+    );
     final messages = <Message>[
       const RequestSnapshot(alice),
       Snapshot(to: alice, epoch: 'e', seq: 3, scene: scene),
       Snapshot(epoch: 'e', seq: 4, scene: scene),
-      PatchBatch(epoch: 'e', seq: 5, patches: [
-        Upsert(token('a')),
-        Delete.token(const TokenId('b')),
-      ], requestId: 'r1'),
+      PatchBatch(
+        epoch: 'e',
+        seq: 5,
+        patches: [Upsert(token('a')), Delete.token(const TokenId('b'))],
+        requestId: 'r1',
+      ),
       const Heartbeat('e', 5),
       Intent(
-          from: bob,
-          requestId: 'r2',
-          command: const MoveToken(TokenId('a'), (x: 1, y: 2)).toJson()),
+        from: bob,
+        requestId: 'r2',
+        command: const MoveToken(TokenId('a'), (x: 1, y: 2)).toJson(),
+      ),
       const RefusalMessage(to: bob, requestId: 'r2', reason: Refusal.notOwner),
     ];
     for (final m in messages) {
       expect(Message.fromJson(m.toJson()).toJson(), equals(m.toJson()));
     }
   });
+
+  test(
+    'presence lists each player once, even with a stale connection',
+    () async {
+      final hub = LoopbackHub();
+      final session = ClientSession(hub.connect(), alice);
+      final stale = ClientSession(hub.connect(), alice); // before a reload
+      final gm = HostSession(
+        hub.connect(),
+        gmId,
+        SceneStore(Scene(settings: settings)),
+      );
+      await stale.setCursor(null);
+      await session.setCursor(null);
+      await gm.setCursor(null);
+      expect(session.currentPeers.map((p) => p.player), ['alice', 'gm']);
+    },
+  );
 
   test('joining fails on another protocol version', () async {
     final hub = LoopbackHub();
@@ -80,53 +106,82 @@ void main() {
   });
 
   test('a player sees their move at once, and the GM sees it too', () async {
-    final table = Table(Scene(
-        settings: settings, tokens: {const TokenId('t'): token('t', owner: alice)}));
+    final table = Table(
+      Scene(
+        settings: settings,
+        tokens: {const TokenId('t'): token('t', owner: alice)},
+      ),
+    );
     await table.join();
     final player = table.clients[alice]!;
 
-    expect(player.request(const MoveToken(TokenId('t'), (x: 5, y: 5))),
-        isA<Accepted>());
-    expect(player.store.scene.tokens[const TokenId('t')]!.position, (x: 5, y: 5));
+    expect(
+      player.request(const MoveToken(TokenId('t'), (x: 5, y: 5))),
+      isA<Accepted>(),
+    );
+    expect(player.store.scene.tokens[const TokenId('t')]!.position, (
+      x: 5,
+      y: 5,
+    ));
     expect(player.pendingCount, 1);
 
     table.hub.flush();
-    expect(table.host.store.scene.tokens[const TokenId('t')]!.position,
-        (x: 5, y: 5));
+    expect(table.host.store.scene.tokens[const TokenId('t')]!.position, (
+      x: 5,
+      y: 5,
+    ));
     expect(player.pendingCount, 0);
     table.expectConverged();
   });
 
   test("a move the GM refuses snaps back", () async {
-    final table = Table(Scene(
-        settings: settings, tokens: {const TokenId('t'): token('t', owner: alice)}));
+    final table = Table(
+      Scene(
+        settings: settings,
+        tokens: {const TokenId('t'): token('t', owner: alice)},
+      ),
+    );
     await table.join();
     final player = table.clients[alice]!;
 
     // The GM gives the token away before alice's move reaches them.
     table.host.execute(const AssignOwner(TokenId('t'), bob));
-    expect(player.request(const MoveToken(TokenId('t'), (x: 9, y: 9))),
-        isA<Accepted>());
+    expect(
+      player.request(const MoveToken(TokenId('t'), (x: 9, y: 9))),
+      isA<Accepted>(),
+    );
     table.hub.flush();
 
     expect(player.pendingCount, 0);
-    expect(player.store.scene.tokens[const TokenId('t')]!.position, (x: 0, y: 0));
+    expect(player.store.scene.tokens[const TokenId('t')]!.position, (
+      x: 0,
+      y: 0,
+    ));
     table.expectConverged();
   });
 
   test('a player refuses what the GM would refuse, without sending', () async {
-    final table = Table(Scene(
-        settings: settings, tokens: {const TokenId('t'): token('t', owner: bob)}));
+    final table = Table(
+      Scene(
+        settings: settings,
+        tokens: {const TokenId('t'): token('t', owner: bob)},
+      ),
+    );
     await table.join();
-    final outcome =
-        table.clients[alice]!.request(const MoveToken(TokenId('t'), (x: 1, y: 1)));
+    final outcome = table.clients[alice]!.request(
+      const MoveToken(TokenId('t'), (x: 1, y: 1)),
+    );
     expect(outcome, isA<Refused>());
     expect(table.hub.idle, isTrue);
   });
 
   test('players follow a GM who reloads and starts counting again', () async {
-    final table = Table(Scene(
-        settings: settings, tokens: {const TokenId('t'): token('t', owner: alice)}));
+    final table = Table(
+      Scene(
+        settings: settings,
+        tokens: {const TokenId('t'): token('t', owner: alice)},
+      ),
+    );
     await table.join();
     for (var i = 0; i < 5; i++) {
       table.host.execute(MoveToken(const TokenId('t'), (x: i * 10.0, y: 0)));
@@ -136,21 +191,32 @@ void main() {
     // The GM's tab reloads: a new session with seq back at 0, resuming from
     // an autosave that missed the last moves.
     await table.host.close();
-    table.host = HostSession(table.hub.connect(), gmId, SceneStore(Scene(
-        settings: settings, tokens: {const TokenId('t'): token('t', owner: alice)})));
+    table.host = HostSession(
+      table.hub.connect(),
+      gmId,
+      SceneStore(
+        Scene(
+          settings: settings,
+          tokens: {const TokenId('t'): token('t', owner: alice)},
+        ),
+      ),
+    );
     table.host.execute(const MoveToken(TokenId('t'), (x: 7, y: 7)));
     table.host.heartbeat();
     table.hub.flush();
     table.expectConverged();
-    expect(table.clients[alice]!.store.scene.tokens[const TokenId('t')]!.position,
-        (x: 7, y: 7));
+    expect(
+      table.clients[alice]!.store.scene.tokens[const TokenId('t')]!.position,
+      (x: 7, y: 7),
+    );
   });
 
   test('loading a scene reaches every player', () async {
     final table = Table(Scene(settings: settings));
     await table.join();
-    table.host.load(Scene(
-        settings: settings, tokens: {const TokenId('new'): token('new')}));
+    table.host.load(
+      Scene(settings: settings, tokens: {const TokenId('new'): token('new')}),
+    );
     table.hub.flush();
     table.expectConverged();
   });
@@ -161,14 +227,21 @@ void main() {
   test('H3: players converge despite loss and reordering', () async {
     final random = Random(7);
     final ids = [for (var i = 0; i < 6; i++) TokenId('t$i')];
-    final table = Table(Scene(settings: settings, tokens: {
-      for (final id in ids)
-        id: token(id.value, owner: random.nextBool() ? alice : bob),
-    }));
+    final table = Table(
+      Scene(
+        settings: settings,
+        tokens: {
+          for (final id in ids)
+            id: token(id.value, owner: random.nextBool() ? alice : bob),
+        },
+      ),
+    );
     await table.join();
 
-    Point somewhere() =>
-        (x: random.nextInt(4096).toDouble(), y: random.nextInt(4096).toDouble());
+    Point somewhere() => (
+      x: random.nextInt(4096).toDouble(),
+      y: random.nextInt(4096).toDouble(),
+    );
 
     var accepted = 0;
     for (var i = 0; i < 1000; i++) {

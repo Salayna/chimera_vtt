@@ -7,9 +7,11 @@ import 'package:chimera_core/chimera_core.dart';
 import 'package:chimera_sync/chimera_sync.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show SupabaseClient;
 
+import 'assets.dart';
 import 'table/table_view.dart';
 import 'table/toolbar.dart';
 
@@ -165,6 +167,7 @@ class GmRoom extends StatefulWidget {
   const GmRoom({
     super.key,
     required this.client,
+    required this.assets,
     required this.me,
     required this.code,
     required this.art,
@@ -172,6 +175,7 @@ class GmRoom extends StatefulWidget {
   });
 
   final SupabaseClient client;
+  final AssetStore assets;
   final PlayerId me;
   final String code;
   final Art art;
@@ -259,6 +263,41 @@ class _GmRoomState extends State<GmRoom> {
     )));
   }
 
+  bool _uploading = false;
+
+  /// Picks an image, uploads it, and makes it the scene's map.
+  Future<void> _setMap() async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final file = await FilePicker.pickFile(type: FileType.image);
+      if (file == null) return;
+      final type = AssetStore.contentTypes[file.extension?.toLowerCase()];
+      if (type == null) {
+        messenger.showSnackBar(
+            const SnackBar(content: Text('Use a PNG, JPEG or WebP image.')));
+        return;
+      }
+      setState(() => _uploading = true);
+      final bytes = await file.readAsBytes();
+      final image = await decodeImage(bytes);
+      final id = await widget.assets.upload(bytes, type);
+      widget.assets.remember(id, image);
+      final host = _host!;
+      final old = host.store.scene.settings;
+      host.execute(UpdateSettings(SceneSettings(
+        map: id,
+        width: image.width.toDouble(),
+        height: image.height.toDouble(),
+        grid: old.grid,
+        fogByDefault: old.fogByDefault,
+      )));
+    } on Object catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Map upload failed: $e')));
+    } finally {
+      if (mounted) setState(() => _uploading = false);
+    }
+  }
+
   @override
   void dispose() {
     _heartbeat?.cancel();
@@ -286,8 +325,13 @@ class _GmRoomState extends State<GmRoom> {
         else ...[
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: GmToolbar(controller: _controller, onAddToken: _addToken),
+            child: GmToolbar(
+              controller: _controller,
+              onAddToken: _addToken,
+              onSetMap: _uploading ? null : _setMap,
+            ),
           ),
+          if (_uploading) const LinearProgressIndicator(),
           _SelectedToken(host: host, controller: _controller),
           Expanded(
             child: TableView(
@@ -297,6 +341,7 @@ class _GmRoomState extends State<GmRoom> {
               self: widget.me,
               send: host.execute,
               map: widget.art.map,
+              loadAsset: widget.assets.image,
               images: (id) => widget.art.tokens[id],
             ),
           ),
@@ -347,6 +392,7 @@ class PlayerRoom extends StatefulWidget {
   const PlayerRoom({
     super.key,
     required this.client,
+    required this.assets,
     required this.me,
     required this.code,
     required this.art,
@@ -354,6 +400,7 @@ class PlayerRoom extends StatefulWidget {
   });
 
   final SupabaseClient client;
+  final AssetStore assets;
   final PlayerId me;
   final String code;
   final Art art;
@@ -429,6 +476,7 @@ class _PlayerRoomState extends State<PlayerRoom> {
                   self: widget.me,
                   send: session.request,
                   map: widget.art.map,
+                  loadAsset: widget.assets.image,
                   images: (id) => widget.art.tokens[id],
                 ),
         ),

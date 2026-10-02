@@ -54,6 +54,7 @@ class TableView extends StatefulWidget {
     required this.self,
     required this.send,
     this.map,
+    this.loadAsset,
     this.images = _noImages,
   });
 
@@ -62,7 +63,11 @@ class TableView extends StatefulWidget {
   final bool gm;
   final PlayerId self;
   final Outcome Function(Command) send;
+  /// Shown while the scene has no map of its own.
   final ui.Image? map;
+
+  /// Loads the scene's map ([SceneSettings.map]) when it has one.
+  final Future<ui.Image> Function(AssetId)? loadAsset;
   final ui.Image? Function(AssetId) images;
 
   static ui.Image? _noImages(AssetId _) => null;
@@ -81,10 +86,12 @@ class _TableViewState extends State<TableView> {
   Map<FogOpId, FogOp>? _maskedOps;
   int _fogRevision = 0;
   Timer? _bakeTimer;
+  AssetId? _mapId;
+  ui.Image? _mapImage;
 
   /// Pending fog ops bake after this long without a new one.
   static const bakeAfter = Duration(seconds: 1);
-  bool _fitted = false;
+  Size? _fittedTo;
 
   // Gesture state.
   Offset? _grab;
@@ -119,6 +126,19 @@ class _TableViewState extends State<TableView> {
 
   void _setScene(Scene scene) {
     _scene = scene;
+    final mapId = scene.settings.map;
+    if (mapId != _mapId) {
+      _mapId = mapId;
+      _mapImage = null;
+      if (mapId != null) {
+        widget.loadAsset?.call(mapId).then((image) {
+          if (mounted && _mapId == mapId) setState(() => _mapImage = image);
+        }, onError: (Object e) {
+          // ponytail: no retry UI; a reload retries.
+          debugPrint('Map $mapId failed to load: $e');
+        });
+      }
+    }
     if (!identical(scene.fogOps, _maskedOps)) {
       _maskedOps = scene.fogOps;
       if (_mask.sync(scene.settings, scene.fogInOrder)) _fogRevision++;
@@ -148,15 +168,16 @@ class _TableViewState extends State<TableView> {
       size: size,
       child: Stack(children: [
         RepaintBoundary(
-          child: widget.map == null
-              ? const ColoredBox(color: Color(0xFF2E3B2E))
-              : RawImage(
-                  image: widget.map,
+          child: switch (settings.map == null ? widget.map : _mapImage) {
+            null => const ColoredBox(color: Color(0xFF2E3B2E)),
+            final map => RawImage(
+                  image: map,
                   width: size.width,
                   height: size.height,
                   fit: BoxFit.fill,
                   filterQuality: FilterQuality.medium,
                 ),
+          },
         ),
         RepaintBoundary(
           child: CustomPaint(size: size, painter: GridPainter(settings)),
@@ -191,8 +212,11 @@ class _TableViewState extends State<TableView> {
 
     return LayoutBuilder(builder: (context, constraints) {
       _c._viewport = constraints.biggest;
-      if (!_fitted && constraints.hasBoundedWidth && constraints.hasBoundedHeight) {
-        _fitted = true;
+      // Fit the map in view at first, and again when it changes size.
+      if (_fittedTo != size &&
+          constraints.hasBoundedWidth &&
+          constraints.hasBoundedHeight) {
+        _fittedTo = size;
         _c.view.value = _fit(constraints.biggest, size);
       }
       return ClipRect(

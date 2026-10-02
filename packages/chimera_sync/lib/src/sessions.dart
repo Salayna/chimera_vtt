@@ -10,7 +10,10 @@ sealed class Session {
   Session(this.transport, this.self, {required this.gm}) {
     _subscription = transport.messages.listen(_onJson);
     _presenceSubscription = transport.presence.listen((states) {
-      _peers = [for (final s in states) ?_tryPresence(s)];
+      // One entry per player: after a reload, the old connection lingers in
+      // presence until the server notices it's gone.
+      final all = [for (final s in states) ?_tryPresence(s)];
+      _peers = {for (final p in all) p.player: p}.values.toList();
       _peersController.add(_peers);
     });
   }

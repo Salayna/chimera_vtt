@@ -6,10 +6,12 @@ import 'table_view.dart';
 
 /// The GM's tools: move or paint fog, cover or reveal, add a token.
 class GmToolbar extends StatefulWidget {
-  const GmToolbar({super.key, required this.controller, this.onAddToken});
+  const GmToolbar(
+      {super.key, required this.controller, this.onAddToken, this.onSetMap});
 
   final TableController controller;
   final VoidCallback? onAddToken;
+  final VoidCallback? onSetMap;
 
   @override
   State<GmToolbar> createState() => _GmToolbarState();
@@ -51,6 +53,12 @@ class _GmToolbarState extends State<GmToolbar> {
           selected: c.snap,
           onSelected: (snap) => setState(() => c.snap = snap),
         ),
+        if (widget.onSetMap != null)
+          FilledButton.tonalIcon(
+            onPressed: widget.onSetMap,
+            icon: const Icon(Icons.map_outlined),
+            label: const Text('Map'),
+          ),
         if (widget.onAddToken != null)
           FilledButton.tonalIcon(
             onPressed: widget.onAddToken,
