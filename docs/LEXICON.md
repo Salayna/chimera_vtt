@@ -23,6 +23,7 @@ One word, one meaning. When code, docs and conversation disagree, this file wins
 | **Player** | `Player` | Anyone at the table who isn't the GM. Sees a filtered copy of the scene. |
 | **Campaign** | `Campaign` | Everything one group plays with: scenes, packs, assets and members. Owned by one signed-in GM. |
 | **Member** | — | A player who has entered a campaign's room at least once, with the name and colour they chose. Signed in or anonymous. The GM can remove one. A token's owner is a member. |
+| **Home** | `GmHome` | A signed-in GM's screen outside any room: their campaigns, their library, and joining someone else's room as a player. Signed out, the lobby shows sign-in and joining instead. |
 | **Scene** | `Scene` | One map and everything on it. A set of entities keyed by id. |
 | **Map** | — | The background image of a scene. It's an asset, referenced from the scene settings. |
 | **Library** | — | A GM's maps, token pictures and scenes, shared by all their campaigns, each named and picked instead of made again. A library scene is a template: campaigns get a copy. |

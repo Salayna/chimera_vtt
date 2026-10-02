@@ -273,6 +273,16 @@ Bricks:
 4. Rename and delete library entries.
 5. Scenes: save a campaign's scene to the library, and start a new scene in any campaign as a copy of a library scene.
 
+### Home
+
+Built 2026-10-03. A signed-in GM lands on their home instead of the lobby's sign-in card, with three tabs:
+
+- **Campaigns:** a card per campaign with its live scene's map (when that map is in the library), its scene and player counts and its room code. Create, open, rename, change the code, or delete (with its scenes, members and log; the library stays).
+- **Library:** maps, token images and scenes in one place. Upload maps and token images, rename and delete entries. Scenes still come in from a campaign's Scenes panel.
+- **Join a room:** the player form, to sit at someone else's table.
+
+Leaving a room comes back here.
+
 ---
 
 ## Tactical engine

@@ -138,6 +138,7 @@ class _ChimeraAppState extends State<ChimeraApp> {
         // No room, or a GM room without a signed-in GM.
         (_?, _?, _) => Lobby(
             client: _client,
+            assets: _assets,
             onEnter: _enter,
             // A join link, ?room=CODE: the player still gives a name.
             code: normalizeRoomCode(Uri.base.queryParameters['room'] ?? '')),

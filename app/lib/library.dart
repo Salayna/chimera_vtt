@@ -2,6 +2,7 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:chimera_core/chimera_core.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/widgets.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show SupabaseClient;
 
@@ -113,12 +114,86 @@ Future<Uint8List> thumbnail(ui.Image image) async {
   return png!.buffer.asUint8List();
 }
 
-/// A library thumbnail, loaded once per session like any asset.
+/// Asks for a new name for [entry]. Null when cancelled or unchanged.
+Future<String?> askEntryName(BuildContext context, LibraryEntry entry) async {
+  final text = TextEditingController(text: entry.name);
+  final name = await showCvDialog<String>(
+    context: context,
+    title: 'Rename ${entry.name}',
+    icon: Lucide.pencil,
+    body: CvTextInput(
+      controller: text,
+      label: 'Name',
+      maxLength: 80,
+      onSubmitted: (v) => Navigator.pop(context, v),
+    ),
+    actions: (context) => [
+      CvButton(
+          label: 'Cancel',
+          variant: CvButtonVariant.ghost,
+          onPressed: () => Navigator.pop(context)),
+      CvButton(
+          label: 'Rename',
+          variant: CvButtonVariant.primary,
+          onPressed: () => Navigator.pop(context, text.text)),
+    ],
+  );
+  // Not disposed: the dialog still shows it while it animates away.
+  final trimmed = name?.trim() ?? '';
+  return trimmed.isEmpty || trimmed == entry.name ? null : trimmed;
+}
+
+/// Asks before [entry] leaves the library.
+Future<bool> confirmEntryDelete(BuildContext context, LibraryEntry entry) async =>
+    await showCvDialog<bool>(
+      context: context,
+      title: 'Delete ${entry.name}?',
+      icon: Lucide.trash2,
+      tone: CvTone.danger,
+      body: const Text('It leaves your library. Scenes already using it '
+          'keep it.'),
+      actions: (context) => [
+        CvButton(
+            label: 'Cancel',
+            variant: CvButtonVariant.ghost,
+            onPressed: () => Navigator.pop(context, false)),
+        CvButton(
+            label: 'Delete',
+            variant: CvButtonVariant.danger,
+            onPressed: () => Navigator.pop(context, true)),
+      ],
+    ) ??
+    false;
+
+/// An image the GM picked and uploaded, named after its file.
+typedef PickedImage = ({AssetId id, ui.Image image, String name});
+
+/// Lets the GM pick an image file and uploads it. Null when they pick none.
+/// [onUploading] gets the file's name once one is picked. Throws a
+/// [FormatException] for a file that isn't PNG, JPEG or WebP.
+Future<PickedImage?> pickImage(AssetStore assets,
+    {void Function(String file)? onUploading}) async {
+  final file = await FilePicker.pickFile(type: FileType.image);
+  if (file == null) return null;
+  final type = AssetStore.contentTypes[file.extension?.toLowerCase()];
+  if (type == null) {
+    throw const FormatException('Use a PNG, JPEG or WebP image.');
+  }
+  onUploading?.call(file.name);
+  final bytes = await file.readAsBytes();
+  final image = await decodeImage(bytes);
+  final id = await assets.upload(bytes, type);
+  assets.remember(id, image);
+  return (id: id, image: image, name: file.name.replaceFirst(RegExp(r'\.[^.]*$'), ''));
+}
+
+/// A library thumbnail, loaded once per session like any asset. Empty
+/// ground when there is none.
 class LibraryThumb extends StatelessWidget {
-  const LibraryThumb({super.key, required this.assets, required this.entry});
+  const LibraryThumb({super.key, required this.assets, required this.thumb});
 
   final AssetStore assets;
-  final LibraryEntry entry;
+  final AssetId? thumb;
 
   @override
   Widget build(BuildContext context) => ClipRRect(
@@ -126,7 +201,7 @@ class LibraryThumb extends StatelessWidget {
         child: ColoredBox(
           color: CvColors.surfaceInput,
           child: FutureBuilder(
-            future: switch (entry.thumb) {
+            future: switch (thumb) {
               final thumb? => assets.image(thumb),
               null => null,
             },
@@ -176,54 +251,14 @@ class _LibraryPanelState extends State<LibraryPanel> {
   bool _editing = false;
 
   Future<void> _rename(LibraryEntry entry) async {
-    final text = TextEditingController(text: entry.name);
-    final name = await showCvDialog<String>(
-      context: context,
-      title: 'Rename ${entry.name}',
-      icon: Lucide.pencil,
-      body: CvTextInput(
-        controller: text,
-        label: 'Name',
-        maxLength: 80,
-        onSubmitted: (v) => Navigator.pop(context, v),
-      ),
-      actions: (context) => [
-        CvButton(
-            label: 'Cancel',
-            variant: CvButtonVariant.ghost,
-            onPressed: () => Navigator.pop(context)),
-        CvButton(
-            label: 'Rename',
-            variant: CvButtonVariant.primary,
-            onPressed: () => Navigator.pop(context, text.text)),
-      ],
-    );
-    // Not disposed: the dialog still shows it while it animates away.
-    final trimmed = name?.trim() ?? '';
-    if (trimmed.isEmpty || trimmed == entry.name) return;
-    await _run(() => widget.library.rename(entry.id, trimmed));
+    final name = await askEntryName(context, entry);
+    if (name != null) await _run(() => widget.library.rename(entry.id, name));
   }
 
   Future<void> _delete(LibraryEntry entry) async {
-    final confirmed = await showCvDialog<bool>(
-      context: context,
-      title: 'Delete ${entry.name}?',
-      icon: Lucide.trash2,
-      tone: CvTone.danger,
-      body: const Text('It leaves your library. Scenes already using it '
-          'keep it.'),
-      actions: (context) => [
-        CvButton(
-            label: 'Cancel',
-            variant: CvButtonVariant.ghost,
-            onPressed: () => Navigator.pop(context, false)),
-        CvButton(
-            label: 'Delete',
-            variant: CvButtonVariant.danger,
-            onPressed: () => Navigator.pop(context, true)),
-      ],
-    );
-    if (confirmed ?? false) await _run(() => widget.library.delete(entry.id));
+    if (await confirmEntryDelete(context, entry)) {
+      await _run(() => widget.library.delete(entry.id));
+    }
   }
 
   Future<void> _run(Future<void> Function() change) async {
@@ -313,7 +348,7 @@ class _LibraryPanelState extends State<LibraryPanel> {
                                           : CvColors.borderSubtle),
                                 ),
                                 child: Stack(fit: StackFit.expand, children: [
-                                  LibraryThumb(assets: widget.assets, entry: e),
+                                  LibraryThumb(assets: widget.assets, thumb: e.thumb),
                                   if (_editing)
                                     Positioned(
                                       right: 2,
@@ -350,6 +385,179 @@ class _LibraryPanelState extends State<LibraryPanel> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// The GM's whole library on their home: browse each kind, upload maps and
+/// token images, rename and delete.
+class LibraryPage extends StatefulWidget {
+  const LibraryPage({super.key, required this.library, required this.assets});
+
+  final Library library;
+  final AssetStore assets;
+
+  @override
+  State<LibraryPage> createState() => _LibraryPageState();
+}
+
+class _LibraryPageState extends State<LibraryPage> {
+  var _kind = LibraryKind.map;
+  List<LibraryEntry>? _entries;
+  String? _error;
+  String? _uploading;
+
+  static const _hints = {
+    LibraryKind.map: 'Maps you upload, here or at the table, are kept here '
+        'for every campaign.',
+    LibraryKind.token: 'Token images you upload, here or at the table, are '
+        'kept here for every campaign.',
+    LibraryKind.scene: "Save a scene from a campaign's Scenes panel, then "
+        'start new scenes as copies of it in any campaign.',
+  };
+
+  @override
+  void initState() {
+    super.initState();
+    _run(() async {});
+  }
+
+  /// Runs [change], then reloads the shown kind.
+  Future<void> _run(Future<void> Function() change) async {
+    setState(() => _error = null);
+    try {
+      await change();
+      final kind = _kind;
+      final entries = await widget.library.list(kind);
+      if (mounted && kind == _kind) setState(() => _entries = entries);
+    } on FormatException catch (e) {
+      if (mounted) setState(() => _error = e.message);
+    } on Object catch (e) {
+      if (mounted) setState(() => _error = '$e');
+    }
+  }
+
+  void _show(LibraryKind kind) {
+    setState(() {
+      _kind = kind;
+      _entries = null;
+    });
+    _run(() async {});
+  }
+
+  Future<void> _upload() => _run(() async {
+        try {
+          final kind = _kind;
+          final picked = await pickImage(widget.assets,
+              onUploading: (file) => setState(() => _uploading = file));
+          if (picked == null) return;
+          await widget.library.add(kind, picked.name.isEmpty ? kind.name : picked.name,
+              picked.id, picked.image);
+        } finally {
+          if (mounted) setState(() => _uploading = null);
+        }
+      });
+
+  @override
+  Widget build(BuildContext context) {
+    final entries = _entries;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      spacing: CvSpacing.s6,
+      children: [
+        Wrap(
+          spacing: CvSpacing.s4,
+          runSpacing: CvSpacing.s4,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            SizedBox(
+              width: 320,
+              child: CvSegmentedControl(
+                segments: const [
+                  (value: LibraryKind.map, label: 'Maps', icon: Lucide.layers, checked: null),
+                  (value: LibraryKind.token, label: 'Tokens', icon: Lucide.userRound, checked: null),
+                  (value: LibraryKind.scene, label: 'Scenes', icon: Lucide.grid3x3, checked: null),
+                ],
+                value: _kind,
+                onChanged: _show,
+              ),
+            ),
+            if (_kind != LibraryKind.scene)
+              CvButton(
+                label: _uploading == null
+                    ? _kind == LibraryKind.map ? 'Upload map' : 'Upload token image'
+                    : 'Uploading $_uploading…',
+                icon: Lucide.imageUp,
+                variant: CvButtonVariant.primary,
+                onPressed: _uploading == null ? _upload : null,
+              ),
+          ],
+        ),
+        if (_error case final error?)
+          Text(error, style: CvTypography.bodySm.copyWith(color: CvColors.textDanger)),
+        if (entries == null)
+          if (_error == null)
+            const Center(child: CvSpinner(size: 20, color: CvColors.amber500))
+          else
+            const SizedBox()
+        else if (entries.isEmpty)
+          Text(_hints[_kind]!,
+              style: CvTypography.body.copyWith(color: CvColors.textSecondary))
+        else
+          Wrap(spacing: CvSpacing.s6, runSpacing: CvSpacing.s6, children: [
+            for (final e in entries)
+              SizedBox(
+                width: 180,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  spacing: CvSpacing.s3,
+                  children: [
+                    SizedBox(
+                      height: 180,
+                      child: DecoratedBox(
+                        position: DecorationPosition.foreground,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(CvRadii.md),
+                          border: Border.all(color: CvColors.borderSubtle),
+                        ),
+                        child: LibraryThumb(assets: widget.assets, thumb: e.thumb),
+                      ),
+                    ),
+                    Row(children: [
+                      Expanded(
+                        child: Text(e.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: CvTypography.label),
+                      ),
+                      CvToolButton(
+                        icon: Lucide.pencil,
+                        label: 'Rename ${e.name}',
+                        tooltipSide: AxisDirection.up,
+                        onPressed: () async {
+                          final name = await askEntryName(context, e);
+                          if (name != null) {
+                            await _run(() => widget.library.rename(e.id, name));
+                          }
+                        },
+                      ),
+                      CvToolButton(
+                        icon: Lucide.trash2,
+                        label: 'Delete ${e.name}',
+                        danger: true,
+                        tooltipSide: AxisDirection.up,
+                        onPressed: () async {
+                          if (await confirmEntryDelete(context, e)) {
+                            await _run(() => widget.library.delete(e.id));
+                          }
+                        },
+                      ),
+                    ]),
+                  ],
+                ),
+              ),
+          ]),
+      ],
     );
   }
 }

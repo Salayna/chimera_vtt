@@ -10,11 +10,13 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:supabase_flutter/supabase_flutter.dart' show SupabaseClient;
+import 'package:supabase_flutter/supabase_flutter.dart'
+    show PostgrestException, SupabaseClient;
 
 import 'account.dart';
 import 'assets.dart';
 import 'campaigns.dart';
+import 'home.dart';
 import 'library.dart';
 import 'members.dart';
 import 'table/chrome.dart';
@@ -88,21 +90,128 @@ Scene sceneFromFile(Uint8List bytes) {
 typedef Art = ({ui.Image map, Map<AssetId, ui.Image> tokens});
 
 /// Open a room as the GM (signed in), or join one with a room code.
-class Lobby extends StatefulWidget {
-  const Lobby(
-      {super.key, required this.client, required this.onEnter, this.code});
+class Lobby extends StatelessWidget {
+  const Lobby({
+    super.key,
+    required this.client,
+    required this.assets,
+    required this.onEnter,
+    this.code,
+  });
 
   final SupabaseClient client;
+  final AssetStore assets;
   final void Function(SavedRoom room) onEnter;
 
   /// From a join link: fills in the room code.
   final String? code;
 
   @override
-  State<Lobby> createState() => _LobbyState();
+  Widget build(BuildContext context) => GmAccount(
+        client: client,
+        builder: (context, gm) => gm == null
+            ? _SignedOut(client: client, onEnter: onEnter, code: code)
+            : GmHome(
+                client: client,
+                assets: assets,
+                email: gm.email,
+                onEnter: onEnter,
+                code: code,
+              ),
+      );
 }
 
-class _LobbyState extends State<Lobby> {
+/// Nobody signed in: sign in to run a campaign, or join one as a player.
+class _SignedOut extends StatelessWidget {
+  const _SignedOut({required this.client, required this.onEnter, this.code});
+
+  final SupabaseClient client;
+  final void Function(SavedRoom room) onEnter;
+  final String? code;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget card({
+      required Lucide icon,
+      required CvTone tone,
+      required String title,
+      required String subtitle,
+      required Widget child,
+    }) =>
+        CvPanel(
+          width: 360,
+          padding: const EdgeInsets.all(CvSpacing.s8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            spacing: CvSpacing.s6,
+            children: [
+              Row(spacing: 10, children: [
+                CvIconBadge(icon, tone: tone),
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(title, style: CvTypography.title),
+                  Text(subtitle,
+                      style: CvTypography.bodySm
+                          .copyWith(color: CvColors.textSecondary)),
+                ]),
+              ]),
+              child,
+            ],
+          ),
+        );
+
+    return Stack(children: [
+      const Positioned(left: 28, top: 24, child: CvWordmark()),
+      Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(CvSpacing.s6),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Text('Gather at the table',
+                textAlign: TextAlign.center, style: CvTypography.display),
+            const SizedBox(height: CvSpacing.s4),
+            Text('Run a campaign as the GM, or join one with a room code.',
+                textAlign: TextAlign.center,
+                style: CvTypography.body.copyWith(
+                    fontSize: 16, height: 1.5, color: CvColors.textSecondary)),
+            const SizedBox(height: CvSpacing.s10),
+            _SideBySide(
+              children: [
+                card(
+                  icon: Lucide.crown,
+                  tone: CvTone.gm,
+                  title: 'Run a campaign',
+                  subtitle: "You'll be the GM.",
+                  child: GmSignIn(client: client),
+                ),
+                card(
+                  icon: Lucide.logIn,
+                  tone: CvTone.player,
+                  title: 'Join a room',
+                  subtitle: 'As a player.',
+                  child: JoinRoomForm(client: client, onEnter: onEnter, code: code),
+                ),
+              ],
+            ),
+          ]),
+        ),
+      ),
+    ]);
+  }
+}
+
+/// A room code, a name and a colour: enters a campaign's room as a player.
+class JoinRoomForm extends StatefulWidget {
+  const JoinRoomForm(
+      {super.key, required this.client, required this.onEnter, this.code});
+
+  final SupabaseClient client;
+  final void Function(SavedRoom room) onEnter;
+  final String? code;
+
+  @override
+  State<JoinRoomForm> createState() => _JoinRoomFormState();
+}
+
+class _JoinRoomFormState extends State<JoinRoomForm> {
   late final _code = TextEditingController(text: widget.code);
   final _name = TextEditingController();
   var _color = 0;
@@ -150,6 +259,13 @@ class _LobbyState extends State<Lobby> {
       await _prefs.setString('playerName', name);
       await _prefs.setInt('playerColor', _color);
       widget.onEnter((code: code, gm: false, campaign: campaign));
+    } on PostgrestException catch (e) {
+      // unique_violation: another player at this table has the name.
+      if (mounted) {
+        setState(() => e.code == '23505'
+            ? _nameError = 'Someone at this table already goes by $name.'
+            : _error = e.message);
+      }
     } on Object catch (e) {
       if (mounted) setState(() => _error = '$e');
     } finally {
@@ -158,156 +274,52 @@ class _LobbyState extends State<Lobby> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    Widget card({
-      required Lucide icon,
-      required CvTone tone,
-      required String title,
-      required String subtitle,
-      required List<Widget> children,
-    }) =>
-        CvPanel(
-          width: 360,
-          padding: const EdgeInsets.all(CvSpacing.s8),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            spacing: CvSpacing.s6,
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: CvSpacing.s6,
+        children: [
+          CvTextInput(
+            controller: _code,
+            label: 'Room code',
+            placeholder: 'K7Q2XM',
+            code: true,
+            maxLength: 6,
+            error: _error,
+            onChanged: (_) => setState(() => _error = null),
+            onSubmitted: (_) => _join(),
+          ),
+          CvTextInput(
+            controller: _name,
+            label: 'Your name',
+            placeholder: 'Aria',
+            maxLength: 40,
+            error: _nameError,
+            onChanged: (_) => setState(() => _nameError = null),
+            onSubmitted: (_) => _join(),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            spacing: 6,
             children: [
-              Row(spacing: 10, children: [
-                CvIconBadge(icon, tone: tone),
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(title, style: CvTypography.title),
-                  Text(subtitle,
-                      style: CvTypography.bodySm
-                          .copyWith(color: CvColors.textSecondary)),
-                ]),
-              ]),
-              ...children,
+              Text('Your colour',
+                  style: CvTypography.label
+                      .copyWith(color: CvColors.textSecondary)),
+              ColorPicker(
+                  value: _color, onChanged: (c) => setState(() => _color = c)),
             ],
           ),
-        );
-
-    return Stack(children: [
-      const Positioned(left: 28, top: 24, child: CvWordmark()),
-      Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(CvSpacing.s6),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Text('Gather at the table',
-                textAlign: TextAlign.center, style: CvTypography.display),
-            const SizedBox(height: CvSpacing.s4),
-            Text('Run a campaign as the GM, or join one with a room code.',
-                textAlign: TextAlign.center,
-                style: CvTypography.body.copyWith(
-                    fontSize: 16, height: 1.5, color: CvColors.textSecondary)),
-            const SizedBox(height: CvSpacing.s10),
-            _SideBySide(
-              children: [
-                card(
-                  icon: Lucide.crown,
-                  tone: CvTone.gm,
-                  title: 'Run a campaign',
-                  subtitle: "You'll be the GM.",
-                  children: [
-                    GmAccount(
-                      client: widget.client,
-                      builder: (context, gm) => gm == null
-                          ? GmSignIn(client: widget.client)
-                          : Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              spacing: CvSpacing.s5,
-                              children: [
-                                CampaignList(
-                                  client: widget.client,
-                                  onOpen: (c) => widget.onEnter(
-                                      (code: c.code, gm: true, campaign: c.id)),
-                                ),
-                                _SignedInAs(client: widget.client, email: gm.email),
-                              ],
-                            ),
-                    ),
-                  ],
-                ),
-                card(
-                  icon: Lucide.logIn,
-                  tone: CvTone.player,
-                  title: 'Join a room',
-                  subtitle: 'As a player.',
-                  children: [
-                    CvTextInput(
-                      controller: _code,
-                      label: 'Room code',
-                      placeholder: 'K7Q2XM',
-                      code: true,
-                      maxLength: 6,
-                      error: _error,
-                      onChanged: (_) => setState(() => _error = null),
-                      onSubmitted: (_) => _join(),
-                    ),
-                    CvTextInput(
-                      controller: _name,
-                      label: 'Your name',
-                      placeholder: 'Aria',
-                      maxLength: 40,
-                      error: _nameError,
-                      onChanged: (_) => setState(() => _nameError = null),
-                      onSubmitted: (_) => _join(),
-                    ),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      spacing: 6,
-                      children: [
-                        Text('Your colour',
-                            style: CvTypography.label
-                                .copyWith(color: CvColors.textSecondary)),
-                        ColorPicker(
-                            value: _color,
-                            onChanged: (c) => setState(() => _color = c)),
-                      ],
-                    ),
-                    ListenableBuilder(
-                      listenable: _code,
-                      builder: (context, _) => CvButton(
-                        label: 'Join',
-                        icon: Lucide.logIn,
-                        variant: CvButtonVariant.player,
-                        block: true,
-                        onPressed: _code.text.isEmpty || _joining ? null : _join,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+          ListenableBuilder(
+            listenable: _code,
+            builder: (context, _) => CvButton(
+              label: 'Join',
+              icon: Lucide.logIn,
+              variant: CvButtonVariant.player,
+              block: true,
+              onPressed: _code.text.isEmpty || _joining ? null : _join,
             ),
-          ]),
-        ),
-      ),
-    ]);
-  }
-}
-
-/// "Signed in as …", with a way out.
-class _SignedInAs extends StatelessWidget {
-  const _SignedInAs({required this.client, required this.email});
-
-  final SupabaseClient client;
-  final String? email;
-
-  @override
-  Widget build(BuildContext context) => Row(children: [
-        Expanded(
-          child: Text('Signed in as ${email ?? 'GM'}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: CvTypography.caption.copyWith(color: CvColors.textSecondary)),
-        ),
-        CvButton(
-          label: 'Sign out',
-          variant: CvButtonVariant.ghost,
-          small: true,
-          onPressed: client.auth.signOut,
-        ),
-      ]);
+          ),
+        ],
+      );
 }
 
 /// Equal-height cards in a row when they fit, stacked when they don't.
@@ -774,25 +786,18 @@ class _GmRoomState extends State<GmRoom> {
       void Function(AssetId id, ui.Image image) use) async {
     if (_uploading != null) return;
     try {
-      final file = await FilePicker.pickFile(type: FileType.image);
-      if (file == null) return;
-      final type = AssetStore.contentTypes[file.extension?.toLowerCase()];
-      if (type == null) {
-        _toasts.show('Use a PNG, JPEG or WebP image.', tone: CvTone.danger);
-        return;
-      }
-      setState(() => _uploading = 'Uploading ${file.name}');
-      final bytes = await file.readAsBytes();
-      final image = await decodeImage(bytes);
-      final id = await widget.assets.upload(bytes, type);
-      widget.assets.remember(id, image);
-      use(id, image);
+      final picked = await pickImage(widget.assets,
+          onUploading: (file) => setState(() => _uploading = 'Uploading $file'));
+      if (picked == null) return;
+      use(picked.id, picked.image);
       _toasts.show('$what uploaded', tone: CvTone.ok);
       // The library is a convenience: a failure there doesn't undo the upload.
-      final name = file.name.replaceFirst(RegExp(r'\.[^.]*$'), '');
-      _library.add(kind, name.isEmpty ? what : name, id, image).then((_) {
+      final name = picked.name.isEmpty ? what : picked.name;
+      _library.add(kind, name, picked.id, picked.image).then((_) {
         if (mounted) setState(() => _libraryRevision++);
       }, onError: (Object e) => debugPrint('$what not added to the library: $e'));
+    } on FormatException catch (e) {
+      _toasts.show(e.message, tone: CvTone.danger);
     } on Object catch (e) {
       _toasts.show('$what failed to upload: $e', tone: CvTone.danger);
     } finally {

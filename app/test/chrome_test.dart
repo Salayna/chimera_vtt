@@ -1,5 +1,7 @@
 import 'package:chimera_core/chimera_core.dart';
 import 'package:chimera_sync/chimera_sync.dart';
+import 'package:chimera_vtt/assets.dart';
+import 'package:chimera_vtt/home.dart';
 import 'package:chimera_vtt/members.dart';
 import 'package:chimera_vtt/room.dart';
 import 'package:chimera_vtt/table/chrome.dart';
@@ -40,7 +42,10 @@ void main() {
         authOptions: const AuthClientOptions(autoRefreshToken: false));
     await tester.pumpWidget(cvApp(
         title: 'test',
-        home: Lobby(client: client, onEnter: (room) => entered = room)));
+        home: Lobby(
+            client: client,
+            assets: AssetStore(client),
+            onEnter: (room) => entered = room)));
     await tester.pump();
     expect(find.text('Sign in'), findsOneWidget);
     expect(find.text('Create room'), findsNothing);
@@ -51,6 +56,41 @@ void main() {
     await tester.pump();
     expect(find.text('Room codes have 6 characters.'), findsOneWidget);
     expect(entered, isNull);
+  });
+
+  testWidgets("the GM's home switches between campaigns, library and joining",
+      (tester) async {
+    tester.view.physicalSize = const Size(1440, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    SharedPreferencesAsyncPlatform.instance =
+        InMemorySharedPreferencesAsync.empty();
+    final client = SupabaseClient('http://127.0.0.1:9', 'key',
+        authOptions: const AuthClientOptions(autoRefreshToken: false));
+    await tester.pumpWidget(cvApp(
+        title: 'test',
+        home: GmHome(
+            client: client,
+            assets: AssetStore(client),
+            email: 'gm@example.com',
+            onEnter: (_) {})));
+    expect(find.text('Your campaigns'), findsOneWidget);
+    expect(find.text('Create campaign'), findsOneWidget);
+
+    await tester.tap(find.text('Library'));
+    await tester.pump();
+    expect(find.text('Your library'), findsOneWidget);
+    expect(find.text('Upload map'), findsOneWidget);
+    await tester.tap(find.text('Scenes'));
+    await tester.pump();
+    expect(find.text('Upload map'), findsNothing);
+
+    await tester.tap(find.text('Join a room').first);
+    await tester.pump();
+    expect(find.widgetWithText(CvTextInput, 'Room code'), findsOneWidget);
+    // Let the unreachable requests fail before the test ends.
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 200)));
+    await tester.pump();
   });
 
   testWidgets('the GM chrome follows the controller', (tester) async {

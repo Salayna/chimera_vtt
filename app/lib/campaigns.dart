@@ -6,6 +6,8 @@ import 'package:flutter/widgets.dart';
 import 'package:supabase_flutter/supabase_flutter.dart'
     show PostgrestException, SupabaseClient;
 
+import 'assets.dart';
+import 'library.dart' show LibraryThumb;
 import 'room.dart' show newRoomCode;
 import 'table/chrome.dart' show TextKeysOnly;
 import 'theme.dart';
@@ -48,6 +50,52 @@ class Campaigns {
           .select('id, name, room_code')
           .single()));
 
+  Future<void> rename(String id, String name) =>
+      _client.from('campaigns').update({'name': name}).eq('id', id);
+
+  /// Deletes the campaign with its scenes, members and log.
+  Future<void> delete(String id) =>
+      _client.from('campaigns').delete().eq('id', id);
+
+  /// Every campaign with its size, and its live scene's map thumbnail when
+  /// the map is in the library.
+  Future<List<CampaignSummary>> summaries() async {
+    // A scene's settings are always its first entity (Scene.entities).
+    final rows = await _client
+        .from('campaigns')
+        .select('id, name, room_code, scenes!scenes_campaign_fkey(count), '
+            'members(count), '
+            'live:scenes!campaigns_live_scene_fkey(map:data->entities->0->>map)')
+        .order('created_at', ascending: true);
+    final maps = {
+      for (final r in rows)
+        if (r['live'] case {'map': final String map}) r['id'] as String: map,
+    };
+    final thumbs = maps.isEmpty
+        ? const <String, String>{}
+        : {
+            for (final r in await _client
+                .from('library')
+                .select('asset, thumb')
+                .eq('kind', 'map')
+                .inFilter('asset', maps.values.toSet().toList()))
+              r['asset'] as String: r['thumb'] as String,
+          };
+    int count(Object? embedded) => (embedded as List).first['count'] as int;
+    return [
+      for (final r in rows)
+        (
+          campaign: _row(r),
+          scenes: count(r['scenes']),
+          players: count(r['members']),
+          thumb: switch (thumbs[maps[r['id']]]) {
+            final String t => AssetId(t),
+            null => null,
+          },
+        ),
+    ];
+  }
+
   /// Codes are random, so one can already be taken: try another.
   static Future<T> _withNewCode<T>(Future<T> Function(String code) write) async {
     for (var attempt = 1;; attempt++) {
@@ -59,6 +107,14 @@ class Campaigns {
     }
   }
 }
+
+/// A campaign as the GM's home shows it.
+typedef CampaignSummary = ({
+  Campaign campaign,
+  int scenes,
+  int players,
+  AssetId? thumb,
+});
 
 /// A scene in a campaign's list.
 typedef SceneEntry = ({String id, String name});
@@ -163,29 +219,35 @@ class LogEntries {
   }
 }
 
-
-/// The signed-in GM's campaigns: open one, start one, or change a code.
-class CampaignList extends StatefulWidget {
-  const CampaignList({super.key, required this.client, required this.onOpen});
+/// The signed-in GM's campaigns as cards: open one, start one, rename it,
+/// change its code or delete it.
+class CampaignsPage extends StatefulWidget {
+  const CampaignsPage({
+    super.key,
+    required this.client,
+    required this.assets,
+    required this.onOpen,
+  });
 
   final SupabaseClient client;
+  final AssetStore assets;
   final void Function(Campaign campaign) onOpen;
 
   @override
-  State<CampaignList> createState() => _CampaignListState();
+  State<CampaignsPage> createState() => _CampaignsPageState();
 }
 
-class _CampaignListState extends State<CampaignList> {
+class _CampaignsPageState extends State<CampaignsPage> {
   late final _campaigns = Campaigns(widget.client);
   final _name = TextEditingController();
-  List<Campaign>? _list;
+  List<CampaignSummary>? _list;
   String? _error;
   bool _busy = false;
 
   @override
   void initState() {
     super.initState();
-    _load();
+    _run(() async {});
   }
 
   @override
@@ -194,15 +256,7 @@ class _CampaignListState extends State<CampaignList> {
     super.dispose();
   }
 
-  Future<void> _load() async {
-    try {
-      final list = await _campaigns.list();
-      if (mounted) setState(() => _list = list);
-    } on Object catch (e) {
-      if (mounted) setState(() => _error = '$e');
-    }
-  }
-
+  /// Runs [action], then reloads the cards.
   Future<void> _run(Future<void> Function() action) async {
     setState(() {
       _busy = true;
@@ -210,6 +264,8 @@ class _CampaignListState extends State<CampaignList> {
     });
     try {
       await action();
+      final list = await _campaigns.summaries();
+      if (mounted) setState(() => _list = list);
     } on Object catch (e) {
       if (mounted) setState(() => _error = '$e');
     } finally {
@@ -229,32 +285,82 @@ class _CampaignListState extends State<CampaignList> {
     });
   }
 
-  Future<void> _changeCode(Campaign campaign) async {
-    final confirmed = await showCvDialog<bool>(
+  Future<bool> _confirm({
+    required String title,
+    required Lucide icon,
+    required String body,
+    required String action,
+    bool danger = false,
+  }) async =>
+      await showCvDialog<bool>(
+        context: context,
+        title: title,
+        icon: icon,
+        tone: danger ? CvTone.danger : CvTone.neutral,
+        body: Text(body),
+        actions: (context) => [
+          CvButton(
+              label: 'Cancel',
+              variant: CvButtonVariant.ghost,
+              onPressed: () => Navigator.pop(context, false)),
+          CvButton(
+              label: action,
+              variant: danger ? CvButtonVariant.danger : CvButtonVariant.primary,
+              onPressed: () => Navigator.pop(context, true)),
+        ],
+      ) ??
+      false;
+
+  Future<void> _changeCode(Campaign c) async {
+    if (await _confirm(
+        title: 'Change the room code?',
+        icon: Lucide.refreshCw,
+        body: '${c.code} stops working. Share the new code with the players '
+            'you want to keep.',
+        action: 'Change code')) {
+      await _run(() => _campaigns.changeCode(c.id));
+    }
+  }
+
+  Future<void> _rename(Campaign c) async {
+    final text = TextEditingController(text: c.name);
+    final name = await showCvDialog<String>(
       context: context,
-      title: 'Change the room code?',
-      icon: Lucide.refreshCw,
-      body: Text(
-          '${campaign.code} stops working. Share the new code with the '
-          'players you want to keep.'),
+      title: 'Rename ${c.name}',
+      icon: Lucide.pencil,
+      body: CvTextInput(
+        controller: text,
+        label: 'Name',
+        maxLength: 80,
+        onSubmitted: (v) => Navigator.pop(context, v),
+      ),
       actions: (context) => [
         CvButton(
             label: 'Cancel',
             variant: CvButtonVariant.ghost,
-            onPressed: () => Navigator.pop(context, false)),
+            onPressed: () => Navigator.pop(context)),
         CvButton(
-            label: 'Change code',
+            label: 'Rename',
             variant: CvButtonVariant.primary,
-            onPressed: () => Navigator.pop(context, true)),
+            onPressed: () => Navigator.pop(context, text.text)),
       ],
     );
-    if (!(confirmed ?? false)) return;
-    await _run(() async {
-      final changed = await _campaigns.changeCode(campaign.id);
-      setState(() => _list = [
-            for (final c in _list ?? <Campaign>[]) c.id == changed.id ? changed : c,
-          ]);
-    });
+    // Not disposed: the dialog still shows it while it animates away.
+    final trimmed = name?.trim() ?? '';
+    if (trimmed.isEmpty || trimmed == c.name) return;
+    await _run(() => _campaigns.rename(c.id, trimmed));
+  }
+
+  Future<void> _delete(Campaign c) async {
+    if (await _confirm(
+        title: 'Delete ${c.name}?',
+        icon: Lucide.trash2,
+        body: 'Its scenes, players and log go with it, for good. Your '
+            'library keeps its maps, tokens and scenes.',
+        action: 'Delete campaign',
+        danger: true)) {
+      await _run(() => _campaigns.delete(c.id));
+    }
   }
 
   @override
@@ -262,53 +368,154 @@ class _CampaignListState extends State<CampaignList> {
     final list = _list;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      spacing: CvSpacing.s4,
+      spacing: CvSpacing.s6,
       children: [
-        if (list == null && _error == null)
-          const Center(child: CvSpinner(size: 20, color: CvColors.amber500))
+        Wrap(
+          spacing: CvSpacing.s4,
+          runSpacing: CvSpacing.s4,
+          crossAxisAlignment: WrapCrossAlignment.end,
+          children: [
+            SizedBox(
+              width: 320,
+              child: CvTextInput(
+                controller: _name,
+                label: list?.isEmpty ?? true ? 'Your first campaign' : 'New campaign',
+                placeholder: 'Curse of the Crimson Tide',
+                maxLength: 80,
+                onSubmitted: (_) => _create(),
+              ),
+            ),
+            CvButton(
+              label: 'Create campaign',
+              icon: Lucide.plus,
+              variant: CvButtonVariant.primary,
+              onPressed: _busy ? null : _create,
+            ),
+          ],
+        ),
+        if (_error case final error?)
+          Text(error, style: CvTypography.bodySm.copyWith(color: CvColors.textDanger)),
+        if (list == null)
+          if (_error == null)
+            const Center(child: CvSpinner(size: 20, color: CvColors.amber500))
+          else
+            const SizedBox()
+        else if (list.isEmpty)
+          Text('Name your first campaign to start preparing scenes.',
+              style: CvTypography.body.copyWith(color: CvColors.textSecondary))
         else
-          for (final c in list ?? <Campaign>[])
-            Row(spacing: 8, children: [
-              Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(c.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: CvTypography.weight(CvTypography.body, 600)),
+          Wrap(spacing: CvSpacing.s6, runSpacing: CvSpacing.s6, children: [
+            for (final s in list)
+              _CampaignCard(
+                summary: s,
+                assets: widget.assets,
+                busy: _busy,
+                onOpen: () => widget.onOpen(s.campaign),
+                onRename: () => _rename(s.campaign),
+                onChangeCode: () => _changeCode(s.campaign),
+                onDelete: () => _delete(s.campaign),
+              ),
+          ]),
+      ],
+    );
+  }
+}
+
+class _CampaignCard extends StatelessWidget {
+  const _CampaignCard({
+    required this.summary,
+    required this.assets,
+    required this.busy,
+    required this.onOpen,
+    required this.onRename,
+    required this.onChangeCode,
+    required this.onDelete,
+  });
+
+  final CampaignSummary summary;
+  final AssetStore assets;
+  final bool busy;
+  final VoidCallback onOpen;
+  final VoidCallback onRename;
+  final VoidCallback onChangeCode;
+  final VoidCallback onDelete;
+
+  static String _count(int n, String one) => '$n $one${n == 1 ? '' : 's'}';
+
+  @override
+  Widget build(BuildContext context) {
+    final c = summary.campaign;
+    return CvPanel(
+      width: 280,
+      solid: true,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            height: 140,
+            child: Stack(fit: StackFit.expand, children: [
+              LibraryThumb(assets: assets, thumb: summary.thumb),
+              if (summary.thumb == null)
+                const Center(
+                    child: CvIcon(Lucide.layers, color: CvColors.textDisabled)),
+            ]),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(CvSpacing.s6),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              spacing: CvSpacing.s2,
+              children: [
+                Text(c.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: CvTypography.weight(CvTypography.body, 600)
+                        .copyWith(fontSize: 16)),
+                Text(
+                    '${_count(summary.scenes, 'scene')} · '
+                    '${_count(summary.players, 'player')}',
+                    style: CvTypography.caption
+                        .copyWith(color: CvColors.textSecondary)),
+                const SizedBox(height: CvSpacing.s4),
+                Row(spacing: 2, children: [
                   Text(c.code,
-                      style: CvTypography.caption.copyWith(
+                      style: CvTypography.label.copyWith(
                           fontFamily: CvTypography.mono,
                           color: CvColors.textSecondary)),
+                  const Spacer(),
+                  CvToolButton(
+                    icon: Lucide.pencil,
+                    label: 'Rename',
+                    tooltipSide: AxisDirection.up,
+                    onPressed: busy ? null : onRename,
+                  ),
+                  CvToolButton(
+                    icon: Lucide.refreshCw,
+                    label: 'Change room code',
+                    tooltipSide: AxisDirection.up,
+                    onPressed: busy ? null : onChangeCode,
+                  ),
+                  CvToolButton(
+                    icon: Lucide.trash2,
+                    label: 'Delete campaign',
+                    danger: true,
+                    tooltipSide: AxisDirection.up,
+                    onPressed: busy ? null : onDelete,
+                  ),
                 ]),
-              ),
-              CvToolButton(
-                icon: Lucide.refreshCw,
-                label: 'Change room code',
-                tooltipSide: AxisDirection.up,
-                onPressed: _busy ? null : () => _changeCode(c),
-              ),
-              CvButton(
-                label: 'Open',
-                variant: CvButtonVariant.primary,
-                small: true,
-                onPressed: _busy ? null : () => widget.onOpen(c),
-              ),
-            ]),
-        CvTextInput(
-          controller: _name,
-          label: list?.isEmpty ?? true ? 'Your first campaign' : 'New campaign',
-          placeholder: 'Curse of the Crimson Tide',
-          maxLength: 80,
-          error: _error,
-          onSubmitted: (_) => _create(),
-        ),
-        CvButton(
-          label: 'Create campaign',
-          icon: Lucide.plus,
-          block: true,
-          onPressed: _busy ? null : _create,
-        ),
-      ],
+                const SizedBox(height: CvSpacing.s2),
+                CvButton(
+                  label: 'Open',
+                  icon: Lucide.logIn,
+                  variant: CvButtonVariant.primary,
+                  block: true,
+                  onPressed: busy ? null : onOpen,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
