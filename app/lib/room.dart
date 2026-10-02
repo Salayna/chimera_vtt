@@ -441,12 +441,10 @@ class _GmRoomState extends State<GmRoom> {
       widget.assets.remember(id, image);
       final host = _host!;
       final old = host.store.scene.settings;
-      host.execute(UpdateSettings(SceneSettings(
+      host.execute(UpdateSettings(old.copyWith(
         map: id,
         width: image.width.toDouble(),
         height: image.height.toDouble(),
-        grid: old.grid,
-        fogByDefault: old.fogByDefault,
       )));
       _toasts.show('Map uploaded', tone: CvTone.ok);
     } on Object catch (e) {
@@ -460,7 +458,13 @@ class _GmRoomState extends State<GmRoom> {
     final host = _host!;
     final old = host.store.scene.settings;
     host.execute(UpdateSettings(
-        old.withGrid(Grid(cellSize: size, offset: old.grid.offset))));
+        old.copyWith(grid: Grid(cellSize: size, offset: old.grid.offset))));
+  }
+
+  void _setGridVisible(bool visible) {
+    final host = _host!;
+    host.execute(UpdateSettings(
+        host.store.scene.settings.copyWith(gridVisible: visible)));
   }
 
   Future<void> _export() async {
@@ -639,7 +643,8 @@ class _GmRoomState extends State<GmRoom> {
               stream: host.store.changes,
               initialData: host.store.scene,
               builder: (context, snap) {
-                final grid = snap.requireData.settings.grid;
+                final settings = snap.requireData.settings;
+                final grid = settings.grid;
                 return Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -648,7 +653,9 @@ class _GmRoomState extends State<GmRoom> {
                     GridOptions(
                         controller: _controller,
                         grid: grid,
-                        onCellSize: _setCellSize),
+                        visible: settings.gridVisible,
+                        onCellSize: _setCellSize,
+                        onVisible: _setGridVisible),
                     FogOptions(controller: _controller, grid: grid),
                   ],
                 );

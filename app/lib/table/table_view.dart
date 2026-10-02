@@ -412,7 +412,7 @@ class _TableViewState extends State<TableView> {
     } else if (_c.fogPreview.value case (:final shape, :final mode) when send) {
       widget.send(AddFogOp(FogOpId(newId()), mode, shape));
     } else if (_c.gridFit.value case final grid? when send && grid.valid) {
-      widget.send(UpdateSettings(_scene.settings.withGrid(grid)));
+      widget.send(UpdateSettings(_scene.settings.copyWith(grid: grid)));
       _c.tool = Tool.move;
     }
     _c.fogPreview.value = null;

@@ -47,6 +47,14 @@ void main() {
     expect(Scene.fromJson(decoded).toJson(), equals(scene.toJson()));
   });
 
+  test('settings saved before gridVisible show the grid', () {
+    final json = const SceneSettings(
+            width: 100, height: 100, grid: Grid(cellSize: 10), gridVisible: false)
+        .toJson()
+      ..remove('gridVisible');
+    expect((Entity.fromJson(json) as SceneSettings).gridVisible, isTrue);
+  });
+
   test('patches leave the tables they do not touch untouched', () {
     final scene = sceneWith([token('a')]);
     final moved = scene.applyPatches([Upsert(token('a'))]);

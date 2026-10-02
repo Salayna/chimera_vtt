@@ -25,6 +25,8 @@ class GridPainter extends CustomPainter {
     final fitting = controller?.gridFit.value;
     final grid = fitting != null && fitting.valid ? fitting : settings.grid;
     final setup = controller?.gridOptions ?? false;
+    // Hidden lines still show while the GM sets the grid up.
+    if (!settings.gridVisible && !setup) return;
     final paint = Paint()
       ..color = setup ? CvColors.amber500.withValues(alpha: 0.85) : const Color(0x40FFFFFF)
       ..strokeWidth = setup ? 2 : 1;
@@ -46,6 +48,7 @@ class GridPainter extends CustomPainter {
   @override
   bool shouldRepaint(GridPainter old) =>
       old.controller != controller ||
+      old.settings.gridVisible != settings.gridVisible ||
       old.settings.grid.cellSize != settings.grid.cellSize ||
       old.settings.grid.offset != settings.grid.offset ||
       old.settings.width != settings.width ||

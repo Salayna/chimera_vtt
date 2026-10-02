@@ -183,11 +183,15 @@ class GridOptions extends StatefulWidget {
       {super.key,
       required this.controller,
       required this.grid,
-      required this.onCellSize});
+      required this.visible,
+      required this.onCellSize,
+      required this.onVisible});
 
   final TableController controller;
   final Grid grid;
+  final bool visible;
   final ValueChanged<double> onCellSize;
+  final ValueChanged<bool> onVisible;
 
   @override
   State<GridOptions> createState() => _GridOptionsState();
@@ -268,6 +272,11 @@ class _GridOptionsState extends State<GridOptions> {
                         : 'Match one square of the map image, or fit it on the map.',
                     style: CvTypography.caption
                         .copyWith(color: CvColors.textSecondary)),
+              CvSwitch(
+                label: const Text('Show grid lines'),
+                value: widget.visible,
+                onChanged: widget.onVisible,
+              ),
               CvButton(
                 label: fitting ? 'Cancel fit' : 'Fit on map',
                 icon: fitting ? Lucide.x : Lucide.squareDashed,

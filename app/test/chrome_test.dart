@@ -80,6 +80,7 @@ void main() {
     final controller = TableController();
     addTearDown(controller.dispose);
     final sizes = <double>[];
+    final visible = <bool>[];
     await tester.pumpWidget(cvApp(
       title: 'test',
       home: TableShortcuts(
@@ -93,7 +94,9 @@ void main() {
               child: GridOptions(
                   controller: controller,
                   grid: const Grid(cellSize: 128),
-                  onCellSize: sizes.add)),
+                  visible: true,
+                  onCellSize: sizes.add,
+                  onVisible: visible.add)),
         ]),
       ),
     ));
@@ -115,5 +118,8 @@ void main() {
     // B would pick the fog brush; in the field it's just a key.
     await tester.sendKeyEvent(LogicalKeyboardKey.keyB);
     expect(controller.tool, Tool.move);
+
+    await tester.tap(find.text('Show grid lines'));
+    expect(visible, [false]);
   });
 }

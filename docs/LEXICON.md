@@ -45,7 +45,7 @@ One word, one meaning. When code, docs and conversation disagree, this file wins
 | **Kind** | `EntityKind` | Which type of entity: `token`, `fogOp`, `settings`… Sent on the wire so a bare id can be resolved. |
 | **Field** | — | A value inside an entity with no identity of its own, for example a token's position or the grid. |
 | **Id** | `TokenId`, `FogOpId`… | An entity's identity. It never changes and is never reused. Typed per kind with extension types. |
-| **Scene settings** | `SceneSettings` | The single-instance entity holding the map asset, map size, grid and default fog. It has no id: its kind identifies it, and it can't be deleted. |
+| **Scene settings** | `SceneSettings` | The single-instance entity holding the map asset, map size, grid, whether grid lines show, and default fog. It has no id: its kind identifies it, and it can't be deleted. |
 | **Fog op** | `FogOp` | One fog operation (`FogMode.cover` or `reveal`) with a shape and an `order`. |
 | **Fog shape** | `FogShape` (sealed) | `FogRect` (two opposite corners) or `FogBrush` (a polyline of points swept by a radius). |
 | **Order** | `FogOp.order` | A fog op's drawing position. Assigned by the reducer as the current maximum + 1, never by the client. |

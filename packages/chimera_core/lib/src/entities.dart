@@ -86,6 +86,7 @@ final class SceneSettings extends Entity {
     required this.width,
     required this.height,
     required this.grid,
+    this.gridVisible = true,
     this.fogByDefault = false,
   });
 
@@ -94,11 +95,28 @@ final class SceneSettings extends Entity {
   final double height;
   final Grid grid;
 
+  /// Whether the grid lines are drawn. Off for a map with its own grid
+  /// printed on it; snapping still uses [grid].
+  final bool gridVisible;
+
   /// Whether the whole map starts covered, so fog ops reveal it.
   final bool fogByDefault;
 
-  SceneSettings withGrid(Grid grid) => SceneSettings(
-      map: map, width: width, height: height, grid: grid, fogByDefault: fogByDefault);
+  SceneSettings copyWith({
+    AssetId? map,
+    double? width,
+    double? height,
+    Grid? grid,
+    bool? gridVisible,
+  }) =>
+      SceneSettings(
+        map: map ?? this.map,
+        width: width ?? this.width,
+        height: height ?? this.height,
+        grid: grid ?? this.grid,
+        gridVisible: gridVisible ?? this.gridVisible,
+        fogByDefault: fogByDefault,
+      );
 
   @override
   EntityKind get kind => EntityKind.settings;
@@ -109,6 +127,7 @@ final class SceneSettings extends Entity {
         'width': width,
         'height': height,
         'grid': grid.toJson(),
+        'gridVisible': gridVisible,
         'fogByDefault': fogByDefault,
       };
 
@@ -117,6 +136,8 @@ final class SceneSettings extends Entity {
         width: (json['width'] as num).toDouble(),
         height: (json['height'] as num).toDouble(),
         grid: Grid.fromJson(json['grid'] as Json),
+        // Absent in scenes saved before it existed.
+        gridVisible: json['gridVisible'] as bool? ?? true,
         fogByDefault: json['fogByDefault'] as bool,
       );
 }
