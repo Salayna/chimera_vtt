@@ -75,17 +75,17 @@ void main() {
             email: 'gm@example.com',
             onEnter: (_) {})));
     expect(find.text('Your campaigns'), findsOneWidget);
-    expect(find.text('Create campaign'), findsOneWidget);
+    expect(find.textContaining('Good '), findsOneWidget);
 
-    await tester.tap(find.text('Library'));
+    await tester.tap(find.text('Library').first);
     await tester.pump();
-    expect(find.text('Your library'), findsOneWidget);
-    expect(find.text('Upload map'), findsOneWidget);
-    await tester.tap(find.text('Scenes'));
+    expect(find.text('Upload'), findsOneWidget);
+    expect(find.text('Search maps'), findsOneWidget);
+    await tester.tap(find.text('Tokens 0'));
     await tester.pump();
-    expect(find.text('Upload map'), findsNothing);
+    expect(find.text('Search tokens'), findsOneWidget);
 
-    await tester.tap(find.text('Join a room').first);
+    await tester.tap(find.text('Join with code'));
     await tester.pump();
     expect(find.widgetWithText(CvTextInput, 'Room code'), findsOneWidget);
     // Let the unreachable requests fail before the test ends.

@@ -8,7 +8,9 @@ import 'package:supabase_flutter/supabase_flutter.dart' show SupabaseClient;
 
 import 'assets.dart';
 import 'theme.dart';
+import 'room.dart' show sceneFromFile;
 import 'ui/cv.dart';
+import 'ui/hub.dart';
 
 enum LibraryKind { map, token, scene }
 
@@ -389,8 +391,11 @@ class _LibraryPanelState extends State<LibraryPanel> {
   }
 }
 
-/// The GM's whole library on their home: browse each kind, upload maps and
-/// token images, rename and delete.
+/// The GM's library page (design: hub/library): maps, tokens and scenes for
+/// any campaign, searchable, with a detail panel for the picked map or
+/// token.
+// ponytail: no "Add to campaign" or usage counts in the detail panel yet;
+// maps go into a campaign from its room, and usage isn't tracked.
 class LibraryPage extends StatefulWidget {
   const LibraryPage({super.key, required this.library, required this.assets});
 
@@ -403,33 +408,46 @@ class LibraryPage extends StatefulWidget {
 
 class _LibraryPageState extends State<LibraryPage> {
   var _kind = LibraryKind.map;
-  List<LibraryEntry>? _entries;
+  Map<LibraryKind, List<LibraryEntry>>? _entries;
   String? _error;
   String? _uploading;
+  String? _selected;
+  final _search = TextEditingController();
 
-  static const _hints = {
+  static const _empty = {
     LibraryKind.map: 'Maps you upload, here or at the table, are kept here '
         'for every campaign.',
     LibraryKind.token: 'Token images you upload, here or at the table, are '
         'kept here for every campaign.',
-    LibraryKind.scene: "Save a scene from a campaign's Scenes panel, then "
-        'start new scenes as copies of it in any campaign.',
+    LibraryKind.scene: "Save a scene from a campaign's Scenes panel, or "
+        'upload a scene file, then start new scenes from it in any campaign.',
   };
 
   @override
   void initState() {
     super.initState();
+    _search.addListener(() => setState(() {}));
     _run(() async {});
   }
 
-  /// Runs [change], then reloads the shown kind.
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  /// Runs [change], then reloads every kind, for the counts.
   Future<void> _run(Future<void> Function() change) async {
     setState(() => _error = null);
     try {
       await change();
-      final kind = _kind;
-      final entries = await widget.library.list(kind);
-      if (mounted && kind == _kind) setState(() => _entries = entries);
+      final lists = await Future.wait(
+          [for (final k in LibraryKind.values) widget.library.list(k)]);
+      if (mounted) {
+        setState(() => _entries = {
+              for (final (i, k) in LibraryKind.values.indexed) k: lists[i],
+            });
+      }
     } on FormatException catch (e) {
       if (mounted) setState(() => _error = e.message);
     } on Object catch (e) {
@@ -437,127 +455,374 @@ class _LibraryPageState extends State<LibraryPage> {
     }
   }
 
-  void _show(LibraryKind kind) {
-    setState(() {
-      _kind = kind;
-      _entries = null;
-    });
-    _run(() async {});
-  }
-
+  /// An image for maps and tokens, a scene file for scenes.
   Future<void> _upload() => _run(() async {
+        final kind = _kind;
         try {
-          final kind = _kind;
+          if (kind == LibraryKind.scene) {
+            final file = await FilePicker.pickFile(
+                type: FileType.custom, allowedExtensions: const ['json']);
+            if (file == null) return;
+            setState(() => _uploading = file.name);
+            final scene = sceneFromFile(await file.readAsBytes());
+            await widget.library.addScene(
+                file.name.replaceFirst(RegExp(r'\.[^.]*$'), ''), scene);
+            return;
+          }
           final picked = await pickImage(widget.assets,
               onUploading: (file) => setState(() => _uploading = file));
           if (picked == null) return;
-          await widget.library.add(kind, picked.name.isEmpty ? kind.name : picked.name,
-              picked.id, picked.image);
+          await widget.library.add(kind,
+              picked.name.isEmpty ? kind.name : picked.name, picked.id, picked.image);
         } finally {
           if (mounted) setState(() => _uploading = null);
         }
       });
 
+  Future<void> _rename(LibraryEntry e) async {
+    final name = await askEntryName(context, e);
+    if (name != null) await _run(() => widget.library.rename(e.id, name));
+  }
+
+  Future<void> _delete(LibraryEntry e) async {
+    if (await confirmEntryDelete(context, e)) {
+      setState(() => _selected = null);
+      await _run(() => widget.library.delete(e.id));
+    }
+  }
+
+  static String _plural(LibraryKind k) => switch (k) {
+        LibraryKind.map => 'maps',
+        LibraryKind.token => 'tokens',
+        LibraryKind.scene => 'scenes',
+      };
+
   @override
   Widget build(BuildContext context) {
-    final entries = _entries;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      spacing: CvSpacing.s6,
-      children: [
-        Wrap(
-          spacing: CvSpacing.s4,
-          runSpacing: CvSpacing.s4,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            SizedBox(
-              width: 320,
-              child: CvSegmentedControl(
-                segments: const [
-                  (value: LibraryKind.map, label: 'Maps', icon: Lucide.layers, checked: null),
-                  (value: LibraryKind.token, label: 'Tokens', icon: Lucide.userRound, checked: null),
-                  (value: LibraryKind.scene, label: 'Scenes', icon: Lucide.grid3x3, checked: null),
-                ],
-                value: _kind,
-                onChanged: _show,
-              ),
+    final all = _entries;
+    final query = _search.text.trim().toLowerCase();
+    final shown = [
+      for (final e in all?[_kind] ?? const <LibraryEntry>[])
+        if (e.name.toLowerCase().contains(query)) e,
+    ];
+    final selected = shown.where((e) => e.id == _selected).firstOrNull;
+    int count(LibraryKind k) => all?[k]?.length ?? 0;
+    return HubPage(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: 28,
+        children: [
+          Row(crossAxisAlignment: CrossAxisAlignment.end, spacing: 16, children: [
+            const Expanded(
+              child: HubTitle('Library',
+                  subtitle: 'Maps, tokens and scenes you can use in any of '
+                      'your campaigns.'),
             ),
-            if (_kind != LibraryKind.scene)
-              CvButton(
-                label: _uploading == null
-                    ? _kind == LibraryKind.map ? 'Upload map' : 'Upload token image'
-                    : 'Uploading $_uploading…',
-                icon: Lucide.imageUp,
-                variant: CvButtonVariant.primary,
-                onPressed: _uploading == null ? _upload : null,
-              ),
-          ],
-        ),
-        if (_error case final error?)
-          Text(error, style: CvTypography.bodySm.copyWith(color: CvColors.textDanger)),
-        if (entries == null)
-          if (_error == null)
-            const Center(child: CvSpinner(size: 20, color: CvColors.amber500))
-          else
-            const SizedBox()
-        else if (entries.isEmpty)
-          Text(_hints[_kind]!,
-              style: CvTypography.body.copyWith(color: CvColors.textSecondary))
-        else
-          Wrap(spacing: CvSpacing.s6, runSpacing: CvSpacing.s6, children: [
-            for (final e in entries)
+            CvButton(
+              label: 'Upload',
+              icon: Lucide.upload,
+              variant: CvButtonVariant.primary,
+              onPressed: _uploading == null ? _upload : null,
+            ),
+          ]),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
               SizedBox(
-                width: 180,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  spacing: CvSpacing.s3,
-                  children: [
-                    SizedBox(
-                      height: 180,
-                      child: DecoratedBox(
-                        position: DecorationPosition.foreground,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(CvRadii.md),
-                          border: Border.all(color: CvColors.borderSubtle),
-                        ),
-                        child: LibraryThumb(assets: widget.assets, thumb: e.thumb),
+                width: 420,
+                child: CvSegmentedControl(
+                  segments: [
+                    (value: LibraryKind.map, label: 'Maps ${count(LibraryKind.map)}', icon: Lucide.map, checked: null),
+                    (value: LibraryKind.token, label: 'Tokens ${count(LibraryKind.token)}', icon: Lucide.circle, checked: null),
+                    (value: LibraryKind.scene, label: 'Scenes ${count(LibraryKind.scene)}', icon: Lucide.fileJson, checked: null),
+                  ],
+                  value: _kind,
+                  onChanged: (k) => setState(() {
+                    _kind = k;
+                    _selected = null;
+                  }),
+                ),
+              ),
+              SizedBox(
+                width: 300,
+                child: CvTextInput(
+                  controller: _search,
+                  icon: Lucide.search,
+                  placeholder: 'Search ${_plural(_kind)}',
+                ),
+              ),
+            ],
+          ),
+          if (_uploading case final file?)
+            CvPanel(
+              solid: true,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              child: CvProgressBar(label: 'Uploading $file', color: CvColors.amber500),
+            ),
+          if (_error case final error?)
+            Text(error, style: CvTypography.bodySm.copyWith(color: CvColors.textDanger)),
+          if (all == null)
+            if (_error == null)
+              const Center(child: CvSpinner(size: 20, color: CvColors.amber500))
+            else
+              const SizedBox()
+          else if (shown.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 48),
+              child: Text(
+                query.isEmpty
+                    ? _empty[_kind]!
+                    : 'Nothing in ${_plural(_kind)} matches "${_search.text.trim()}".',
+                textAlign: TextAlign.center,
+                style: CvTypography.body.copyWith(color: CvColors.textSecondary),
+              ),
+            )
+          else
+            Row(crossAxisAlignment: CrossAxisAlignment.start, spacing: 24, children: [
+              Expanded(
+                child: _kind == LibraryKind.scene
+                    ? _sceneList(shown)
+                    : _grid(shown, detail: selected != null),
+              ),
+              if (selected != null && _kind != LibraryKind.scene)
+                SizedBox(
+                  width: 340,
+                  child: _Detail(
+                    key: ValueKey(selected.id),
+                    entry: selected,
+                    kind: _kind,
+                    assets: widget.assets,
+                    onClose: () => setState(() => _selected = null),
+                    onRename: () => _rename(selected),
+                    onDelete: () => _delete(selected),
+                  ),
+                ),
+            ]),
+        ],
+      ),
+    );
+  }
+
+  /// Maps as cover cards (4 across), tokens as round faces (7 across);
+  /// fewer beside the detail panel.
+  Widget _grid(List<LibraryEntry> entries, {required bool detail}) {
+    final maps = _kind == LibraryKind.map;
+    final gap = maps ? 16.0 : 12.0;
+    return LayoutBuilder(builder: (context, constraints) {
+      final columns = hubColumns(constraints.maxWidth, maps ? 200 : 110, gap,
+          maps ? (detail ? 3 : 4) : (detail ? 5 : 7));
+      final width = (constraints.maxWidth - gap * (columns - 1)) / columns;
+      return Wrap(spacing: gap, runSpacing: gap, children: [
+        for (final e in entries)
+          SizedBox(
+            width: width,
+            child: HubCard(
+              label: e.name,
+              selected: e.id == _selected,
+              onTap: () => setState(
+                  () => _selected = e.id == _selected ? null : e.id),
+              child: maps
+                  ? Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                      SizedBox(
+                        height: 150,
+                        child: _Image(assets: widget.assets, entry: e),
                       ),
-                    ),
-                    Row(children: [
-                      Expanded(
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                         child: Text(e.name,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: CvTypography.label),
+                            style: CvTypography.weight(CvTypography.body, 500)),
                       ),
-                      CvToolButton(
-                        icon: Lucide.pencil,
-                        label: 'Rename ${e.name}',
-                        tooltipSide: AxisDirection.up,
-                        onPressed: () async {
-                          final name = await askEntryName(context, e);
-                          if (name != null) {
-                            await _run(() => widget.library.rename(e.id, name));
-                          }
-                        },
-                      ),
-                      CvToolButton(
-                        icon: Lucide.trash2,
-                        label: 'Delete ${e.name}',
-                        danger: true,
-                        tooltipSide: AxisDirection.up,
-                        onPressed: () async {
-                          if (await confirmEntryDelete(context, e)) {
-                            await _run(() => widget.library.delete(e.id));
-                          }
-                        },
-                      ),
-                    ]),
-                  ],
+                    ])
+                  : Padding(
+                      padding: const EdgeInsets.fromLTRB(8, 20, 8, 14),
+                      child: Column(spacing: 10, children: [
+                        SizedBox.square(
+                          dimension: 64,
+                          child: ClipOval(
+                              child: _Image(assets: widget.assets, entry: e)),
+                        ),
+                        Text(e.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.center,
+                            style: CvTypography.weight(CvTypography.bodySm, 500)),
+                      ]),
+                    ),
+            ),
+          ),
+      ]);
+    });
+  }
+
+  /// Scenes as rows in one panel.
+  Widget _sceneList(List<LibraryEntry> entries) => CvPanel(
+        solid: true,
+        child: Column(children: [
+          for (final (i, e) in entries.indexed)
+            Container(
+              constraints: const BoxConstraints(minHeight: 64),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              decoration: BoxDecoration(
+                border: i == entries.length - 1
+                    ? null
+                    : const Border(bottom: BorderSide(color: CvColors.borderSubtle)),
+              ),
+              child: Row(spacing: 16, children: [
+                SizedBox.square(
+                  dimension: 40,
+                  child: e.thumb == null
+                      ? Container(
+                          decoration: BoxDecoration(
+                            color: CvColors.slate800,
+                            borderRadius: BorderRadius.circular(CvRadii.md),
+                          ),
+                          child: const CvIcon(Lucide.fileJson,
+                              color: CvColors.textSecondary),
+                        )
+                      : LibraryThumb(assets: widget.assets, thumb: e.thumb),
+                ),
+                Expanded(
+                  child: Text(e.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: CvTypography.weight(CvTypography.body, 500)
+                          .copyWith(fontFamily: CvTypography.mono)),
+                ),
+                CvButton(
+                  label: 'Rename',
+                  icon: Lucide.pencil,
+                  variant: CvButtonVariant.ghost,
+                  small: true,
+                  onPressed: () => _rename(e),
+                ),
+                CvButton(
+                  label: 'Delete',
+                  icon: Lucide.trash2,
+                  variant: CvButtonVariant.dangerGhost,
+                  small: true,
+                  onPressed: () => _delete(e),
+                ),
+              ]),
+            ),
+        ]),
+      );
+}
+
+/// An entry's image, filling its box: its thumbnail, or stand-in art.
+class _Image extends StatelessWidget {
+  const _Image({required this.assets, required this.entry});
+
+  final AssetStore assets;
+  final LibraryEntry entry;
+
+  @override
+  Widget build(BuildContext context) => switch (entry.thumb) {
+        final thumb? => FutureBuilder(
+            future: assets.image(thumb),
+            builder: (context, snapshot) => snapshot.data == null
+                ? const ColoredBox(color: CvColors.surfaceInput)
+                : RawImage(image: snapshot.data, fit: BoxFit.cover),
+          ),
+        null => HubCover(seed: entry.id),
+      };
+}
+
+/// The picked map or token: a large preview, its name, rename and delete.
+class _Detail extends StatelessWidget {
+  const _Detail({
+    super.key,
+    required this.entry,
+    required this.kind,
+    required this.assets,
+    required this.onClose,
+    required this.onRename,
+    required this.onDelete,
+  });
+
+  final LibraryEntry entry;
+  final LibraryKind kind;
+  final AssetStore assets;
+  final VoidCallback onClose;
+  final VoidCallback onRename;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) => CvPopIn(
+        child: CvPanel(
+          solid: true,
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            if (kind == LibraryKind.map)
+              SizedBox(height: 190, child: _Image(assets: assets, entry: entry))
+            else
+              Container(
+                height: 160,
+                color: CvColors.bgSunken,
+                alignment: Alignment.center,
+                child: SizedBox.square(
+                  dimension: 96,
+                  child: ClipOval(child: _Image(assets: assets, entry: entry)),
                 ),
               ),
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                spacing: 16,
+                children: [
+                  Row(crossAxisAlignment: CrossAxisAlignment.start, spacing: 8, children: [
+                    Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text(entry.name,
+                            style: CvTypography.weight(CvTypography.body, 600)
+                                .copyWith(fontSize: 16, height: 22 / 16)),
+                        Text(kind == LibraryKind.map ? 'Map' : 'Token',
+                            style: CvTypography.caption
+                                .copyWith(color: CvColors.textSecondary)),
+                      ]),
+                    ),
+                    CvToolButton(
+                      icon: Lucide.x,
+                      label: 'Close',
+                      tooltipSide: AxisDirection.left,
+                      onPressed: onClose,
+                    ),
+                  ]),
+                  Text(
+                    kind == LibraryKind.map
+                        ? 'Use it from a room: Change map, on the GM\'s rail.'
+                        : 'Use it from a room: Add token, on the GM\'s rail.',
+                    style: CvTypography.bodySm.copyWith(color: CvColors.textSecondary),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.only(top: 12),
+                    decoration: const BoxDecoration(
+                        border: Border(top: BorderSide(color: CvColors.borderSubtle))),
+                    child: Row(spacing: 4, children: [
+                      CvButton(
+                        label: 'Rename',
+                        icon: Lucide.pencil,
+                        variant: CvButtonVariant.ghost,
+                        small: true,
+                        onPressed: onRename,
+                      ),
+                      CvButton(
+                        label: 'Delete',
+                        icon: Lucide.trash2,
+                        variant: CvButtonVariant.dangerGhost,
+                        small: true,
+                        onPressed: onDelete,
+                      ),
+                    ]),
+                  ),
+                ],
+              ),
+            ),
           ]),
-      ],
-    );
-  }
+        ),
+      );
 }
