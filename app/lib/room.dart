@@ -702,7 +702,18 @@ class _GmRoomState extends State<GmRoom> {
     _toasts.show('Token removed');
   }
 
+  /// What the GM is waiting for ("Uploading tavern.jpg"), shown over the
+  /// table; null when nothing is.
   String? _uploading;
+
+  /// The library panel open beside the rail, if any.
+  LibraryKind? _libraryOpen;
+
+  /// Bumped when an upload lands in the library, so an open panel reloads.
+  int _libraryRevision = 0;
+
+  void _toggleLibrary(LibraryKind kind) =>
+      setState(() => _libraryOpen = _libraryOpen == kind ? null : kind);
 
   late final _library = Library(widget.client, widget.assets);
 
@@ -720,7 +731,7 @@ class _GmRoomState extends State<GmRoom> {
         _toasts.show('Use a PNG, JPEG or WebP image.', tone: CvTone.danger);
         return;
       }
-      setState(() => _uploading = file.name);
+      setState(() => _uploading = 'Uploading ${file.name}');
       final bytes = await file.readAsBytes();
       final image = await decodeImage(bytes);
       final id = await widget.assets.upload(bytes, type);
@@ -729,8 +740,9 @@ class _GmRoomState extends State<GmRoom> {
       _toasts.show('$what uploaded', tone: CvTone.ok);
       // The library is a convenience: a failure there doesn't undo the upload.
       final name = file.name.replaceFirst(RegExp(r'\.[^.]*$'), '');
-      _library.add(kind, name.isEmpty ? what : name, id, image).catchError(
-          (Object e) => debugPrint('$what not added to the library: $e'));
+      _library.add(kind, name.isEmpty ? what : name, id, image).then((_) {
+        if (mounted) setState(() => _libraryRevision++);
+      }, onError: (Object e) => debugPrint('$what not added to the library: $e'));
     } on Object catch (e) {
       _toasts.show('$what failed to upload: $e', tone: CvTone.danger);
     } finally {
@@ -747,6 +759,25 @@ class _GmRoomState extends State<GmRoom> {
           height: image.height.toDouble(),
         )));
       });
+
+  /// Makes a library map the scene's map, at its own size.
+  Future<void> _useMap(LibraryEntry entry) async {
+    if (_uploading != null) return;
+    setState(() => _uploading = 'Opening ${entry.name}');
+    try {
+      final image = await widget.assets.image(entry.asset);
+      final old = _host!.store.scene.settings;
+      _host!.execute(UpdateSettings(old.copyWith(
+        map: entry.asset,
+        width: image.width.toDouble(),
+        height: image.height.toDouble(),
+      )));
+    } on Object catch (e) {
+      _toasts.show('${entry.name} failed to open: $e', tone: CvTone.danger);
+    } finally {
+      if (mounted) setState(() => _uploading = null);
+    }
+  }
 
   /// Gives a token an uploaded image.
   Future<void> _setTokenImage(TokenId token) =>
@@ -882,7 +913,7 @@ class _GmRoomState extends State<GmRoom> {
       controller: _controller,
       gm: true,
       onAddToken: _addToken,
-      onSetMap: _setMap,
+      onSetMap: () => _toggleLibrary(LibraryKind.map),
       onExport: _export,
       onImport: _import,
       onRemove: _removeToken,
@@ -932,7 +963,8 @@ class _GmRoomState extends State<GmRoom> {
             child: GmRail(
               controller: _controller,
               onAddToken: _addToken,
-              onSetMap: _uploading == null ? _setMap : null,
+              onSetMap: () => _toggleLibrary(LibraryKind.map),
+              mapsOpen: _libraryOpen == LibraryKind.map,
               onExport: _export,
               onImport: _import,
               scenesOpen: _scenesOpen,
@@ -958,6 +990,19 @@ class _GmRoomState extends State<GmRoom> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   spacing: CvSpacing.s4,
                   children: [
+                    if (_libraryOpen == LibraryKind.map)
+                      LibraryPanel(
+                        library: _library,
+                        assets: widget.assets,
+                        kind: LibraryKind.map,
+                        title: 'Maps',
+                        hint: 'Maps you upload are kept here, for every '
+                            'campaign.',
+                        revision: _libraryRevision,
+                        onPick: _useMap,
+                        addLabel: 'Upload new map',
+                        onAdd: _uploading == null ? _setMap : null,
+                      ),
                     if (_membersOpen) MembersPanel(onRemove: _removeMember),
                     if (_scenesOpen)
                       ScenesPanel(
@@ -1001,8 +1046,7 @@ class _GmRoomState extends State<GmRoom> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       spacing: CvSpacing.s5,
                       children: [
-                        CvProgressBar(
-                            label: 'Uploading $name', color: CvColors.amber500),
+                        CvProgressBar(label: name, color: CvColors.amber500),
                         Text('Players see it when the upload finishes.',
                             style: CvTypography.caption
                                 .copyWith(color: CvColors.textSecondary)),
