@@ -20,6 +20,7 @@ import 'home.dart';
 import 'library.dart';
 import 'members.dart';
 import 'table/chrome.dart';
+import 'table/initiative.dart';
 import 'table/log_panel.dart';
 import 'table/table_view.dart';
 import 'theme.dart';
@@ -1040,6 +1041,19 @@ class _GmRoomState extends State<GmRoom> {
           ]),
         ),
         Positioned(
+          left: 0,
+          right: 0,
+          top: pad,
+          child: Center(
+            child: InitiativeBar(
+                store: host.store,
+                controller: _controller,
+                send: host.execute,
+                gm: true,
+                self: widget.me),
+          ),
+        ),
+        Positioned(
           right: pad,
           top: pad,
           child: PresenceBar(session: host, onLeave: widget.onLeave),
@@ -1403,6 +1417,19 @@ class _PlayerRoomState extends State<PlayerRoom> {
           left: pad + CvSizes.rail + CvSpacing.s4,
           top: pad + CvSizes.hit + CvSpacing.s4,
           child: YourTokens(store: store, self: widget.me, controller: _controller),
+        ),
+        Positioned(
+          left: 0,
+          right: 0,
+          top: pad,
+          child: Center(
+            child: InitiativeBar(
+                store: store,
+                controller: _controller,
+                send: session.request,
+                gm: false,
+                self: widget.me),
+          ),
         ),
         Positioned(
           right: pad,
