@@ -293,6 +293,11 @@ The POC passes when this session runs start to finish with no restart, once with
 6. The player closes the tab, reopens it, and is back in the same state.
 7. The GM saves the scene, restarts, and loads it again.
 
+Status 2026-10-02:
+
+- **GM in a browser:** all 7 steps pass on the local stack, with the GM and the player in Chrome. In step 4, a player can't pick up a token they don't own (dragging it pans the map), so the refusal is never reached through the interface; it is covered by the sync tests. Step 7 passed through the autosave (a reload); export and import of the scene file are not tested yet.
+- **GM on desktop:** not run yet.
+
 ### Hypotheses and pass criteria
 
 The thresholds below are first guesses, to be confirmed before the POC starts.
@@ -330,7 +335,7 @@ Two weeks, ending with a go or no-go decision on the architecture.
 
 Measured 2026-10-02 (profile builds, GM and player views side by side, 4096 px map, 50 image tokens, 500+ fog strokes, live drag and fog painting): 60 fps with 0% dropped frames on macOS, Chrome skwasm and Chrome CanvasKit, raster p99 ≤ 4.5 ms. Frame rate for H1 and H5 passes; H1's first-load time is not measured yet. CanvasKit turns a picture into an image slowly (about 32 ms), so new fog ops are drawn into the mask in batches (after a 1 s pause or 32 ops) rather than per stroke. Rerun with `flutter run --profile --dart-define=BENCH=true` in `app/`.
 
-H4 measured 2026-10-02 on the local stack: a 9.7 MB, 4096 px JPEG map loads in the web build with no CORS errors, in about 0.25 s on reload (download 110–123 ms, decode 75–112 ms). Storage serves it with `cache-control: max-age=31536000`. The browser upload itself is untested (automation can't drive the file dialog); the same upload request passes from Dart and its CORS preflight is allowed. Rerun on a hosted project for real network numbers.
+H4 measured 2026-10-02 on the local stack: a 9.7 MB, 4096 px JPEG map loads in the web build with no CORS errors, in about 0.25 s on reload (download 110–123 ms, decode 75–112 ms). Storage serves it with `cache-control: max-age=31536000`. The browser upload works, both locally and on the hosted project (Cloudflare-hosted web build, after `supabase db push` created the bucket there). Load times on the hosted project are not measured yet.
 
 If H2 fails, a small WebSocket relay of our own replaces Realtime behind the same transport interface. If H1 fails, the map moves to a tiled renderer or to Flame before anything else changes.
 
