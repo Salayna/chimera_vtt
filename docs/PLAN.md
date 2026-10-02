@@ -26,7 +26,7 @@ Chimera VTT is one Flutter app for desktop, web and phones, used by GMs and play
 
 ## Working agreement
 
-This project is written by hand, not vibe coded. AI assistants help with planning, architecture, reviews and explanations. They write implementation code only when the project owner explicitly asks for that specific piece. Code shown in design discussions is an illustration, not a deliverable.
+AI assistants help with planning, architecture and reviews, and write implementation code too (revised 2026-10-02: the earlier hand-written-only rule is lifted). The [Lexicon](LEXICON.md) governs names in code and docs.
 
 ---
 
@@ -105,7 +105,7 @@ flowchart LR
 2. **Every change is a command.** Applying a command returns patches or a refusal. Nothing else changes state, not even the GM's own UI.
 3. **One authority per session.** The GM's session runs the reducer. Player sessions only apply the patches they receive.
 4. **The transport is behind an interface.** Supabase, loopback (for tests and solo play) and a later self-hosted relay are interchangeable.
-5. **Serializable records.** Every record converts to and from JSON and carries a schema version.
+5. **Serializable entities.** Every entity converts to and from JSON and carries a schema version.
 6. **Presentation observes, never owns.** Views subscribe to the store and send commands. They know nothing about the network.
 7. **One codebase, two roles.** GM and player differ only in what they're allowed to do and in the filtered state they receive.
 8. **Strict analysis.** Strict Dart analysis options, with lints treated as errors in CI.
@@ -175,19 +175,22 @@ chimera_vtt/                # monorepo, a Dart pub workspace
                             # protocol, host and client sessions
     tactical_engine/        # pure Dart, no Flutter, depends on nothing
       lib/src/
-        topology/  regions/  measure/  sight/  effects/
+        geometry.dart       # Point, Shape (Polygon, Circle)
+        topology.dart       # SquareGrid (diagonal rules), Gridless
+        pack.dart           # SystemPack, TagDef, Effect building blocks, RangeBand
+        engine.dart         # Region, TacticalEngine: measure, tags, sight, moves
       test/                 # every pack's examples, headless
 ```
 
-Every member declares `resolution: workspace`. `chimera_core` depends on `tactical_engine` as a path dependency. The engine stays in the monorepo while its API changes often, and moves to its own repository (with `git filter-repo`) once something outside this app uses it. Every package has its own `test/` folder, run with `dart test`, and widgets use `flutter_test`.
+Every member declares `resolution: workspace`. `chimera_core` will depend on `tactical_engine` as a workspace dependency once the reducer calls it (phase 4). The engine stays in the monorepo while its API changes often, and moves to its own repository (with `git filter-repo`) once something outside this app uses it. Every package has its own `test/` folder, run with `dart test`, and widgets use `flutter_test`.
 
 ---
 
 ## Data model and sync protocol
 
-A scene is a set of records keyed by id, the same shape Atlas uses, so syncing sends one changed record at a time.
+A scene is a set of entities keyed by id, the same shape as Atlas' records, so syncing sends one changed entity at a time. Terms are defined in the [Lexicon](LEXICON.md).
 
-- **Scene:** map image, grid (size, offset, units), and record tables: tokens, sectors, fog operations, drawings, pins, texts, lights and walls.
+- **Scene:** map image, grid (size, offset, units), and entity tables: tokens, sectors, fog operations, drawings, pins, texts, lights and walls.
 - **Token:** position, size, image, owner (a player id), conditions with optional values, hidden flag.
 - **Sector:** a region holding sector tags. For Solaris, one grid cell. Each player can switch the sector view on for their own screen.
 - **System pack:** a data file defining conditions and sector tags (one definition with a `sector` flag), range bands, trackers and sheet fields.
@@ -196,7 +199,7 @@ A scene is a set of records keyed by id, the same shape Atlas uses, so syncing s
 The protocol has four kinds of message:
 
 1. `snapshot`: the GM sends the whole player-filtered scene when someone joins or resyncs.
-2. `patch`: the GM sends record upserts and deletes, one per changed record, with a sequence number.
+2. `patch`: the GM sends entity upserts and deletes, one per changed entity, with a sequence number.
 3. `intent`: a player asks for a change (move token, roll dice, toggle own condition, ping). The GM checks ownership and applies it.
 4. `presence`: who is connected, their role and their cursor, from Realtime presence.
 
@@ -353,7 +356,7 @@ Phases 1–4 alone make a usable VTT, and cinematic mode and the Solaris pack fo
 | 002 | GM-authoritative commands and patches | Plan decision | Accepted |
 | 003 | Official `supabase_flutter` client behind the transport interface | H2 | Proposed |
 | 004 | Transport interface with a loopback adapter | H3 tests | Proposed |
-| 005 | Records as versioned JSON dictionaries | H3, save and load | Proposed |
+| 005 | Entities as versioned JSON dictionaries | H3, save and load | Proposed |
 | 006 | Images in Storage, named by SHA-256 hash | H4 | Proposed |
 | 007 | Fog as ordered operations drawn into a mask layer, as in Atlas | H5 | Proposed |
 | 008 | Flutter web renderer (CanvasKit or skwasm) picked by POC measurements | H1 | Proposed |
@@ -398,7 +401,7 @@ A review of `~/Documents/dev/chimera_vtt` as created (Flutter 3.47.4, Dart SDK `
 - [ ] Where the web build is hosted (it may need COOP/COEP headers for skwasm)
 - [ ] Import scope: Atlas `.atlasmap` scenes, Fantasy Statblocks notes, or both
 - [ ] Hex grids in scope, or square only at first
-- [ ] Patch size: whole records (simple) or only changed fields (smaller drags)?
+- [ ] Patch size: whole entities (simple) or only changed fields (smaller drags)?
 - [ ] Fog history grows with every stroke: when is it compacted into one mask image for new players?
 - [ ] Remote drags: send every throttled position, or only the path when dropped, plus interpolation?
 - [ ] Access control: is a secret room code enough for the POC, or private channels with row-level security from day one?
