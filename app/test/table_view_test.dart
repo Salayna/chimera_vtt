@@ -1,6 +1,7 @@
 import 'package:chimera_core/chimera_core.dart';
 import 'package:chimera_vtt/table/chrome.dart';
 import 'package:chimera_vtt/table/layers.dart';
+import 'package:chimera_vtt/table/rules.dart';
 import 'package:chimera_vtt/table/table_view.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -56,6 +57,25 @@ void main() {
     final position = store.scene.tokens[id]!.position;
     expect(position.x, closeTo(192 + 100 / scale, 1));
     expect(position.y, closeTo(192, 1));
+  });
+
+  test('the ruler speaks the pack: cells, feet, and blocked sight', () {
+    final settings = const SceneSettings(width: 1000, height: 1000, grid: Grid(cellSize: 100));
+    final generic = Scene(settings: settings);
+    expect(rulerLabel(generic, (x: 50, y: 50), (x: 350, y: 250)), '3 cells');
+    expect(rulerLabel(generic, (x: 50, y: 50), (x: 150, y: 50)), '1 cell');
+    final dnd = Scene(
+      settings: settings.copyWith(pack: 'dnd5e'),
+      regions: {
+        const RegionId('smoke'): const Region(
+            id: RegionId('smoke'),
+            from: (x: 200, y: 0),
+            to: (x: 300, y: 300),
+            tags: {'Heavily Obscured': null}),
+      },
+    );
+    expect(rulerLabel(dnd, (x: 50, y: 50), (x: 50, y: 250)), '10 ft');
+    expect(rulerLabel(dnd, (x: 50, y: 50), (x: 450, y: 50)), '20 ft · no sight');
   });
 
   test('the ruler counts cells, a diagonal as one', () {

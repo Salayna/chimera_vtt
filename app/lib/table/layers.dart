@@ -9,6 +9,7 @@ import 'package:tactical_engine/tactical_engine.dart' show SquareGrid;
 import '../theme.dart';
 import '../members.dart' show members;
 import 'fog_mask.dart';
+import 'rules.dart';
 import 'table_view.dart' show TableController;
 
 /// Grid lines. Repaints when the grid or the map size changes, and for the
@@ -61,21 +62,22 @@ class GridPainter extends CustomPainter {
 /// The token being dragged, drawn at [position] instead of its stored one.
 typedef TokenDrag = ({TokenId id, Offset position});
 
-/// Cells from [a] to [b], each diagonal counting one.
-// ponytail: the diagonal rule and the unit (feet, metres) belong to the
-// system pack, in phase 4. Until then: cells, D&D 5e's default diagonals.
+/// Cells from [a] to [b], each diagonal counting one, whatever the pack.
 int rulerCells(Grid grid, Point a, Point b) =>
     SquareGrid(cellSize: grid.cellSize, offset: grid.offset).steps(a, b).round();
 
 /// Rulers being dragged, this client's and everyone else's: a line between
 /// the ends, and the distance.
 class RulerPainter extends CustomPainter {
-  RulerPainter(this.ruler, this.others, this.grid)
+  RulerPainter(this.ruler, this.others, this.scene)
       : super(repaint: Listenable.merge([ruler, others]));
 
   final ValueListenable<(Point, Point)?> ruler;
   final ValueListenable<List<((Point, Point), Color)>> others;
-  final Grid grid;
+
+  /// For the grid, the pack's units and the regions blocking sight.
+  final Scene scene;
+  Grid get grid => scene.settings.grid;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -105,10 +107,9 @@ class RulerPainter extends CustomPainter {
       ..drawCircle(a, 5 * u, dot)
       ..drawCircle(b, 5 * u, dot);
 
-    final cells = rulerCells(grid, from, to);
     final label = TextPainter(
       text: TextSpan(
-          text: cells == 1 ? '1 cell' : '$cells cells',
+          text: rulerLabel(scene, from, to),
           style: CvTypography.label.copyWith(
               fontSize: 14 * u,
               fontFamily: CvTypography.mono,
@@ -127,7 +128,7 @@ class RulerPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(RulerPainter old) =>
-      old.ruler != ruler || old.others != others || old.grid != grid;
+      old.ruler != ruler || old.others != others || old.scene != scene;
 }
 
 /// A ping on the map: where, in whose colour, and a key for its ripple.

@@ -594,6 +594,8 @@ class _GmRoomState extends State<GmRoom> {
           width: widget.art.map.width.toDouble(),
           height: widget.art.map.height.toDouble(),
           grid: const Grid(cellSize: 128),
+          // A new scene keeps the system the table plays.
+          pack: _host?.store.scene.settings.pack ?? SceneSettings.defaultPack,
         ),
       );
 
@@ -869,6 +871,11 @@ class _GmRoomState extends State<GmRoom> {
     final old = host.store.scene.settings;
     host.execute(UpdateSettings(
         old.copyWith(grid: Grid(cellSize: size, offset: old.grid.offset))));
+  }
+
+  void _setPack(String pack) {
+    final host = _host!;
+    host.execute(UpdateSettings(host.store.scene.settings.copyWith(pack: pack)));
   }
 
   void _setGridVisible(bool visible) {
@@ -1162,7 +1169,9 @@ class _GmRoomState extends State<GmRoom> {
                         grid: grid,
                         visible: settings.gridVisible,
                         onCellSize: _setCellSize,
-                        onVisible: _setGridVisible),
+                        onVisible: _setGridVisible,
+                        pack: settings.pack,
+                        onPack: _setPack),
                     FogOptions(controller: _controller, grid: grid),
                   ],
                 );

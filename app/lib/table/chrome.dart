@@ -8,9 +8,13 @@ import 'package:flutter/foundation.dart'
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
+import 'package:tactical_engine/tactical_engine.dart'
+    show SystemPack, TagDef, builtInPacks;
+
 import '../members.dart';
 import '../theme.dart';
 import '../ui/cv.dart';
+import 'rules.dart';
 import 'table_view.dart';
 
 /// The floating chrome around a table (layout A in the design system):
@@ -332,13 +336,19 @@ class GridOptions extends StatefulWidget {
       required this.grid,
       required this.visible,
       required this.onCellSize,
-      required this.onVisible});
+      required this.onVisible,
+      this.pack = SceneSettings.defaultPack,
+      this.onPack});
 
   final TableController controller;
   final Grid grid;
   final bool visible;
   final ValueChanged<double> onCellSize;
   final ValueChanged<bool> onVisible;
+
+  /// The scene's system pack, picked here when [onPack] is given.
+  final String pack;
+  final ValueChanged<String>? onPack;
 
   @override
   State<GridOptions> createState() => _GridOptionsState();
@@ -420,6 +430,16 @@ class _GridOptionsState extends State<GridOptions> {
                 value: widget.visible,
                 onChanged: widget.onVisible,
               ),
+              if (widget.onPack case final onPack?)
+                CvDropdown(
+                  label: 'System',
+                  entries: [
+                    for (final MapEntry(key: id, value: pack) in builtInPacks.entries)
+                      CvMenuItem(id, pack.name),
+                  ],
+                  value: widget.pack,
+                  onChanged: onPack,
+                ),
               CvButton(
                 label: fitting ? 'Cancel fit' : 'Fit on map',
                 icon: fitting ? Lucide.x : Lucide.squareDashed,
@@ -722,7 +742,7 @@ class TokenCardLayer extends StatelessWidget {
                   child: _TokenCard(
                     key: ValueKey(token.id),
                     token: token,
-                    grid: scene.settings.grid,
+                    scene: scene,
                     snap: controller.snap,
                     session: session,
                     send: send,
@@ -753,7 +773,7 @@ class _TokenCard extends StatelessWidget {
   const _TokenCard({
     super.key,
     required this.token,
-    required this.grid,
+    required this.scene,
     required this.snap,
     required this.session,
     required this.send,
@@ -768,7 +788,10 @@ class _TokenCard extends StatelessWidget {
   });
 
   final Token token;
-  final Grid grid;
+
+  /// For the grid, and the rules in force where the token stands.
+  final Scene scene;
+  Grid get grid => scene.settings.grid;
 
   /// Resizing snaps the token too, like a drop.
   final bool snap;
@@ -918,7 +941,7 @@ class _TokenCard extends StatelessWidget {
                       ]),
                     ),
                   ],
-                  _Conditions(token: token, send: send),
+                  _Conditions(token: token, send: send, pack: packOf(scene)),
                 ],
               ),
             ),
@@ -1137,10 +1160,14 @@ class _NameFieldState extends State<_NameField> {
 /// A token's conditions as chips, each removable, and a line to add one:
 /// "Prone", or "Darkness 2" for one with a value.
 class _Conditions extends StatefulWidget {
-  const _Conditions({required this.token, required this.send});
+  const _Conditions(
+      {required this.token, required this.send, required this.pack});
 
   final Token token;
   final Outcome Function(Command) send;
+
+  /// Offers its conditions, and explains them.
+  final SystemPack pack;
 
   @override
   State<_Conditions> createState() => _ConditionsState();
@@ -1149,6 +1176,18 @@ class _Conditions extends StatefulWidget {
 class _ConditionsState extends State<_Conditions> {
   final _text = TextEditingController();
   bool _invalid = false;
+
+  /// The pack's conditions the token doesn't have yet.
+  List<TagDef> _offered(Token token) => [
+        for (final t in widget.pack.conditions)
+          if (!token.conditions.containsKey(t.name)) t,
+      ];
+
+  /// [child] with the rules [text] on hover, when there is any.
+  static Widget _explained(String? text, Widget child) =>
+      text == null || text.isEmpty
+          ? child
+          : CvTooltip(message: text, side: AxisDirection.up, child: child);
 
   @override
   void dispose() {
@@ -1180,7 +1219,7 @@ class _ConditionsState extends State<_Conditions> {
         if (token.conditions.isNotEmpty)
           Wrap(spacing: 6, runSpacing: 6, children: [
             for (final MapEntry(key: name, :value) in token.conditions.entries)
-              Container(
+              _explained(widget.pack.tags[name]?.text, Container(
                 height: 28,
                 padding: const EdgeInsets.only(left: 10),
                 decoration: BoxDecoration(
@@ -1207,8 +1246,22 @@ class _ConditionsState extends State<_Conditions> {
                     ),
                   ),
                 ]),
-              ),
+              )),
           ]),
+        if (_offered(token) case final offered when offered.isNotEmpty)
+          CvDropdown<String?>(
+            entries: [
+              for (final t in offered)
+                CvMenuItem(t.name, t.valued ? '${t.name} (1)' : t.name),
+            ],
+            value: null,
+            placeholder: 'Add from ${widget.pack.name}…',
+            onChanged: (name) {
+              if (name == null) return;
+              final def = widget.pack.tags[name]!;
+              widget.send(SetCondition(token.id, name, def.valued ? 1 : null));
+            },
+          ),
         TextKeysOnly(
           child: CvTextInput(
             controller: _text,

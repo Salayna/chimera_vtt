@@ -372,7 +372,7 @@ class _TableViewState extends State<TableView>
         RepaintBoundary(
           child: CustomPaint(
             size: size,
-            painter: RulerPainter(_c.ruler, _c.otherRulers, settings.grid),
+            painter: RulerPainter(_c.ruler, _c.otherRulers, _scene),
           ),
         ),
         // Above the fog: a ping under it still shows where to look.
