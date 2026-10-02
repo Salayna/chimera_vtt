@@ -89,7 +89,7 @@ class _ChimeraAppState extends State<ChimeraApp> {
       if (room == null) {
         final code = normalizeRoomCode(Uri.base.queryParameters['room'] ?? '');
         if (code.length == 6) {
-          room = (code: code, gm: false);
+          room = (code: code, gm: false, campaign: null);
           await saveRoom(room);
         }
       }

@@ -14,29 +14,41 @@ import 'package:supabase_flutter/supabase_flutter.dart' show SupabaseClient;
 
 import 'account.dart';
 import 'assets.dart';
+import 'campaigns.dart';
 import 'table/chrome.dart';
 import 'table/table_view.dart';
 import 'theme.dart';
 import 'ui/cv.dart';
 
-/// The room this client is in, saved so a refresh lands back in it.
-typedef SavedRoom = ({String code, bool gm});
+/// The room this client is in, saved so a refresh lands back in it. A GM's
+/// room is a campaign's.
+typedef SavedRoom = ({String code, bool gm, String? campaign});
 
 final _prefs = SharedPreferencesAsync();
 
 Future<SavedRoom?> loadSavedRoom() async {
   final code = await _prefs.getString('room');
   final gm = await _prefs.getBool('gm');
-  return code == null || gm == null ? null : (code: code, gm: gm);
+  final campaign = await _prefs.getString('campaign');
+  if (code == null || gm == null) return null;
+  // A GM room from before campaigns: back to the lobby.
+  if (gm && campaign == null) return null;
+  return (code: code, gm: gm, campaign: campaign);
 }
 
 Future<void> saveRoom(SavedRoom? room) async {
   if (room == null) {
     await _prefs.remove('room');
     await _prefs.remove('gm');
+    await _prefs.remove('campaign');
   } else {
     await _prefs.setString('room', room.code);
     await _prefs.setBool('gm', room.gm);
+    if (room.campaign case final id?) {
+      await _prefs.setString('campaign', id);
+    } else {
+      await _prefs.remove('campaign');
+    }
   }
 }
 
@@ -99,7 +111,7 @@ class _LobbyState extends State<Lobby> {
       setState(() => _error = 'Room codes have 6 characters.');
       return;
     }
-    widget.onEnter((code: code, gm: false));
+    widget.onEnter((code: code, gm: false, campaign: null));
   }
 
   @override
@@ -141,7 +153,7 @@ class _LobbyState extends State<Lobby> {
             Text('Gather at the table',
                 textAlign: TextAlign.center, style: CvTypography.display),
             const SizedBox(height: CvSpacing.s4),
-            Text('Open a room as the GM, or join one with a room code.',
+            Text('Run a campaign as the GM, or join one with a room code.',
                 textAlign: TextAlign.center,
                 style: CvTypography.body.copyWith(
                     fontSize: 16, height: 1.5, color: CvColors.textSecondary)),
@@ -151,7 +163,7 @@ class _LobbyState extends State<Lobby> {
                 card(
                   icon: Lucide.crown,
                   tone: CvTone.gm,
-                  title: 'Open a room',
+                  title: 'Run a campaign',
                   subtitle: "You'll be the GM.",
                   children: [
                     GmAccount(
@@ -160,20 +172,12 @@ class _LobbyState extends State<Lobby> {
                           ? GmSignIn(client: widget.client)
                           : Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
-                              spacing: CvSpacing.s4,
+                              spacing: CvSpacing.s5,
                               children: [
-                                Text(
-                                    'You get a 6-character room code to share '
-                                    'with your players.',
-                                    style: CvTypography.body.copyWith(
-                                        color: CvColors.textSecondary)),
-                                CvButton(
-                                  label: 'Create room',
-                                  icon: Lucide.plus,
-                                  variant: CvButtonVariant.primary,
-                                  block: true,
-                                  onPressed: () => widget
-                                      .onEnter((code: newRoomCode(), gm: true)),
+                                CampaignList(
+                                  client: widget.client,
+                                  onOpen: (c) => widget.onEnter(
+                                      (code: c.code, gm: true, campaign: c.id)),
                                 ),
                                 _SignedInAs(client: widget.client, email: gm.email),
                               ],
