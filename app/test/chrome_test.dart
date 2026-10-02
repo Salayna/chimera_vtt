@@ -1,5 +1,6 @@
 import 'package:chimera_core/chimera_core.dart';
 import 'package:chimera_sync/chimera_sync.dart';
+import 'package:chimera_vtt/members.dart';
 import 'package:chimera_vtt/room.dart';
 import 'package:chimera_vtt/table/chrome.dart';
 import 'package:chimera_vtt/table/table_view.dart';
@@ -182,5 +183,16 @@ void main() {
     await tester.tap(find.text('2×2'));
     await tester.pump();
     expect(host.store.scene.tokens[id]!.size, 200);
+
+    // A member who isn't connected can still be given the token.
+    const aria = PlayerId('aria');
+    members.value = {aria: (name: 'Aria', color: 3)};
+    addTearDown(() => members.value = {});
+    await tester.pump();
+    await tester.tap(find.text('No owner'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Aria').last);
+    await tester.pumpAndSettle();
+    expect(host.store.scene.tokens[id]!.owner, aria);
   });
 }

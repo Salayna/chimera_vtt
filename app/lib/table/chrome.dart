@@ -747,34 +747,41 @@ class _TokenCard extends StatelessWidget {
                   StreamBuilder(
                     stream: session.peers,
                     initialData: session.currentPeers,
-                    builder: (context, snapshot) {
-                      final players = [
-                        for (final p in snapshot.requireData)
-                          if (!p.gm) PlayerId(p.player),
-                      ];
-                      final owners = {...players, ?token.owner};
-                      return CvDropdown<PlayerId?>(
-                        label: 'Owner',
-                        value: token.owner,
-                        above: menuAbove,
-                        onChanged: (owner) => send(AssignOwner(token.id, owner)),
-                        entries: [
-                          const CvMenuItem(null, 'No owner',
-                              leading: CvIcon(Lucide.circleDashed,
-                                  size: CvSizes.iconSm,
-                                  color: CvColors.textSecondary)),
-                          if (owners.isNotEmpty) ...[
-                            const CvMenuDivider(),
-                            const CvMenuHeading('Connected players'),
+                    builder: (context, snapshot) => ValueListenableBuilder(
+                      valueListenable: members,
+                      builder: (context, all, _) {
+                        // Every member, connected or not, so tokens can be
+                        // handed out before a session; and anyone connected
+                        // who isn't a member yet.
+                        final owners = {
+                          ...all.keys,
+                          for (final p in snapshot.requireData)
+                            if (!p.gm) PlayerId(p.player),
+                          ?token.owner,
+                        };
+                        return CvDropdown<PlayerId?>(
+                          label: 'Owner',
+                          value: token.owner,
+                          above: menuAbove,
+                          onChanged: (owner) => send(AssignOwner(token.id, owner)),
+                          entries: [
+                            const CvMenuItem(null, 'No owner',
+                                leading: CvIcon(Lucide.circleDashed,
+                                    size: CvSizes.iconSm,
+                                    color: CvColors.textSecondary)),
+                            if (owners.isNotEmpty) ...[
+                              const CvMenuDivider(),
+                              const CvMenuHeading('Players'),
+                            ],
+                            for (final p in owners)
+                              CvMenuItem(p, playerName(p),
+                                  leading: avatarFor(
+                                      (player: p.value, gm: false, cursor: null),
+                                      size: 24)),
                           ],
-                          for (final p in owners)
-                            CvMenuItem(p, playerName(p),
-                                leading: avatarFor(
-                                    (player: p.value, gm: false, cursor: null),
-                                    size: 24)),
-                        ],
-                      );
-                    },
+                        );
+                      },
+                    ),
                   ),
                   CvButton(
                     label: 'Change image',
@@ -790,7 +797,10 @@ class _TokenCard extends StatelessWidget {
                     label: const Row(spacing: 8, children: [
                       CvIcon(Lucide.eyeOff,
                           size: CvSizes.iconSm, color: CvColors.textSecondary),
-                      Text('Hidden from players'),
+                      Flexible(
+                        child: Text('Hidden from players',
+                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                      ),
                     ]),
                   ),
                 ],
@@ -799,8 +809,9 @@ class _TokenCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: const BoxDecoration(border: Border(top: border)),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              // Wraps rather than overflows with large text.
+              child: Wrap(
+                alignment: WrapAlignment.spaceBetween,
                 children: [
                   CvButton(
                     label: 'Duplicate',
