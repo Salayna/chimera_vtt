@@ -1,0 +1,10 @@
+name: chimera_core
+description: Chimera VTT domain core, pure Dart. Model, commands, reducer, store, visibility.
+publish_to: none
+resolution: workspace
+
+environment:
+  sdk: ^3.13.3
+
+dev_dependencies:
+  test: ^1.25.6

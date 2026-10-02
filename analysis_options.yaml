@@ -11,13 +11,13 @@ include: package:flutter_lints/flutter.yaml
 
 analyzer:
   exclude:
-    - build/**
-    - android/**
-    - ios/**
-    - web/**
-    - windows/**
-    - macos/**
-    - linux/**
+    - app/build/**
+    - app/android/**
+    - app/ios/**
+    - app/web/**
+    - app/windows/**
+    - app/macos/**
+    - app/linux/**
 
 linter:
   # The lint rules applied to this project can be customized in the

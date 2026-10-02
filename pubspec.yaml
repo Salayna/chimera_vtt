@@ -6,3 +6,5 @@ environment:
 
 workspace:
   - app
+  - packages/chimera_core
+  - packages/tactical_engine
