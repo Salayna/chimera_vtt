@@ -44,6 +44,8 @@ void main() {
     await tester.dragFrom(tokenOnScreen, const Offset(100, 0));
     await tester.pump();
     expect(store.scene.tokens[id]!.position, (x: 320.0, y: 192.0));
+    // Whoever drags sees their token land at once; only others see it glide.
+    expect(tester.hasRunningAnimations, isFalse);
   });
 
   testWidgets('with snapping off, it stays where it was dropped',

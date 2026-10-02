@@ -155,6 +155,9 @@ class _TableViewState extends State<TableView>
   late Scene _scene;
   final _glides = TokenGlides();
   bool _hasScene = false;
+
+  /// The token this view just dropped, until the scene answers the drop.
+  TokenId? _dropped;
   late final Ticker _glideTicker = createTicker((elapsed) {
     _glides.tick(elapsed);
     if (!_glides.active) _glideTicker.stop();
@@ -208,24 +211,22 @@ class _TableViewState extends State<TableView>
   }
 
   void _setScene(Scene scene) {
-    // Moved tokens glide from where they're drawn now; one being dragged
-    // here glides from under the pointer onto its drop.
+    // Moved tokens glide from where they're drawn now, except the one just
+    // dropped here: its dragger already put it there.
     if (_hasScene) {
-      final drag = _c.drag.value;
       for (final token in scene.tokens.values) {
         final old = _scene.tokens[token.id];
         if (old == null || old.position == token.position) continue;
+        if (token.id == _dropped) continue;
         if (!_glideTicker.isActive) {
           _glides.restartClock();
           _glideTicker.start();
         }
-        _glides.start(
-            token.id,
-            drag?.id == token.id
-                ? drag!.position
-                : _glides.at(token.id, Offset(old.position.x, old.position.y)));
+        _glides.start(token.id,
+            _glides.at(token.id, Offset(old.position.x, old.position.y)));
       }
     }
+    _dropped = null;
     _hasScene = true;
     _scene = scene;
     final mapId = scene.settings.map;
@@ -447,6 +448,7 @@ class _TableViewState extends State<TableView>
         final Point to = (x: position.dx, y: position.dy);
         final token = _scene.tokens[id];
         final snap = _c.snap != HardwareKeyboard.instance.isAltPressed;
+        _dropped = id;
         widget.send(MoveToken(
             id,
             snap && token != null
