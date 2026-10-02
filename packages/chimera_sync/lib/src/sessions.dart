@@ -9,24 +9,34 @@ import 'transport.dart';
 sealed class Session {
   Session(this.transport, this.self, {required this.gm}) {
     _subscription = transport.messages.listen(_onJson);
+    _presenceSubscription = transport.presence.listen((states) {
+      _peers = [for (final s in states) ?_tryPresence(s)];
+      _peersController.add(_peers);
+    });
   }
 
   final Transport transport;
   final PlayerId self;
   final bool gm;
   late final StreamSubscription<Json> _subscription;
+  late final StreamSubscription<List<Json>> _presenceSubscription;
+  final _peersController = StreamController<List<Presence>>.broadcast();
+  List<Presence> _peers = const [];
 
-  /// Everyone connected, from Realtime presence.
-  Stream<List<Presence>> get peers =>
-      transport.presence.map((states) => [
-            for (final s in states) ?_tryPresence(s),
-          ]);
+  /// Everyone connected now, from presence, this client included once it
+  /// called [setCursor].
+  List<Presence> get currentPeers => _peers;
+
+  /// [currentPeers] on every change.
+  Stream<List<Presence>> get peers => _peersController.stream;
 
   Future<void> setCursor(Point? cursor) => transport
       .track(presenceToJson((player: self.value, gm: gm, cursor: cursor)));
 
   Future<void> close() async {
     await _subscription.cancel();
+    await _presenceSubscription.cancel();
+    await _peersController.close();
     await transport.close();
   }
 
@@ -52,6 +62,9 @@ final class HostSession extends Session {
   HostSession(super.transport, super.self, this.store) : super(gm: true);
 
   final SceneStore store;
+
+  /// This run of the session. See [Snapshot.epoch].
+  final String epoch = newId();
   int _seq = 0;
 
   // Visibility depends on the role only, so every player gets the same batch
@@ -70,12 +83,12 @@ final class HostSession extends Session {
     store.replace(scene);
     // A new seq, so a stale snapshot of the old scene can't win.
     _seq++;
-    _send(Snapshot(seq: _seq, scene: visibleTo(scene, _players)));
+    _send(Snapshot(epoch: epoch, seq: _seq, scene: visibleTo(scene, _players)));
   }
 
   /// Call periodically (every few seconds) so players notice a missed last
   /// batch, and so lost intents expire.
-  void heartbeat() => _send(Heartbeat(_seq));
+  void heartbeat() => _send(Heartbeat(epoch, _seq));
 
   Outcome _run(Actor actor, Command command,
       {PlayerId? from, String? requestId}) {
@@ -87,7 +100,8 @@ final class HostSession extends Session {
         // An empty batch still answers an intent.
         if (visible.isNotEmpty || requestId != null) {
           _seq++;
-          _send(PatchBatch(seq: _seq, patches: visible, requestId: requestId));
+          _send(PatchBatch(
+              epoch: epoch, seq: _seq, patches: visible, requestId: requestId));
         }
       case Refused(:final reason):
         if (from != null && requestId != null) {
@@ -108,7 +122,10 @@ final class HostSession extends Session {
     switch (message) {
       case RequestSnapshot(:final from):
         _send(Snapshot(
-            to: from, seq: _seq, scene: visibleTo(store.scene, _players)));
+            to: from,
+            epoch: epoch,
+            seq: _seq,
+            scene: visibleTo(store.scene, _players)));
       case Intent(:final from, :final requestId, :final command):
         final Command decoded;
         try {
@@ -137,6 +154,7 @@ final class ClientSession extends Session {
   final _joined = Completer<SceneStore>();
   SceneStore? _store;
   Scene? _confirmed;
+  String? _epoch;
   int _seq = -1;
   bool _resyncing = true;
   int _beats = 0;
@@ -185,25 +203,28 @@ final class ClientSession extends Session {
       return;
     }
     switch (message) {
-      case Snapshot(:final to, :final seq, :final scene)
-          when (to == null || to == self) && seq >= _seq:
+      case Snapshot(:final to, :final epoch, :final seq, :final scene)
+          when (to == null || to == self) && (epoch != _epoch || seq >= _seq):
+        _epoch = epoch;
         _seq = seq;
         _confirmed = scene;
         _resyncing = false;
         // Anything in flight is answered by a later batch or expires.
         _publish();
-      case PatchBatch(:final seq, :final patches, :final requestId):
-        if (_resyncing || seq <= _seq) return; // Waiting, or a late duplicate.
+      case PatchBatch(:final epoch, :final seq, :final patches, :final requestId):
+        if (_resyncing) return;
+        if (epoch != _epoch) return _resync(); // The GM restarted.
+        if (seq <= _seq) return; // A late duplicate.
         if (seq > _seq + 1) return _resync();
         _seq = seq;
         _confirmed = _confirmed!.applyPatches(patches);
         if (requestId != null) _settle(requestId);
         _publish();
-      case Heartbeat(:final seq):
+      case Heartbeat(:final epoch, :final seq):
         _beats++;
         final before = _pending.length;
         _pending.removeWhere((_, p) => _beats - p.$2 >= intentLifetime);
-        if (seq > _seq || _resyncing) {
+        if (epoch != _epoch || seq > _seq || _resyncing) {
           _resync();
         } else if (_pending.length != before) {
           _publish();

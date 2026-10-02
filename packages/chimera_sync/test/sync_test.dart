@@ -29,7 +29,7 @@ class Table {
   }
 
   final hub = LoopbackHub(manual: true);
-  late final HostSession host;
+  late HostSession host;
   late final Map<PlayerId, ClientSession> clients;
 
   Future<void> join() async {
@@ -53,13 +53,13 @@ void main() {
     });
     final messages = <Message>[
       const RequestSnapshot(alice),
-      Snapshot(to: alice, seq: 3, scene: scene),
-      Snapshot(seq: 4, scene: scene),
-      PatchBatch(seq: 5, patches: [
+      Snapshot(to: alice, epoch: 'e', seq: 3, scene: scene),
+      Snapshot(epoch: 'e', seq: 4, scene: scene),
+      PatchBatch(epoch: 'e', seq: 5, patches: [
         Upsert(token('a')),
         Delete.token(const TokenId('b')),
       ], requestId: 'r1'),
-      const Heartbeat(5),
+      const Heartbeat('e', 5),
       Intent(
           from: bob,
           requestId: 'r2',
@@ -122,6 +122,28 @@ void main() {
         table.clients[alice]!.request(const MoveToken(TokenId('t'), (x: 1, y: 1)));
     expect(outcome, isA<Refused>());
     expect(table.hub.idle, isTrue);
+  });
+
+  test('players follow a GM who reloads and starts counting again', () async {
+    final table = Table(Scene(
+        settings: settings, tokens: {const TokenId('t'): token('t', owner: alice)}));
+    await table.join();
+    for (var i = 0; i < 5; i++) {
+      table.host.execute(MoveToken(const TokenId('t'), (x: i * 10.0, y: 0)));
+    }
+    table.hub.flush();
+
+    // The GM's tab reloads: a new session with seq back at 0, resuming from
+    // an autosave that missed the last moves.
+    await table.host.close();
+    table.host = HostSession(table.hub.connect(), gmId, SceneStore(Scene(
+        settings: settings, tokens: {const TokenId('t'): token('t', owner: alice)})));
+    table.host.execute(const MoveToken(TokenId('t'), (x: 7, y: 7)));
+    table.host.heartbeat();
+    table.hub.flush();
+    table.expectConverged();
+    expect(table.clients[alice]!.store.scene.tokens[const TokenId('t')]!.position,
+        (x: 7, y: 7));
   });
 
   test('loading a scene reaches every player', () async {

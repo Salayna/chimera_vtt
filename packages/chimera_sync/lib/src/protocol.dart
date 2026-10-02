@@ -34,17 +34,19 @@ sealed class Message {
       'requestSnapshot' => RequestSnapshot(player('from')),
       'snapshot' => Snapshot(
           to: optionalPlayer('to'),
+          epoch: json['epoch'] as String,
           seq: json['seq'] as int,
           scene: Scene.fromJson(json['scene'] as Json),
         ),
       'batch' => PatchBatch(
+          epoch: json['epoch'] as String,
           seq: json['seq'] as int,
           patches: [
             for (final p in json['patches'] as List) Patch.fromJson(p as Json),
           ],
           requestId: json['requestId'] as String?,
         ),
-      'heartbeat' => Heartbeat(json['seq'] as int),
+      'heartbeat' => Heartbeat(json['epoch'] as String, json['seq'] as int),
       'intent' => Intent(
           from: player('from'),
           requestId: json['requestId'] as String,
@@ -76,9 +78,15 @@ final class RequestSnapshot extends Message {
 /// The whole player-filtered scene, as of batch [seq]. [to] is null when
 /// every player should take it, for example after the GM loads a scene.
 final class Snapshot extends Message {
-  const Snapshot({this.to, required this.seq, required this.scene});
+  const Snapshot(
+      {this.to, required this.epoch, required this.seq, required this.scene});
 
   final PlayerId? to;
+
+  /// Names one run of the GM's session. A GM who reloads starts a new
+  /// epoch with [seq] back at zero, so players compare sequence numbers
+  /// only within one epoch.
+  final String epoch;
   final int seq;
   final Scene scene;
 
@@ -88,6 +96,7 @@ final class Snapshot extends Message {
   @override
   Json _fields() => {
         if (to != null) 'to': to!.value,
+        'epoch': epoch,
         'seq': seq,
         'scene': scene.toJson(),
       };
@@ -96,8 +105,13 @@ final class Snapshot extends Message {
 /// The player-filtered patches of one accepted command. [requestId] names
 /// the intent it answers, so its sender can drop the optimistic copy.
 final class PatchBatch extends Message {
-  const PatchBatch({required this.seq, required this.patches, this.requestId});
+  const PatchBatch(
+      {required this.epoch,
+      required this.seq,
+      required this.patches,
+      this.requestId});
 
+  final String epoch;
   final int seq;
   final List<Patch> patches;
   final String? requestId;
@@ -107,6 +121,7 @@ final class PatchBatch extends Message {
 
   @override
   Json _fields() => {
+        'epoch': epoch,
         'seq': seq,
         'patches': [for (final p in patches) p.toJson()],
         if (requestId != null) 'requestId': requestId,
@@ -116,15 +131,16 @@ final class PatchBatch extends Message {
 /// The GM's latest [seq], sent periodically so a player who missed the last
 /// batch notices the gap.
 final class Heartbeat extends Message {
-  const Heartbeat(this.seq);
+  const Heartbeat(this.epoch, this.seq);
 
+  final String epoch;
   final int seq;
 
   @override
   String get _type => 'heartbeat';
 
   @override
-  Json _fields() => {'seq': seq};
+  Json _fields() => {'epoch': epoch, 'seq': seq};
 }
 
 /// A player asking for a command. [command] stays JSON until the GM decodes

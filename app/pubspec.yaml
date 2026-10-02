@@ -37,6 +37,8 @@ dependencies:
   cupertino_icons: ^1.0.8
   chimera_core: any
   chimera_sync: any
+  supabase_flutter: ^2.18.0
+  shared_preferences: ^2.5.5
 
 dev_dependencies:
   flutter_test:

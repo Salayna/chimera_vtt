@@ -32,7 +32,8 @@ One word, one meaning. When code, docs and conversation disagree, this file wins
 | **Grid** | `Grid` | Cell size and offset used to snap and measure. A field of the scene settings, not an entity. |
 | **Cell** | — | One square of the grid. |
 | **Room** | — | A live session of one scene that players can join. |
-| **Room code** | — | The short, human-typable code players enter to join a room. It's not an id. |
+| **Room code** | `newRoomCode` | The short, human-typable code players enter to join a room: 6 characters, without look-alikes (0/O, 1/I/L). The Realtime channel is `room:<code>`. It's not an id. |
+| **Join link** | `?room=CODE` | The app's URL with a room code, which opens that room as a player. |
 | **Cinematic scene** | — | A phase 5 presentation mode: art, parallax, particles, music. Not a tactical map. |
 
 ## Domain core
@@ -84,7 +85,9 @@ Otherwise it's a field of some entity.
 | **Protocol version** | `protocolVersion` | Bumped on any incompatible message change. A client on another version can't join (`ProtocolMismatch`). |
 | **Snapshot** | `Snapshot` | The whole player-filtered scene, sent on join or resync. |
 | **Patch batch** | `PatchBatch` | The patches produced by one accepted command, sent under one sequence number. |
-| **Sequence number** | `seq` | A counter on patch batches, owned by `chimera_sync`. A gap means a missed batch, and the player resyncs. |
+| **Sequence number** | `seq` | A counter on patch batches, owned by `chimera_sync`. A gap means a missed batch, and the player resyncs. Only compared within one epoch. |
+| **Epoch** | `HostSession.epoch` | A random id for one run of the GM's session. A GM who reloads starts a new epoch with `seq` back at 0, and players resync when they see it change. |
+| **Autosave** | — | The GM's scene saved locally (browser storage on web) a second after each change, so a GM reload resumes the room. |
 | **Intent** | `Intent` | The message a player sends, carrying a command and a request id. The GM's own commands don't travel as intents. |
 | **Request id** | `requestId` | Names one intent, so the batch or refusal answering it can be matched to the optimistic copy. |
 | **Heartbeat** | `Heartbeat` | The GM's latest `seq`, sent every few seconds. Reveals a missed last batch, and expires intents that got no answer. |

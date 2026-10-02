@@ -17,14 +17,24 @@ class TableController {
   final view = ValueNotifier<Matrix4>(Matrix4.identity());
   final drag = ValueNotifier<TokenDrag?>(null);
   final fogPreview = ValueNotifier<FogPreview?>(null);
+  final selected = ValueNotifier<TokenId?>(null);
   Tool tool = Tool.move;
   FogMode fogMode = FogMode.cover;
   double brushRadius = 48;
+  Size _viewport = Size.zero;
+
+  /// The scene point at the middle of the view, to place new things.
+  Point get viewCenter {
+    final c = MatrixUtils.transformPoint(
+        Matrix4.inverted(view.value), _viewport.center(Offset.zero));
+    return (x: c.dx, y: c.dy);
+  }
 
   void dispose() {
     view.dispose();
     drag.dispose();
     fogPreview.dispose();
+    selected.dispose();
   }
 }
 
@@ -76,6 +86,8 @@ class _TableViewState extends State<TableView> {
   Offset? _grab;
   final _sinceSend = Stopwatch();
   bool _panning = false;
+  Offset? _downAt;
+  bool _moved = false;
   Offset? _fogStart;
   List<Point> _strokePoints = [];
   double _lastPanZoomScale = 1;
@@ -151,6 +163,7 @@ class _TableViewState extends State<TableView> {
             painter: TokenPainter(
               tokens: _scene.tokens,
               drag: _c.drag,
+              selected: _c.selected,
               images: widget.images,
               gm: widget.gm,
             ),
@@ -173,6 +186,7 @@ class _TableViewState extends State<TableView> {
     );
 
     return LayoutBuilder(builder: (context, constraints) {
+      _c._viewport = constraints.biggest;
       if (!_fitted && constraints.hasBoundedWidth && constraints.hasBoundedHeight) {
         _fitted = true;
         _c.view.value = _fit(constraints.biggest, size);
@@ -218,6 +232,8 @@ class _TableViewState extends State<TableView> {
 
   void _down(PointerDownEvent e) {
     final p = _toScene(e.localPosition);
+    _downAt = e.localPosition;
+    _moved = false;
     final tool = widget.gm ? _c.tool : Tool.move;
     if (e.buttons != kPrimaryButton || tool == Tool.move) {
       final token = e.buttons == kPrimaryButton ? _tokenAt(p) : null;
@@ -241,6 +257,9 @@ class _TableViewState extends State<TableView> {
 
   void _move(PointerMoveEvent e) {
     final p = _toScene(e.localPosition);
+    if (_downAt != null && (e.localPosition - _downAt!).distance > 4) {
+      _moved = true;
+    }
     if (_c.drag.value case (:final id, position: _)) {
       final position = p + _grab!;
       _c.drag.value = (id: id, position: position);
@@ -269,13 +288,20 @@ class _TableViewState extends State<TableView> {
 
   void _up({required bool send}) {
     if (_c.drag.value case (:final id, :final position)) {
-      if (send) widget.send(MoveToken(id, (x: position.dx, y: position.dy)));
+      if (send && _moved) {
+        widget.send(MoveToken(id, (x: position.dx, y: position.dy)));
+      } else if (send) {
+        _c.selected.value = id; // A click, not a drag.
+      }
       _c.drag.value = null;
+    } else if (_panning && send && !_moved) {
+      _c.selected.value = null;
     } else if (_c.fogPreview.value case (:final shape, :final mode) when send) {
       widget.send(AddFogOp(FogOpId(newId()), mode, shape));
     }
     _c.fogPreview.value = null;
     _panning = false;
+    _downAt = null;
     _fogStart = null;
     _strokePoints = [];
   }

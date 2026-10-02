@@ -49,12 +49,14 @@ class TokenPainter extends CustomPainter {
   TokenPainter({
     required this.tokens,
     required this.drag,
+    required this.selected,
     required this.images,
     required this.gm,
-  }) : super(repaint: drag);
+  }) : super(repaint: Listenable.merge([drag, selected]));
 
   final Map<TokenId, Token> tokens;
   final ValueNotifier<TokenDrag?> drag;
+  final ValueNotifier<TokenId?> selected;
   final ui.Image? Function(AssetId) images;
   final bool gm;
 
@@ -89,7 +91,12 @@ class TokenPainter extends CustomPainter {
         fill.color = _ownerColor(token.owner).withAlpha(alpha);
         canvas.drawCircle(center, token.size / 2, fill);
       }
-      ring.color = const Color(0xFF000000).withAlpha(alpha);
+      final isSelected = selected.value == token.id;
+      ring
+        ..color = isSelected
+            ? const Color(0xFFFFD54F)
+            : const Color(0xFF000000).withAlpha(alpha)
+        ..strokeWidth = isSelected ? 8 : 3;
       canvas.drawCircle(center, token.size / 2, ring);
     }
   }
