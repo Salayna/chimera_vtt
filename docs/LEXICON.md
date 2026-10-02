@@ -21,7 +21,8 @@ One word, one meaning. When code, docs and conversation disagree, this file wins
 | --- | --- | --- |
 | **GM** | `Gm` | The game master. Runs the authoritative session and sees everything. |
 | **Player** | `Player` | Anyone at the table who isn't the GM. Sees a filtered copy of the scene. |
-| **Campaign** | `Campaign` | Everything one group plays with: scenes, packs, assets and players. |
+| **Campaign** | `Campaign` | Everything one group plays with: scenes, packs, assets and members. Owned by one signed-in GM. |
+| **Member** | — | A player who has entered a campaign's room at least once, with the name and colour they chose. Signed in or anonymous. The GM can remove one. A token's owner is a member. |
 | **Scene** | `Scene` | One map and everything on it. A set of entities keyed by id. |
 | **Map** | — | The background image of a scene. It's an asset, referenced from the scene settings. |
 | **Token** | `Token` | An entity standing for a creature or object on the map. It has a position, a size, an optional owner and a hidden flag. |
@@ -32,7 +33,7 @@ One word, one meaning. When code, docs and conversation disagree, this file wins
 | **Grid** | `Grid` | Cell size and offset used to snap and measure. A field of the scene settings, not an entity. |
 | **Cell** | — | One square of the grid. |
 | **Snap** | `Grid.snap` | Moving a dropped token onto the grid: its edges onto grid lines, or the middle of a cell for tokens smaller than one. On by default; the GM can turn it off, and holding Alt places one token freely. |
-| **Room** | — | A live session of one scene that players can join. |
+| **Room** | — | A live session that players can join. Today it holds one scene; with campaigns, it's a campaign's session, showing whichever scene the GM has live. |
 | **Room code** | `newRoomCode` | The short, human-typable code players enter to join a room: 6 characters, without look-alikes (0/O, 1/I/L). The Realtime channel is `room:<code>`. It's not an id. |
 | **Join link** | `?room=CODE` | The app's URL with a room code, which opens that room as a player. |
 | **Cinematic scene** | — | A phase 5 presentation mode: art, parallax, particles, music. Not a tactical map. |
@@ -124,7 +125,7 @@ Otherwise it's a field of some entity.
 | Term | Code | Meaning |
 | --- | --- | --- |
 | **Workspace** | root `pubspec.yaml` | The monorepo's pub workspace. One lockfile, shared resolution. |
-| **Member** | `resolution: workspace` | A package that belongs to the workspace: `app`, `chimera_core`, `chimera_sync` and `tactical_engine`. |
+| **Workspace member** | `resolution: workspace` | A package that belongs to the workspace: `app`, `chimera_core`, `chimera_sync` and `tactical_engine`. |
 | **Core** | `chimera_core` | The pure-Dart domain package. |
 | **Sync package** | `chimera_sync` | Transport, protocol and sessions. |
 | **ADR** | — | An architecture decision record: one numbered decision in the plan's decision log. |

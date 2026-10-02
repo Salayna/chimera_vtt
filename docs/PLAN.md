@@ -12,15 +12,16 @@ Chimera VTT is one Flutter app for desktop, web and phones, used by GMs and play
 4. [Why Flutter over Godot](#why-flutter-over-godot)
 5. [Architecture](#architecture)
 6. [Data model and sync protocol](#data-model-and-sync-protocol)
-7. [Tactical engine](#tactical-engine)
-8. [Customization: tiered scripting](#customization-tiered-scripting)
-9. [Web constraints](#web-constraints)
-10. [Proof of concept](#proof-of-concept)
-11. [Roadmap](#roadmap)
-12. [Architecture decision records](#architecture-decision-records)
-13. [Risks and fallbacks](#risks-and-fallbacks)
-14. [Repository review](#repository-review)
-15. [Open questions](#open-questions)
+7. [Campaigns (proposal)](#campaigns-proposal)
+8. [Tactical engine](#tactical-engine)
+9. [Customization: tiered scripting](#customization-tiered-scripting)
+10. [Web constraints](#web-constraints)
+11. [Proof of concept](#proof-of-concept)
+12. [Roadmap](#roadmap)
+13. [Architecture decision records](#architecture-decision-records)
+14. [Risks and fallbacks](#risks-and-fallbacks)
+15. [Repository review](#repository-review)
+16. [Open questions](#open-questions)
 
 ---
 
@@ -183,7 +184,7 @@ chimera_vtt/                # monorepo, a Dart pub workspace
       test/                 # every pack's examples, headless
 ```
 
-Every member declares `resolution: workspace`. `chimera_core` will depend on `tactical_engine` as a workspace dependency once the reducer calls it (phase 4). The engine stays in the monorepo while its API changes often, and moves to its own repository (with `git filter-repo`) once something outside this app uses it. Every package has its own `test/` folder, run with `dart test`, and widgets use `flutter_test`.
+Every workspace member declares `resolution: workspace`. `chimera_core` will depend on `tactical_engine` as a workspace dependency once the reducer calls it (phase 4). The engine stays in the monorepo while its API changes often, and moves to its own repository (with `git filter-repo`) once something outside this app uses it. Every package has its own `test/` folder, run with `dart test`, and widgets use `flutter_test`.
 
 ---
 
@@ -205,6 +206,54 @@ The protocol has four kinds of message:
 4. `presence`: who is connected, their role and their cursor, from Realtime presence.
 
 A gap in sequence numbers makes a player ask for a fresh snapshot. Patches received from the network are never re-broadcast and never enter undo history.
+
+---
+
+## Campaigns (proposal)
+
+Proposed 2026-10-02, decisions below. Today a room holds one scene, autosaved in the GM's browser, and players are anonymous ids. Prep needs more: several scenes ready to switch between, and tokens given to players before they join. Both belong to a campaign, so the campaign comes first and scenes hang off it.
+
+### Who signs in
+
+- **The GM signs in** with an email and a password (Supabase Auth). A campaign has an owner who persists across devices and browsers, so only a signed-in GM can create or open one.
+- **Players don't have to.** A player enters with the room code and gives a name and picks a colour. They can be signed in, or anonymous (Supabase's anonymous sign-in, as today). An anonymous player is the same player for as long as that browser keeps its session. If they sign in later, Supabase links the anonymous user to the account and the id stays the same, so nothing they own is lost.
+
+### Shape
+
+- **Campaign:** a name, its owner (the GM), a persistent room code, its scenes and its members.
+- **Scene:** what a room holds today, saved under the campaign with a name. The GM picks which scene is live; one at a time.
+- **Member:** a player who has entered the campaign's room at least once: their user id, the name and colour they chose. The GM can make a member a token's owner whether or not they're connected. The GM can remove a member, and change the room code so removed members can't come back with the old one.
+- **Room:** the live session of a campaign, at the campaign's room code. Players stay in the room when the GM switches scenes.
+
+### Storage
+
+Tables in Postgres, behind row-level security:
+
+| Table | Holds | Who can read and write |
+| --- | --- | --- |
+| `campaigns` | id, owner, name, room code | The owner |
+| `scenes` | id, campaign, name, the scene's JSON, updated | The campaign's owner only |
+| `members` | campaign, user id, name, colour | The owner reads and removes; a member reads the members of their campaigns |
+
+- Players never read `scenes`. They get the scene from the GM over Realtime, already filtered, so hidden tokens stay secret.
+- A player joins through one function (`join_campaign(code, name, colour)`) that checks the code and adds or updates their member row, rather than by writing `members` directly. A removed member who still has the code can join again, so removing someone for good means changing the code too.
+- The GM's autosave writes the live scene's row instead of browser storage. Export and import of scene files stay, for backups and moving scenes between campaigns.
+- Images stay in Storage, named by content hash (ADR 006).
+
+### Bricks
+
+1. GM sign-in with email and password.
+2. Campaigns: create, list and open them from the lobby; change the room code.
+3. Scenes in Postgres: autosave to the live scene, and a scene list to add, rename, switch and delete.
+4. Players give a name and pick a colour on entering, and become members. The GM sees and removes members.
+5. Token owners chosen from the members, connected or not.
+
+### Decided 2026-10-02
+
+- [x] GM sign-in: email and password.
+- [x] The GM can remove a member and change the room code.
+- [x] A member's colour: the player picks it.
+- [x] Timing: starts now, alongside the remaining POC measurements, not after the go/no-go call (ADR 010 revised).
 
 ---
 
@@ -371,7 +420,7 @@ Phases 1–4 alone make a usable VTT, and cinematic mode and the Solaris pack fo
 | 007 | Fog as ordered operations drawn into a mask layer, as in Atlas | H5 | Proposed |
 | 008 | Flutter web renderer (CanvasKit or skwasm) picked by POC measurements | H1 | Proposed |
 | 009 | `dart test` for pure-Dart packages, `flutter_test` for widgets | First test run | Proposed |
-| 010 | Campaigns in Postgres after the POC, JSON files during it | Phase 1 | Proposed |
+| 010 | Campaigns in Postgres, with scene files for backup | Phase 1 | Proposed (revised 2026-10-02: started alongside the POC, not after it) |
 | 011 | Tactical engine as a separate, system-agnostic pure-Dart package, kept in the monorepo until a second consumer exists | System-agnostic goal | Accepted (revised 2026-09-29: was its own repository) |
 | 012 | Tag effects as a small set of data building blocks, with rules text for the rest | First two packs (Solaris, D&D 5e) | Proposed |
 | 013 | Tiered customization: data building blocks, then expressions, then hooks that return commands | Phase 4 expression spike | Not yet logged |
