@@ -59,6 +59,7 @@ class GmRail extends StatelessWidget {
     this.onMembers,
     this.membersOpen = false,
     this.mapsOpen = false,
+    this.tokensOpen = false,
   });
 
   final TableController controller;
@@ -67,6 +68,7 @@ class GmRail extends StatelessWidget {
   final VoidCallback? onMembers;
   final bool membersOpen;
   final bool mapsOpen;
+  final bool tokensOpen;
   final VoidCallback? onAddToken;
   final VoidCallback? onSetMap;
   final VoidCallback? onExport;
@@ -108,6 +110,7 @@ class GmRail extends StatelessWidget {
                 icon: Lucide.circlePlus,
                 label: 'Add token',
                 shortcut: 'T',
+                active: tokensOpen,
                 onPressed: onAddToken),
             CvToolButton(
                 icon: Lucide.imageUp,

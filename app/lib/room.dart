@@ -659,7 +659,9 @@ class _GmRoomState extends State<GmRoom> {
     }
   }
 
-  void _addToken() {
+  /// Places a token in the nearest free cell to the middle of the view:
+  /// with [image] from the library, or one of the stand-in portraits.
+  void _addToken({AssetId? image}) {
     final host = _host!;
     final scene = host.store.scene;
     final size = scene.settings.grid.cellSize;
@@ -673,7 +675,8 @@ class _GmRoomState extends State<GmRoom> {
           size,
           scene.tokens.values),
       size: size,
-      image: AssetId('token${scene.tokens.length % widget.art.tokens.length}'),
+      image: image ??
+          AssetId('token${scene.tokens.length % widget.art.tokens.length}'),
     )));
     _controller
       ..tool = Tool.move
@@ -712,8 +715,14 @@ class _GmRoomState extends State<GmRoom> {
   /// Bumped when an upload lands in the library, so an open panel reloads.
   int _libraryRevision = 0;
 
-  void _toggleLibrary(LibraryKind kind) =>
-      setState(() => _libraryOpen = _libraryOpen == kind ? null : kind);
+  /// The token the token library is choosing an image for, if any; else
+  /// picking places a new token.
+  TokenId? _tokenImageFor;
+
+  void _toggleLibrary(LibraryKind kind) => setState(() {
+        _libraryOpen = _libraryOpen == kind ? null : kind;
+        _tokenImageFor = null;
+      });
 
   late final _library = Library(widget.client, widget.assets);
 
@@ -780,12 +789,33 @@ class _GmRoomState extends State<GmRoom> {
   }
 
   /// Gives a token an uploaded image.
-  Future<void> _setTokenImage(TokenId token) =>
-      _uploadImage('Token image', LibraryKind.token, (id, _) {
-        // The token may have changed (or gone) during the upload.
-        final current = _host!.store.scene.tokens[token];
-        if (current != null) _host!.execute(UpdateToken(current.copyWith(image: id)));
+  /// Opens the token library: to place tokens, or, [forToken], to give
+  /// that one token an image.
+  void _openTokens({TokenId? forToken}) => setState(() {
+        _libraryOpen = forToken == null && _libraryOpen == LibraryKind.token
+            ? null
+            : LibraryKind.token;
+        _tokenImageFor = forToken;
       });
+
+  /// A token image from the library or an upload: the token the library was
+  /// opened for gets it, or a new token is placed with it.
+  void _useTokenImage(AssetId image) {
+    final host = _host!;
+    // The token may have changed (or gone) since the library opened.
+    if (host.store.scene.tokens[_tokenImageFor] case final token?) {
+      host.execute(UpdateToken(token.copyWith(image: image)));
+      setState(() {
+        _tokenImageFor = null;
+        _libraryOpen = null;
+      });
+    } else {
+      _addToken(image: image);
+    }
+  }
+
+  Future<void> _uploadTokenImage() => _uploadImage(
+      'Token image', LibraryKind.token, (id, _) => _useTokenImage(id));
 
   void _setCellSize(double size) {
     final host = _host!;
@@ -912,7 +942,7 @@ class _GmRoomState extends State<GmRoom> {
     return TableShortcuts(
       controller: _controller,
       gm: true,
-      onAddToken: _addToken,
+      onAddToken: _openTokens,
       onSetMap: () => _toggleLibrary(LibraryKind.map),
       onExport: _export,
       onImport: _import,
@@ -939,7 +969,7 @@ class _GmRoomState extends State<GmRoom> {
             send: host.execute,
             onRemove: _removeToken,
             onDuplicate: _duplicateToken,
-            onSetImage: _uploading == null ? _setTokenImage : null,
+            onSetImage: (id) => _openTokens(forToken: id),
           ),
         ),
         Positioned(
@@ -962,9 +992,10 @@ class _GmRoomState extends State<GmRoom> {
           child: Center(
             child: GmRail(
               controller: _controller,
-              onAddToken: _addToken,
+              onAddToken: _openTokens,
               onSetMap: () => _toggleLibrary(LibraryKind.map),
               mapsOpen: _libraryOpen == LibraryKind.map,
+              tokensOpen: _libraryOpen == LibraryKind.token,
               onExport: _export,
               onImport: _import,
               scenesOpen: _scenesOpen,
@@ -1000,8 +1031,50 @@ class _GmRoomState extends State<GmRoom> {
                             'campaign.',
                         revision: _libraryRevision,
                         onPick: _useMap,
-                        addLabel: 'Upload new map',
-                        onAdd: _uploading == null ? _setMap : null,
+                        footer: [
+                          CvButton(
+                            label: 'Upload new map',
+                            icon: Lucide.imageUp,
+                            small: true,
+                            block: true,
+                            onPressed: _uploading == null ? _setMap : null,
+                          ),
+                        ],
+                      ),
+                    if (_libraryOpen == LibraryKind.token)
+                      LibraryPanel(
+                        library: _library,
+                        assets: widget.assets,
+                        kind: LibraryKind.token,
+                        title: switch (host.store.scene.tokens[_tokenImageFor]) {
+                          null => 'Tokens',
+                          final t => t.name.isEmpty
+                              ? 'Image for the token'
+                              : 'Image for ${t.name}',
+                        },
+                        hint: 'Token images you upload are kept here, for '
+                            'every campaign.',
+                        revision: _libraryRevision,
+                        onPick: (e) => _useTokenImage(e.asset),
+                        footer: [
+                          CvButton(
+                            label: 'Upload new token image',
+                            icon: Lucide.imageUp,
+                            small: true,
+                            block: true,
+                            onPressed:
+                                _uploading == null ? _uploadTokenImage : null,
+                          ),
+                          if (_tokenImageFor == null)
+                            CvButton(
+                              label: 'Blank token',
+                              icon: Lucide.circlePlus,
+                              variant: CvButtonVariant.ghost,
+                              small: true,
+                              block: true,
+                              onPressed: _addToken,
+                            ),
+                        ],
                       ),
                     if (_membersOpen) MembersPanel(onRemove: _removeMember),
                     if (_scenesOpen)

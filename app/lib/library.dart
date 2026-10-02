@@ -107,8 +107,7 @@ class LibraryPanel extends StatefulWidget {
     required this.title,
     required this.hint,
     required this.onPick,
-    this.addLabel,
-    this.onAdd,
+    this.footer = const [],
     this.revision = 0,
   });
 
@@ -118,8 +117,9 @@ class LibraryPanel extends StatefulWidget {
   final String title;
   final String hint;
   final void Function(LibraryEntry entry) onPick;
-  final String? addLabel;
-  final VoidCallback? onAdd;
+
+  /// Buttons under the entries: upload, and the like.
+  final List<Widget> footer;
   final int revision;
 
   @override
@@ -210,14 +210,7 @@ class _LibraryPanelState extends State<LibraryPanel> {
                   ]),
                 ),
               ),
-            if (widget.onAdd != null)
-              CvButton(
-                label: widget.addLabel ?? 'Upload',
-                icon: Lucide.imageUp,
-                small: true,
-                block: true,
-                onPressed: widget.onAdd,
-              ),
+            ...widget.footer,
           ],
         ),
       ),
