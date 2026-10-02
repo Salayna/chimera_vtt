@@ -9,10 +9,11 @@ import 'assets.dart';
 import 'theme.dart';
 import 'ui/cv.dart';
 
-enum LibraryKind { map, token }
+enum LibraryKind { map, token, scene }
 
-/// An image in the GM's library.
-typedef LibraryEntry = ({String id, String name, AssetId asset, AssetId thumb});
+/// An entry in the GM's library: an image ([asset]), or a scene (no asset,
+/// and a thumbnail only if its scene has a map).
+typedef LibraryEntry = ({String id, String name, AssetId? asset, AssetId? thumb});
 
 /// The signed-in GM's library: their images, shared by all their campaigns.
 /// Owner-only behind row-level security.
@@ -39,6 +40,30 @@ class Library {
     }, onConflict: 'owner,kind,asset', ignoreDuplicates: true);
   }
 
+  /// Files a copy of [scene] as a template, with its map's thumbnail.
+  Future<void> addScene(String name, Scene scene) async {
+    AssetId? thumb;
+    if (scene.settings.map case final map?) {
+      thumb = await _assets.upload(
+          await thumbnail(await _assets.image(map)), 'image/png');
+    }
+    await _client.from('library').insert({
+      'owner': _client.auth.currentUser!.id,
+      'kind': LibraryKind.scene.name,
+      'name': name,
+      'data': scene.toJson(),
+      'thumb': thumb?.value,
+    });
+  }
+
+  /// A library scene, ready to become a campaign's: token owners are
+  /// members of one campaign, so the copy has none.
+  Future<Scene> sceneCopy(String id) async {
+    final row =
+        await _client.from('library').select('data').eq('id', id).single();
+    return withoutOwners(Scene.fromJson(row['data'] as Json));
+  }
+
   Future<void> rename(String id, String name) =>
       _client.from('library').update({'name': name}).eq('id', id);
 
@@ -55,11 +80,18 @@ class Library {
           (
             id: r['id'] as String,
             name: r['name'] as String,
-            asset: AssetId(r['asset'] as String),
-            thumb: AssetId(r['thumb'] as String),
+            asset: switch (r['asset']) { final String a => AssetId(a), _ => null },
+            thumb: switch (r['thumb']) { final String t => AssetId(t), _ => null },
           ),
       ];
 }
+
+/// [scene] with no token owned by anyone.
+Scene withoutOwners(Scene scene) => Scene(
+      settings: scene.settings,
+      tokens: {for (final t in scene.tokens.values) t.id: t.withOwner(null)},
+      fogOps: scene.fogOps,
+    );
 
 /// [image] scaled down to [Library.thumbSize] on its longest side, as PNG.
 Future<Uint8List> thumbnail(ui.Image image) async {
@@ -94,7 +126,10 @@ class LibraryThumb extends StatelessWidget {
         child: ColoredBox(
           color: CvColors.surfaceInput,
           child: FutureBuilder(
-            future: assets.image(entry.thumb),
+            future: switch (entry.thumb) {
+              final thumb? => assets.image(thumb),
+              null => null,
+            },
             builder: (context, snapshot) => snapshot.data == null
                 ? const SizedBox.expand()
                 : RawImage(image: snapshot.data, fit: BoxFit.cover),

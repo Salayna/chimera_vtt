@@ -600,20 +600,42 @@ class _GmRoomState extends State<GmRoom> {
     }
   }
 
-  Future<void> _newScene() async {
+  /// A new scene: blank, or [from] a library scene's copy, named after it.
+  Future<void> _newScene({LibraryEntry? from}) async {
     final names = {for (final s in _sceneList) s.name};
-    var n = _sceneList.length + 1;
-    while (names.contains('Scene $n')) {
-      n++;
+    String unique(String stem) {
+      // A blank scene counts on from the list; a copy from its own name.
+      var n = from == null ? _sceneList.length + 1 : 2;
+      while (names.contains('$stem $n')) {
+        n++;
+      }
+      return '$stem $n';
     }
-    final name = 'Scene $n';
+
+    final name = switch (from?.name) {
+      final n? when !names.contains(n) => n,
+      final n => unique(n ?? 'Scene'),
+    };
     try {
-      final scene = _blankScene();
+      final scene =
+          from == null ? _blankScene() : await _library.sceneCopy(from.id);
       final id = await _scenes.create(name, scene);
       setState(() => _sceneList = [..._sceneList, (id: id, name: name)]);
       await _switchScene(id, scene: scene);
     } on Object catch (e) {
       _toasts.show('The scene failed to create: $e', tone: CvTone.danger);
+    }
+  }
+
+  Future<void> _saveSceneToLibrary() async {
+    final name = _sceneList.where((s) => s.id == _sceneId).firstOrNull?.name;
+    try {
+      await _library.addScene(name ?? 'Scene', _host!.store.scene);
+      setState(() => _libraryRevision++);
+      _toasts.show('${name ?? 'Scene'} saved to your library', tone: CvTone.ok);
+    } on Object catch (e) {
+      _toasts.show('The scene failed to save to the library: $e',
+          tone: CvTone.danger);
     }
   }
 
@@ -774,10 +796,11 @@ class _GmRoomState extends State<GmRoom> {
     if (_uploading != null) return;
     setState(() => _uploading = 'Opening ${entry.name}');
     try {
-      final image = await widget.assets.image(entry.asset);
+      // Maps and tokens always have an asset (the library's shape check).
+      final image = await widget.assets.image(entry.asset!);
       final old = _host!.store.scene.settings;
       _host!.execute(UpdateSettings(old.copyWith(
-        map: entry.asset,
+        map: entry.asset!,
         width: image.width.toDouble(),
         height: image.height.toDouble(),
       )));
@@ -1055,7 +1078,7 @@ class _GmRoomState extends State<GmRoom> {
                         hint: 'Token images you upload are kept here, for '
                             'every campaign.',
                         revision: _libraryRevision,
-                        onPick: (e) => _useTokenImage(e.asset),
+                        onPick: (e) => _useTokenImage(e.asset!),
                         footer: [
                           CvButton(
                             label: 'Upload new token image',
@@ -1085,6 +1108,23 @@ class _GmRoomState extends State<GmRoom> {
                         onNew: _newScene,
                         onRename: _renameScene,
                         onDelete: _deleteScene,
+                        onSaveToLibrary: _saveSceneToLibrary,
+                        onFromLibrary: () => _toggleLibrary(LibraryKind.scene),
+                        fromLibraryOpen: _libraryOpen == LibraryKind.scene,
+                      ),
+                    if (_libraryOpen == LibraryKind.scene)
+                      LibraryPanel(
+                        library: _library,
+                        assets: widget.assets,
+                        kind: LibraryKind.scene,
+                        title: 'Library scenes',
+                        hint: 'Save a scene to your library to start new '
+                            'scenes from it, in any campaign.',
+                        revision: _libraryRevision,
+                        onPick: (e) {
+                          setState(() => _libraryOpen = null);
+                          _newScene(from: e);
+                        },
                       ),
                     GridOptions(
                         controller: _controller,

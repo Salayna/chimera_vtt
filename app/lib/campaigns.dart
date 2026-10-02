@@ -278,9 +278,15 @@ class ScenesPanel extends StatelessWidget {
     required this.onNew,
     required this.onRename,
     required this.onDelete,
+    this.onSaveToLibrary,
+    this.onFromLibrary,
+    this.fromLibraryOpen = false,
   });
 
   final List<SceneEntry> scenes;
+  final VoidCallback? onSaveToLibrary;
+  final VoidCallback? onFromLibrary;
+  final bool fromLibraryOpen;
   final String? live;
   final void Function(String id) onSwitch;
   final VoidCallback onNew;
@@ -353,6 +359,24 @@ class ScenesPanel extends StatelessWidget {
               block: true,
               onPressed: onNew,
             ),
+            if (onFromLibrary != null)
+              CvButton(
+                label: fromLibraryOpen ? 'Close library' : 'New from library',
+                icon: Lucide.layers,
+                variant: CvButtonVariant.ghost,
+                small: true,
+                block: true,
+                onPressed: onFromLibrary,
+              ),
+            if (onSaveToLibrary != null)
+              CvButton(
+                label: 'Save to library',
+                icon: Lucide.download,
+                variant: CvButtonVariant.ghost,
+                small: true,
+                block: true,
+                onPressed: onSaveToLibrary,
+              ),
           ],
         ),
       ),
