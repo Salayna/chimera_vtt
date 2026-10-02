@@ -362,7 +362,7 @@ The POC passes when this session runs start to finish with no restart, once with
 
 Status 2026-10-02:
 
-- **GM in a browser:** all 7 steps pass on the local stack, with the GM and the player in Chrome. In step 4, a player can't pick up a token they don't own (dragging it pans the map), so the refusal is never reached through the interface; it is covered by the sync tests. Step 7 passed through the autosave (a reload); export and import of the scene file are not tested yet.
+- **GM in a browser:** all 7 steps pass on the local stack, with the GM and the player in Chrome. In step 4, a player can't pick up a token they don't own (dragging it pans the map), so the refusal is never reached through the interface; it is covered by the sync tests. Step 7 passed through the autosave (a reload). Scenes now save to Postgres, so step 7 is the autosave; testing export and import of scene files was dropped from the POC (2026-10-02).
 - **GM on desktop:** not run yet.
 
 ### Hypotheses and pass criteria
@@ -403,6 +403,10 @@ Two weeks, ending with a go or no-go decision on the architecture.
 Measured 2026-10-02 (profile builds, GM and player views side by side, 4096 px map, 50 image tokens, 500+ fog strokes, live drag and fog painting): 60 fps with 0% dropped frames on macOS, Chrome skwasm and Chrome CanvasKit, raster p99 ≤ 4.5 ms. Frame rate for H1 and H5 passes; H1's first-load time is not measured yet. CanvasKit turns a picture into an image slowly (about 32 ms), so new fog ops are drawn into the mask in batches (after a 1 s pause or 32 ops) rather than per stroke. Rerun with `flutter run --profile --dart-define=BENCH=true` in `app/`.
 
 H4 measured 2026-10-02 on the local stack: a 9.7 MB, 4096 px JPEG map loads in the web build with no CORS errors, in about 0.25 s on reload (download 110–123 ms, decode 75–112 ms). Storage serves it with `cache-control: max-age=31536000`. The browser upload works, both locally and on the hosted project (Cloudflare-hosted web build, after `supabase db push` created the bucket there). Load times on the hosted project are not measured yet.
+
+H1 first load measured 2026-10-02 on the hosted web build (Cloudflare), in Chrome with the cache off and the link throttled to 50 Mbit/s and 20 ms: 3.1 MB transferred, Flutter's first frame at 715–820 ms over three runs. Passes (≤ 10 s). The first frame is the sign-in screen; the lobby follows after one auth round trip.
+
+H6 estimated 2026-10-02 by `packages/chimera_sync/test/quota_test.dart`, a scripted hour over the loopback: the GM and four players, a heartbeat every 3 s, each player moving their token twice a minute and the GM once (2 s drags at 15 updates/s), and 100 fog strokes. 31,908 sends, which Supabase bills as 159,540 messages (each broadcast counts once per client in the room). That is about 12 hours of play a month on the Free plan (2M messages) and 31 on Pro (5M). Player drags are most of it: each update goes out twice, as the player's intent and the GM's patch. Passes for a weekly session on Pro; on Free, only about three 4-hour sessions a month fit.
 
 If H2 fails, a small WebSocket relay of our own replaces Realtime behind the same transport interface. If H1 fails, the map moves to a tiled renderer or to Flame before anything else changes.
 
