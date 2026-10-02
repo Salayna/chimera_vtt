@@ -1,0 +1,14 @@
+name: chimera_sync
+description: "Transport, protocol and sessions for Chimera VTT: Supabase Realtime and loopback."
+publish_to: none
+resolution: workspace
+
+environment:
+  sdk: ^3.13.3
+
+dependencies:
+  chimera_core: any
+  supabase: ^2.16.2
+
+dev_dependencies:
+  test: ^1.25.6

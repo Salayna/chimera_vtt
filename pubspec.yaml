@@ -8,3 +8,4 @@ workspace:
   - app
   - packages/chimera_core
   - packages/tactical_engine
+  - packages/chimera_sync

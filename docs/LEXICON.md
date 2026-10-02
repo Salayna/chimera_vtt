@@ -77,17 +77,20 @@ Otherwise it's a field of some entity.
 | Term | Code | Meaning |
 | --- | --- | --- |
 | **Authority** | — | The session whose state is the truth. Always the GM session (ADR 002). |
-| **Session** | — | One client's live connection to a room. A GM session is the authority, and a player session applies what it receives. |
+| **Session** | `Session` (sealed) | One client's live connection to a room. `HostSession` (the GM) is the authority; `ClientSession` (a player) applies what it receives. |
 | **Transport** | `Transport` | The interface that moves messages. Implemented by Supabase Realtime and by loopback. |
-| **Loopback** | — | An in-memory transport for tests and solo play. |
-| **Message** | — | Anything on the wire: snapshot, patch batch, intent, refusal or presence. |
-| **Snapshot** | — | The whole player-filtered scene, sent on join or resync. |
-| **Patch batch** | — | The patches produced by one accepted command, sent under one sequence number. |
+| **Loopback** | `LoopbackHub` | An in-memory transport for tests and solo play. |
+| **Message** | `Message` (sealed) | Anything on the wire: `RequestSnapshot`, `Snapshot`, `PatchBatch`, `Heartbeat`, `Intent`, `RefusalMessage`. Each carries the protocol version `p`. |
+| **Protocol version** | `protocolVersion` | Bumped on any incompatible message change. A client on another version can't join (`ProtocolMismatch`). |
+| **Snapshot** | `Snapshot` | The whole player-filtered scene, sent on join or resync. |
+| **Patch batch** | `PatchBatch` | The patches produced by one accepted command, sent under one sequence number. |
 | **Sequence number** | `seq` | A counter on patch batches, owned by `chimera_sync`. A gap means a missed batch, and the player resyncs. |
-| **Intent** | — | The message a player sends, carrying a command. The GM's own commands don't travel as intents. |
-| **Resync** | — | A player asking for a fresh snapshot after a gap or a reconnect. |
-| **Presence** | — | Who is connected, their role and their cursor. Comes from Realtime presence. |
-| **Optimistic move** | — | A player's own drag, shown at once and snapped back if refused. |
+| **Intent** | `Intent` | The message a player sends, carrying a command and a request id. The GM's own commands don't travel as intents. |
+| **Request id** | `requestId` | Names one intent, so the batch or refusal answering it can be matched to the optimistic copy. |
+| **Heartbeat** | `Heartbeat` | The GM's latest `seq`, sent every few seconds. Reveals a missed last batch, and expires intents that got no answer. |
+| **Resync** | `RequestSnapshot` | A player asking for a fresh snapshot after a gap or a reconnect. |
+| **Presence** | `Presence` | Who is connected, their role and their cursor, as `({String player, bool gm, Point? cursor})`. Comes from Realtime presence. |
+| **Optimistic move** | `ClientSession.request` | A player's own command, shown at once and snapped back if refused, or if no answer comes within two heartbeats. |
 | **Asset** | `AssetId` | An uploaded file, usually an image. Its id is the SHA-256 of its bytes (ADR 006). |
 
 ## Rules
@@ -116,7 +119,7 @@ Otherwise it's a field of some entity.
 | Term | Code | Meaning |
 | --- | --- | --- |
 | **Workspace** | root `pubspec.yaml` | The monorepo's pub workspace. One lockfile, shared resolution. |
-| **Member** | `resolution: workspace` | A package that belongs to the workspace: `app`, `chimera_core`, and later `chimera_sync` and `tactical_engine`. |
+| **Member** | `resolution: workspace` | A package that belongs to the workspace: `app`, `chimera_core`, `chimera_sync` and `tactical_engine`. |
 | **Core** | `chimera_core` | The pure-Dart domain package. |
 | **Sync package** | `chimera_sync` | Transport, protocol and sessions. |
 | **ADR** | — | An architecture decision record: one numbered decision in the plan's decision log. |

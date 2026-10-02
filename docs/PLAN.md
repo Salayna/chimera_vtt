@@ -153,7 +153,7 @@ sequenceDiagram
   end
 ```
 
-Patches carry a sequence number, and a player who sees a gap asks for a fresh snapshot. The dragging player's token moves at once on their own screen, then snaps back if the request is refused.
+Patches carry a sequence number, and a player who sees a gap asks for a fresh snapshot. The GM also sends a heartbeat with its latest sequence number every few seconds, so a missed last batch is noticed too. The dragging player's token moves at once on their own screen, then snaps back if the request is refused or gets no answer within two heartbeats.
 
 ### Project layout (planned)
 
@@ -173,6 +173,7 @@ chimera_vtt/                # monorepo, a Dart pub workspace
     chimera_core/           # pure Dart: model, commands, reducer, store, visibility
     chimera_sync/           # transport interface, Supabase and loopback adapters,
                             # protocol, host and client sessions
+                            # (H3 convergence test over a lossy loopback)
     tactical_engine/        # pure Dart, no Flutter, depends on nothing
       lib/src/
         geometry.dart       # Point, Shape (Polygon, Circle)
@@ -401,9 +402,9 @@ A review of `~/Documents/dev/chimera_vtt` as created (Flutter 3.47.4, Dart SDK `
 - [ ] Where the web build is hosted (it may need COOP/COEP headers for skwasm)
 - [ ] Import scope: Atlas `.atlasmap` scenes, Fantasy Statblocks notes, or both
 - [ ] Hex grids in scope, or square only at first
-- [ ] Patch size: whole entities (simple) or only changed fields (smaller drags)?
+- [ ] Patch size: whole entities (simple) or only changed fields (smaller drags)? Whole entities for now; revisit if H6 fails.
 - [ ] Fog history grows with every stroke: when is it compacted into one mask image for new players?
 - [ ] Remote drags: send every throttled position, or only the path when dropped, plus interpolation?
 - [ ] Access control: is a secret room code enough for the POC, or private channels with row-level security from day one?
-- [ ] GM disconnects: do players stay read-only until the GM returns, with no host migration?
-- [ ] Protocol versioning: refuse mismatched clients, or support one version back?
+- [ ] GM disconnects: do players stay read-only until the GM returns, with no host migration? (Today: yes. Players keep their last state, and their intents expire unanswered.)
+- [x] Protocol versioning: refuse mismatched clients (`protocolVersion`, 2026-10-02).
