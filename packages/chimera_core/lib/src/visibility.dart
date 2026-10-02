@@ -4,8 +4,9 @@ import 'ids.dart';
 import 'patch.dart';
 import 'scene.dart';
 
-/// [scene] without what [viewer] may not see: hidden tokens, for players.
-/// Tokens under fog are kept ("trust the table").
+/// [scene] without what [viewer] may not see: hidden tokens and regions,
+/// and hidden tokens' places in the turn order, for players. Tokens under
+/// fog are kept ("trust the table").
 Scene visibleTo(Scene scene, Actor viewer) => switch (viewer) {
       Gm() => scene,
       Player() => Scene(
@@ -15,8 +16,33 @@ Scene visibleTo(Scene scene, Actor viewer) => switch (viewer) {
               if (!t.hidden) t.id: t,
           },
           fogOps: scene.fogOps,
+          regions: {
+            for (final r in scene.regions.values)
+              if (!r.hidden) r.id: r,
+          },
+          initiative: switch (scene.initiative) {
+            final i? => _initiativeFor(i, scene),
+            null => null,
+          },
         ),
     };
+
+/// [initiative] as players see it: no hidden token's entry, and no turn
+/// while it's a hidden token's.
+Initiative _initiativeFor(Initiative initiative, Scene scene) {
+  bool shown(TokenId id) => scene.tokens[id]?.hidden == false;
+  return Initiative(
+    round: initiative.round,
+    current: switch (initiative.current) {
+      final c? when shown(c) => c,
+      _ => null,
+    },
+    entries: [
+      for (final e in initiative.entries)
+        if (shown(e.token)) e,
+    ],
+  );
+}
 
 /// The part of [batch] that [viewer] receives, given the GM's scene [before]
 /// the batch. Holds: `visibleTo(before).applyPatches(patchesFor(...))` equals
@@ -26,6 +52,19 @@ Scene visibleTo(Scene scene, Actor viewer) => switch (viewer) {
 List<Patch> patchesFor(Scene before, List<Patch> batch, Actor viewer) {
   if (viewer is Gm) return batch;
   bool known(TokenId id) => before.tokens[id]?.hidden == false;
+  bool knownRegion(RegionId id) => before.regions[id]?.hidden == false;
+  final after = before.applyPatches(batch);
+  // A token hidden or shown changes who the turn order lists.
+  final tokensShift = batch.any((p) => switch (p) {
+        Upsert(entity: Token(:final id, :final hidden)) =>
+          before.tokens[id]?.hidden != hidden,
+        Delete(kind: EntityKind.token) => true,
+        _ => false,
+      });
+  final initiativeSent = batch.any((p) => switch (p) {
+        Upsert(entity: Initiative()) || Delete(kind: EntityKind.initiative) => true,
+        _ => false,
+      });
   return [
     for (final patch in batch)
       ...switch (patch) {
@@ -35,7 +74,16 @@ List<Patch> patchesFor(Scene before, List<Patch> batch, Actor viewer) {
         // Never sent, so nothing to delete, and the id stays secret.
         Delete(kind: EntityKind.token, :final id) when !known(TokenId(id)) =>
           const [],
+        Upsert(entity: Region(hidden: true, :final id)) => knownRegion(id)
+            ? [Delete(EntityKind.region, id.value)]
+            : const [],
+        Delete(kind: EntityKind.region, :final id)
+            when !knownRegion(RegionId(id)) =>
+          const [],
+        Upsert(entity: final Initiative i) => [Upsert(_initiativeFor(i, after))],
         _ => [patch],
       },
+    if (tokensShift && !initiativeSent && after.initiative != null)
+      Upsert(_initiativeFor(after.initiative!, after)),
   ];
 }

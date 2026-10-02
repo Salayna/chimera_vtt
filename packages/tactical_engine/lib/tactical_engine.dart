@@ -5,4 +5,5 @@ library;
 export 'src/engine.dart';
 export 'src/geometry.dart';
 export 'src/pack.dart';
+export 'src/packs.dart';
 export 'src/topology.dart';

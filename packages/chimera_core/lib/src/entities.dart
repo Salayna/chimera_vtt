@@ -28,6 +28,8 @@ sealed class Entity {
       EntityKind.settings => SceneSettings._fromJson(json),
       EntityKind.token => Token._fromJson(json),
       EntityKind.fogOp => FogOp._fromJson(json),
+      EntityKind.region => Region._fromJson(json),
+      EntityKind.initiative => Initiative._fromJson(json),
     };
   }
 }
@@ -109,7 +111,11 @@ final class SceneSettings extends Entity {
     required this.grid,
     this.gridVisible = true,
     this.fogByDefault = false,
+    this.pack = defaultPack,
   });
+
+  /// The system pack scenes use unless the GM picks another.
+  static const defaultPack = 'generic';
 
   final AssetId? map;
   final double width;
@@ -123,12 +129,17 @@ final class SceneSettings extends Entity {
   /// Whether the whole map starts covered, so fog ops reveal it.
   final bool fogByDefault;
 
+  /// The id of the system pack the scene is played with: its units, range
+  /// bands, conditions and tags. Core doesn't read packs; the app does.
+  final String pack;
+
   SceneSettings copyWith({
     AssetId? map,
     double? width,
     double? height,
     Grid? grid,
     bool? gridVisible,
+    String? pack,
   }) =>
       SceneSettings(
         map: map ?? this.map,
@@ -137,6 +148,7 @@ final class SceneSettings extends Entity {
         grid: grid ?? this.grid,
         gridVisible: gridVisible ?? this.gridVisible,
         fogByDefault: fogByDefault,
+        pack: pack ?? this.pack,
       );
 
   @override
@@ -150,6 +162,7 @@ final class SceneSettings extends Entity {
         'grid': grid.toJson(),
         'gridVisible': gridVisible,
         'fogByDefault': fogByDefault,
+        if (pack != defaultPack) 'pack': pack,
       };
 
   factory SceneSettings._fromJson(Json json) => SceneSettings(
@@ -160,6 +173,7 @@ final class SceneSettings extends Entity {
         // Absent in scenes saved before it existed.
         gridVisible: json['gridVisible'] as bool? ?? true,
         fogByDefault: json['fogByDefault'] as bool,
+        pack: json['pack'] as String? ?? defaultPack,
       );
 }
 
@@ -278,11 +292,7 @@ final class Token extends Entity {
         owner: json['owner'] == null ? null : PlayerId(json['owner'] as String),
         hidden: json['hidden'] as bool,
         name: json['name'] as String? ?? '',
-        conditions: Map.unmodifiable({
-          for (final MapEntry(:key, :value)
-              in (json['conditions'] as Map? ?? const {}).entries)
-            key as String: value as int?,
-        }),
+        conditions: _tagsFromJson(json['conditions']),
       );
 }
 
@@ -362,5 +372,133 @@ final class FogOp extends Entity {
         order: json['order'] as int,
         mode: FogMode.values.byName(json['mode'] as String),
         shape: FogShape.fromJson(json['shape'] as Json),
+      );
+}
+
+Map<String, int?> _tagsFromJson(Object? json) => Map.unmodifiable({
+      for (final MapEntry(:key, :value) in (json as Map? ?? const {}).entries)
+        key as String: value as int?,
+    });
+
+/// An area that carries tags: a sector, a zone, a spell's area. A rectangle
+/// between two opposite corners, usually on grid lines.
+// ponytail: rectangles only; freeform zones need a polygon shape here.
+final class Region extends Entity {
+  const Region({
+    required this.id,
+    required this.from,
+    required this.to,
+    this.tags = const {},
+    this.hidden = false,
+  });
+
+  final RegionId id;
+  final Point from;
+  final Point to;
+
+  /// Tags by name, each with an optional value: Heavy Cover, Darkness (2).
+  final Map<String, int?> tags;
+
+  /// GM-only, like a hidden token: never sent to players.
+  final bool hidden;
+
+  Region copyWith({Point? from, Point? to, Map<String, int?>? tags, bool? hidden}) =>
+      Region(
+        id: id,
+        from: from ?? this.from,
+        to: to ?? this.to,
+        tags: tags == null ? this.tags : Map.unmodifiable(tags),
+        hidden: hidden ?? this.hidden,
+      );
+
+  @override
+  EntityKind get kind => EntityKind.region;
+
+  @override
+  Json _fields() => {
+        'id': id.value,
+        'from': from.toJson(),
+        'to': to.toJson(),
+        if (tags.isNotEmpty) 'tags': tags,
+        'hidden': hidden,
+      };
+
+  factory Region._fromJson(Json json) => Region(
+        id: RegionId(json['id'] as String),
+        from: pointFromJson(json['from']),
+        to: pointFromJson(json['to']),
+        tags: _tagsFromJson(json['tags']),
+        hidden: json['hidden'] as bool? ?? false,
+      );
+}
+
+/// One token's place in the turn order.
+typedef InitiativeEntry = ({TokenId token, int value});
+
+/// The turn order while a fight is on: a single-instance entity, absent
+/// when there is none. [entries] go from highest to lowest value.
+final class Initiative extends Entity {
+  Initiative({required this.round, this.current, required List<InitiativeEntry> entries})
+      : entries = List.unmodifiable(entries);
+
+  /// Starts at 1.
+  final int round;
+
+  /// Whose turn it is, or null before the first turn.
+  final TokenId? current;
+  final List<InitiativeEntry> entries;
+
+  /// [entries] ordered from highest to lowest value, ties in their order.
+  static List<InitiativeEntry> ordered(Iterable<InitiativeEntry> entries) =>
+      [...entries]..sort((a, b) => b.value.compareTo(a.value));
+
+  /// The next turn: the entry after [current], or the first of a new round
+  /// after the last.
+  Initiative next() {
+    if (entries.isEmpty) return this;
+    final i = entries.indexWhere((e) => e.token == current);
+    if (current == null || i == -1) {
+      return Initiative(round: round, current: entries.first.token, entries: entries);
+    }
+    return i + 1 < entries.length
+        ? Initiative(round: round, current: entries[i + 1].token, entries: entries)
+        : Initiative(round: round + 1, current: entries.first.token, entries: entries);
+  }
+
+  /// Without [token], whose turn passes to the next entry if it was theirs.
+  Initiative without(TokenId token) {
+    final rest = [for (final e in entries) if (e.token != token) e];
+    if (current != token) {
+      return Initiative(round: round, current: current, entries: rest);
+    }
+    final i = entries.indexWhere((e) => e.token == token);
+    final after = [...entries.skip(i + 1), ...entries.take(i)]
+        .where((e) => e.token != token)
+        .firstOrNull;
+    return Initiative(round: round, current: after?.token, entries: rest);
+  }
+
+  @override
+  EntityKind get kind => EntityKind.initiative;
+
+  @override
+  Json _fields() => {
+        'round': round,
+        if (current != null) 'current': current!.value,
+        'entries': [
+          for (final e in entries) {'token': e.token.value, 'value': e.value},
+        ],
+      };
+
+  factory Initiative._fromJson(Json json) => Initiative(
+        round: json['round'] as int,
+        current: json['current'] == null ? null : TokenId(json['current'] as String),
+        entries: [
+          for (final e in json['entries'] as List)
+            (
+              token: TokenId((e as Json)['token'] as String),
+              value: e['value'] as int,
+            ),
+        ],
       );
 }

@@ -33,7 +33,8 @@ final class Refused extends Outcome {
 /// Checks [command] against [scene] and returns the patches it produces.
 /// Pure: it changes no state itself.
 Outcome reduce(Scene scene, Actor actor, Command command) {
-  // Players may move and mark tokens they own, roll, chat and ping.
+  // Players may move and mark tokens they own, roll, chat, ping and end
+  // their own turn.
   // Everything else is GM-only.
   if (actor is Player &&
       command is! MoveToken &&
@@ -41,7 +42,8 @@ Outcome reduce(Scene scene, Actor actor, Command command) {
       command is! RemoveCondition &&
       command is! RollDice &&
       command is! Say &&
-      command is! Ping) {
+      command is! Ping &&
+      command is! EndTurn) {
     return const Refused(Refusal.gmOnly);
   }
   return switch (command) {
@@ -85,8 +87,28 @@ Outcome reduce(Scene scene, Actor actor, Command command) {
     SetTokenHidden(:final id, :final hidden) =>
       _editToken(scene, id, (t) => t.withHidden(hidden)),
     RemoveToken(:final id) => scene.tokens.containsKey(id)
-        ? Accepted([Delete.token(id)])
+        ? Accepted([
+            Delete.token(id),
+            // A token that leaves the map leaves the turn order.
+            if (scene.initiative case final i?
+                when i.entries.any((e) => e.token == id))
+              Upsert(i.without(id)),
+          ])
         : const Refused(Refusal.notFound),
+    PlaceRegion(:final region) => scene.regions.containsKey(region.id)
+        ? const Refused(Refusal.duplicateId)
+        : _validRegion(region),
+    UpdateRegion(:final region) => !scene.regions.containsKey(region.id)
+        ? const Refused(Refusal.notFound)
+        : _validRegion(region),
+    RemoveRegion(:final id) => scene.regions.containsKey(id)
+        ? Accepted([Delete(EntityKind.region, id.value)])
+        : const Refused(Refusal.notFound),
+    SetInitiative(:final initiative) => _initiative(scene, initiative),
+    EndInitiative() => scene.initiative == null
+        ? const Refused(Refusal.notFound)
+        : const Accepted([Delete(EntityKind.initiative, '')]),
+    EndTurn() => _endTurn(scene, actor),
     AddFogOp(:final id, :final mode, :final shape) => scene.fogOps
             .containsKey(id)
         ? const Refused(Refusal.duplicateId)
@@ -136,10 +158,7 @@ const maxConditions = 20;
 
 Outcome? _setCondition(Token token, String name, int? value) {
   final had = token.conditions.containsKey(name);
-  if (name.trim().isEmpty ||
-      name.trim() != name ||
-      name.length > maxConditionName ||
-      (value != null && (value < 0 || value > 99)) ||
+  if (!_validTags({name: value}) ||
       (!had && token.conditions.length >= maxConditions)) {
     return null;
   }
@@ -154,4 +173,49 @@ Outcome _editToken(Scene scene, TokenId id, Token Function(Token) edit) {
   return token == null
       ? const Refused(Refusal.notFound)
       : Accepted([Upsert(edit(token))]);
+}
+
+/// Bounds for tags typed by people, on regions as on tokens.
+const maxTags = 20;
+
+bool _validTags(Map<String, int?> tags) =>
+    tags.length <= maxTags &&
+    tags.entries.every((t) =>
+        t.key.trim().isNotEmpty &&
+        t.key.trim() == t.key &&
+        t.key.length <= maxConditionName &&
+        (t.value == null || (t.value! >= 0 && t.value! <= 99)));
+
+Outcome _validRegion(Region region) =>
+    region.from.isFinite && region.to.isFinite && _validTags(region.tags)
+        ? Accepted([Upsert(region)])
+        : const Refused(Refusal.invalid);
+
+/// A turn order must list tokens on the map, each once, sorted, with the
+/// current one among them.
+Outcome _initiative(Scene scene, Initiative initiative) {
+  final tokens = [for (final e in initiative.entries) e.token];
+  final sorted = [
+    for (var i = 1; i < initiative.entries.length; i++)
+      initiative.entries[i - 1].value >= initiative.entries[i].value,
+  ].every((ok) => ok);
+  final valid = initiative.round >= 1 &&
+      sorted &&
+      tokens.toSet().length == tokens.length &&
+      tokens.every(scene.tokens.containsKey) &&
+      initiative.entries.every((e) => e.value.abs() <= 999) &&
+      (initiative.current == null || tokens.contains(initiative.current));
+  return valid ? Accepted([Upsert(initiative)]) : const Refused(Refusal.invalid);
+}
+
+Outcome _endTurn(Scene scene, Actor actor) {
+  final initiative = scene.initiative;
+  if (initiative == null) return const Refused(Refusal.notFound);
+  if (actor case Player(id: final player)) {
+    final current = scene.tokens[initiative.current];
+    if (current == null || current.hidden || current.owner != player) {
+      return const Refused(Refusal.notOwner);
+    }
+  }
+  return Accepted([Upsert(initiative.next())]);
 }

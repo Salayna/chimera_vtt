@@ -177,4 +177,15 @@ void main() {
       expect(u.crossesInterior((x: 5, y: 20), (x: 25, y: 20)), isTrue);
     });
   });
+
+  test('built-in packs: 5e measures feet, conditions and region tags apart', () {
+    final pack = packFor('dnd5e');
+    final engine = TacticalEngine(
+        pack: pack, topology: pack.topologyFor(cellSize: 100));
+    expect(engine.measure((x: 50, y: 50), (x: 350, y: 250)).toString(), '15.0 ft');
+    expect(pack.conditions.map((t) => t.name), contains('Prone'));
+    expect(pack.regionTags.map((t) => t.name), contains('Difficult Terrain'));
+    expect(pack.conditions.map((t) => t.name), isNot(contains('Difficult Terrain')));
+    expect(packFor('nope').name, 'Generic');
+  });
 }

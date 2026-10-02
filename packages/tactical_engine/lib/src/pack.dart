@@ -66,18 +66,30 @@ final class EntryCheck extends Effect {
 /// A tag's definition in a pack.
 final class TagDef {
   const TagDef(this.name,
-      {this.sector = false, this.effects = const [], this.text = ''});
+      {this.sector = false,
+      this.condition = false,
+      this.valued = false,
+      this.effects = const [],
+      this.text = ''});
 
   final String name;
 
   /// Whether the tag applies to sectors.
   final bool sector;
+
+  /// Whether it's a condition, set on tokens. Otherwise it goes on regions.
+  final bool condition;
+
+  /// Whether it takes a value, as in Darkness (2) or Exhaustion 3.
+  final bool valued;
   final List<Effect> effects;
   final String text;
 
   factory TagDef.fromJson(Json json) => TagDef(
         json['name'] as String,
         sector: json['sector'] as bool? ?? false,
+        condition: json['condition'] as bool? ?? false,
+        valued: json['valued'] as bool? ?? false,
         effects: [
           for (final e in json['effects'] as List? ?? const [])
             Effect.fromJson(e as Json),
@@ -106,8 +118,19 @@ final class SystemPack {
     required this.unit,
     this.unitsPerStep = 1,
     this.bands = const [],
+    this.initiative,
     List<TagDef> tags = const [],
   }) : tags = {for (final t in tags) t.name: t};
+
+  /// The dice formula each side rolls for initiative, for example `d20`.
+  /// Null when the pack has no initiative roll.
+  final String? initiative;
+
+  /// The tags set on tokens.
+  Iterable<TagDef> get conditions => tags.values.where((t) => t.condition);
+
+  /// The tags set on regions.
+  Iterable<TagDef> get regionTags => tags.values.where((t) => !t.condition);
 
   final String name;
   final TopologyKind topology;
@@ -151,6 +174,7 @@ final class SystemPack {
             RangeBand((b as Json)['name'] as String,
                 (b['max'] as num?)?.toDouble()),
         ],
+        initiative: json['initiative'] as String?,
         tags: [
           for (final t in json['tags'] as List? ?? const [])
             TagDef.fromJson(t as Json),

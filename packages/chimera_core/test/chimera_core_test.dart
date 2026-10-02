@@ -23,6 +23,12 @@ Token token(String id, {PlayerId? owner, bool hidden = false}) => Token(
       hidden: hidden,
     );
 
+final r = Region(
+    id: const RegionId('r'),
+    from: (x: 0, y: 0),
+    to: (x: 64, y: 64),
+    tags: const {'Heavy Cover': null});
+
 Scene sceneWith(List<Token> tokens) =>
     Scene(settings: settings, tokens: {for (final t in tokens) t.id: t});
 
@@ -258,12 +264,33 @@ void main() {
 
     Command randomCommand() {
       final id = ids[random.nextInt(ids.length)];
-      return switch (random.nextInt(5)) {
+      final region = RegionId('r${random.nextInt(3)}');
+      return switch (random.nextInt(10)) {
         0 => PlaceToken(token(id.value, hidden: random.nextBool())),
         1 => MoveToken(id, (x: random.nextDouble() * 4096, y: 0)),
         2 => AssignOwner(id, players[random.nextInt(2)].id),
         3 => SetTokenHidden(id, random.nextBool()),
-        _ => RemoveToken(id),
+        4 => RemoveToken(id),
+        5 => PlaceRegion(Region(
+            id: region,
+            from: (x: 0, y: 0),
+            to: (x: 64, y: 64),
+            hidden: random.nextBool())),
+        6 => UpdateRegion(Region(
+            id: region,
+            from: (x: 0, y: 0),
+            to: (x: 128, y: 64),
+            tags: const {'Darkness': 2},
+            hidden: random.nextBool())),
+        7 => RemoveRegion(region),
+        8 => SetInitiative(Initiative(
+            round: 1,
+            current: gmScene.tokens.keys.firstOrNull,
+            entries: Initiative.ordered([
+              for (final t in gmScene.tokens.keys)
+                (token: t, value: random.nextInt(20)),
+            ]))),
+        _ => random.nextBool() ? const EndTurn() : const EndInitiative(),
       };
     }
 
@@ -282,5 +309,97 @@ void main() {
       }
     }
     expect(accepted, greaterThan(500));
+  });
+
+  group('regions', () {
+    test('the GM places, updates and removes them; players may not', () {
+      final scene = sceneWith([]);
+      final placed = reduce(scene, gm, PlaceRegion(r));
+      expect(placed, isA<Accepted>());
+      final withRegion = scene.applyPatches((placed as Accepted).patches);
+      expect(reduce(withRegion, gm, PlaceRegion(r)), isA<Refused>());
+      expect(reduce(withRegion, alice, RemoveRegion(r.id)), isA<Refused>());
+      expect(
+          reduce(withRegion, gm, UpdateRegion(r.copyWith(tags: {'': 1}))),
+          isA<Refused>());
+      final removed = reduce(withRegion, gm, RemoveRegion(r.id)) as Accepted;
+      expect(withRegion.applyPatches(removed.patches).regions, isEmpty);
+    });
+
+    test('a hidden region never reaches players', () {
+      final scene = sceneWith([]).applyPatches([Upsert(r.copyWith(hidden: true))]);
+      expect(visibleTo(scene, alice).regions, isEmpty);
+      expect(visibleTo(scene, gm).regions, hasLength(1));
+    });
+  });
+
+  group('initiative', () {
+    Initiative order(String? current, {int round = 1}) => Initiative(
+          round: round,
+          current: current == null ? null : TokenId(current),
+          entries: Initiative.ordered([
+            (token: const TokenId('a'), value: 12),
+            (token: const TokenId('b'), value: 18),
+            (token: const TokenId('c'), value: 5),
+          ]),
+        );
+
+    test('turns go from highest to lowest, then a new round', () {
+      var i = order(null);
+      final seen = <String>[];
+      for (var n = 0; n < 4; n++) {
+        i = i.next();
+        seen.add('${i.round}:${i.current!.value}');
+      }
+      expect(seen, ['1:b', '1:a', '1:c', '2:b']);
+    });
+
+    test('players end only their own turn', () {
+      final scene = sceneWith([token('a', owner: alice.id), token('b'), token('c')])
+          .applyPatches([Upsert(order('a'))]);
+      expect(reduce(scene, bob, const EndTurn()), isA<Refused>());
+      final ended = reduce(scene, alice, const EndTurn()) as Accepted;
+      expect((ended.patches.single as Upsert).entity, isA<Initiative>());
+      expect(scene.applyPatches(ended.patches).initiative!.current, const TokenId('c'));
+    });
+
+    test('a removed token leaves the order, passing its turn on', () {
+      final scene = sceneWith([token('a'), token('b'), token('c')])
+          .applyPatches([Upsert(order('a'))]);
+      final after = scene.applyPatches(
+          (reduce(scene, gm, const RemoveToken(TokenId('a'))) as Accepted).patches);
+      expect(after.initiative!.entries.map((e) => e.token.value), ['b', 'c']);
+      expect(after.initiative!.current, const TokenId('c'));
+    });
+
+    test('orders listing missing tokens or out of order are refused', () {
+      final scene = sceneWith([token('a'), token('b')]);
+      expect(reduce(scene, gm, SetInitiative(order(null))), isA<Refused>());
+      final unsorted = Initiative(round: 1, entries: [
+        (token: const TokenId('a'), value: 1),
+        (token: const TokenId('b'), value: 9),
+      ]);
+      expect(reduce(scene, gm, SetInitiative(unsorted)), isA<Refused>());
+    });
+
+    test('players never see a hidden token in the order, nor its turn', () {
+      final scene = sceneWith([token('a'), token('b', hidden: true), token('c')])
+          .applyPatches([Upsert(order('b'))]);
+      final seen = visibleTo(scene, alice).initiative!;
+      expect(seen.entries.map((e) => e.token.value), ['a', 'c']);
+      expect(seen.current, isNull);
+    });
+
+    test('regions, the order and the pack survive a JSON round trip', () {
+      final scene = Scene(
+        settings: settings.copyWith(pack: 'dnd5e'),
+        tokens: {for (final t in [token('a'), token('b'), token('c')]) t.id: t},
+        regions: {r.id: r},
+        initiative: order('b', round: 3),
+      );
+      final decoded = jsonDecode(jsonEncode(scene.toJson())) as Json;
+      expect(Scene.fromJson(decoded).toJson(), equals(scene.toJson()));
+      expect(Scene.fromJson(decoded).settings.pack, 'dnd5e');
+    });
   });
 }

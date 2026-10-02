@@ -36,6 +36,15 @@ sealed class Command {
             secret: json['secret'] as bool? ?? false),
         'say' => Say(json['text'] as String),
         'ping' => Ping(pointFromJson(json['at'])),
+        'placeRegion' =>
+          PlaceRegion(Entity.fromJson(json['region'] as Json) as Region),
+        'updateRegion' =>
+          UpdateRegion(Entity.fromJson(json['region'] as Json) as Region),
+        'removeRegion' => RemoveRegion(RegionId(json['id'] as String)),
+        'setInitiative' => SetInitiative(
+            Entity.fromJson(json['initiative'] as Json) as Initiative),
+        'endInitiative' => const EndInitiative(),
+        'endTurn' => const EndTurn(),
         final type => throw FormatException('Unknown command: $type'),
       };
 }
@@ -156,6 +165,63 @@ final class RemoveCondition extends Command {
 
   @override
   Json toJson() => {'type': 'removeCondition', 'id': id.value, 'name': name};
+}
+
+/// Carries the whole region, id included, minted like a token's.
+final class PlaceRegion extends Command {
+  const PlaceRegion(this.region);
+
+  final Region region;
+
+  @override
+  Json toJson() => {'type': 'placeRegion', 'region': region.toJson()};
+}
+
+/// Replaces a region: its tags, area or hidden flag.
+final class UpdateRegion extends Command {
+  const UpdateRegion(this.region);
+
+  final Region region;
+
+  @override
+  Json toJson() => {'type': 'updateRegion', 'region': region.toJson()};
+}
+
+final class RemoveRegion extends Command {
+  const RemoveRegion(this.id);
+
+  final RegionId id;
+
+  @override
+  Json toJson() => {'type': 'removeRegion', 'id': id.value};
+}
+
+/// Starts or changes the turn order: who is in it, their values, the round
+/// and whose turn it is. The GM's session rolls the values.
+final class SetInitiative extends Command {
+  const SetInitiative(this.initiative);
+
+  final Initiative initiative;
+
+  @override
+  Json toJson() => {'type': 'setInitiative', 'initiative': initiative.toJson()};
+}
+
+/// Ends the fight: the turn order goes.
+final class EndInitiative extends Command {
+  const EndInitiative();
+
+  @override
+  Json toJson() => {'type': 'endInitiative'};
+}
+
+/// Passes the turn to the next in the order. Players may, on their own
+/// token's turn.
+final class EndTurn extends Command {
+  const EndTurn();
+
+  @override
+  Json toJson() => {'type': 'endTurn'};
 }
 
 /// The following commands change nothing in the scene: the GM session turns
