@@ -1,122 +1,167 @@
+import 'dart:async';
+import 'dart:ui' as ui;
+
+import 'package:chimera_core/chimera_core.dart';
+import 'package:chimera_sync/chimera_sync.dart';
 import 'package:flutter/material.dart';
 
+import 'bench.dart';
+import 'demo_assets.dart';
+import 'table/table_view.dart';
+
 void main() {
-  runApp(const MyApp());
+  runApp(const bool.fromEnvironment('BENCH') ? const BenchApp() : const DemoApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+/// The GM and one player side by side, over loopback.
+class DemoApp extends StatefulWidget {
+  const DemoApp({super.key});
 
-  // This widget is the root of your application.
+  @override
+  State<DemoApp> createState() => _DemoAppState();
+}
+
+class _DemoAppState extends State<DemoApp> {
+  static const alice = PlayerId('alice');
+  final _hub = LoopbackHub();
+  late final HostSession _host;
+  late final ClientSession _player;
+  late final Timer _heartbeat;
+  late final ui.Image _map = generateMap(4096);
+  late final Map<AssetId, ui.Image> _images = generateTokenImages(4);
+  final _gm = TableController();
+  final _playerView = TableController();
+  SceneStore? _playerStore;
+
+  @override
+  void initState() {
+    super.initState();
+    Token token(String id, double x, double y,
+            {PlayerId? owner, bool hidden = false, int image = 0}) =>
+        Token(
+          id: TokenId(id),
+          position: (x: x, y: y),
+          size: 128,
+          image: AssetId('token$image'),
+          owner: owner,
+          hidden: hidden,
+        );
+    _host = HostSession(
+      _hub.connect(),
+      const PlayerId('gm'),
+      SceneStore(Scene(
+        settings: const SceneSettings(
+            width: 4096, height: 4096, grid: Grid(cellSize: 128)),
+        tokens: {
+          for (final t in [
+            token('hero', 1000, 1000, owner: alice, image: 1),
+            token('ally', 1300, 1000, owner: alice, image: 2),
+            token('orc', 2600, 2200),
+            token('ambush', 3000, 1200, hidden: true, image: 3),
+          ])
+            t.id: t,
+        },
+      )),
+    );
+    _player = ClientSession(_hub.connect(), alice);
+    _player.join().then((store) => setState(() => _playerStore = store));
+    _heartbeat =
+        Timer.periodic(const Duration(seconds: 3), (_) => _host.heartbeat());
+  }
+
+  @override
+  void dispose() {
+    _heartbeat.cancel();
+    _gm.dispose();
+    _playerView.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
+    final player = _playerStore;
     return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: .fromSeed(seedColor: Colors.deepPurple),
+      title: 'Chimera VTT',
+      theme: ThemeData.dark(useMaterial3: true),
+      home: Scaffold(
+        body: Row(children: [
+          Expanded(
+            child: Column(children: [
+              _GmToolbar(controller: _gm),
+              Expanded(
+                child: TableView(
+                  store: _host.store,
+                  controller: _gm,
+                  gm: true,
+                  self: _host.self,
+                  send: _host.execute,
+                  map: _map,
+                  images: (id) => _images[id],
+                ),
+              ),
+            ]),
+          ),
+          const VerticalDivider(width: 4),
+          Expanded(
+            child: Column(children: [
+              const SizedBox(
+                  height: 48, child: Center(child: Text('Player: alice'))),
+              Expanded(
+                child: player == null
+                    ? const Center(child: CircularProgressIndicator())
+                    : TableView(
+                        store: player,
+                        controller: _playerView,
+                        gm: false,
+                        self: alice,
+                        send: _player.request,
+                        map: _map,
+                        images: (id) => _images[id],
+                      ),
+              ),
+            ]),
+          ),
+        ]),
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
+class _GmToolbar extends StatefulWidget {
+  const _GmToolbar({required this.controller});
 
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
+  final TableController controller;
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  State<_GmToolbar> createState() => _GmToolbarState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
-
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
-  }
-
+class _GmToolbarState extends State<_GmToolbar> {
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
-    return Scaffold(
-      appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: .center,
-          children: [
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
+    final c = widget.controller;
+    return SizedBox(
+      height: 48,
+      child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+        SegmentedButton<Tool>(
+          segments: const [
+            ButtonSegment(value: Tool.move, icon: Icon(Icons.pan_tool), label: Text('Move')),
+            ButtonSegment(value: Tool.fogBrush, icon: Icon(Icons.brush), label: Text('Brush')),
+            ButtonSegment(value: Tool.fogRect, icon: Icon(Icons.crop_square), label: Text('Rect')),
           ],
+          selected: {c.tool},
+          onSelectionChanged: (s) => setState(() => c.tool = s.single),
         ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ),
+        const SizedBox(width: 12),
+        SegmentedButton<FogMode>(
+          segments: const [
+            ButtonSegment(value: FogMode.cover, label: Text('Cover')),
+            ButtonSegment(value: FogMode.reveal, label: Text('Reveal')),
+          ],
+          selected: {c.fogMode},
+          onSelectionChanged: (s) => setState(() => c.fogMode = s.single),
+        ),
+      ]),
     );
   }
 }

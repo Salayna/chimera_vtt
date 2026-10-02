@@ -33,28 +33,36 @@ final class Scene {
   /// The only way a scene changes, for the GM and players alike.
   ///
   /// Entities are keyed by their own id, so `tokens[k].id == k` always holds.
+  /// Tables the patches don't touch are reused as is, so views can skip
+  /// repainting a layer with `identical(old.fogOps, new.fogOps)`.
   Scene applyPatches(Iterable<Patch> patches) {
     var settings = this.settings;
-    final tokens = {...this.tokens};
-    final fogOps = {...this.fogOps};
+    Map<TokenId, Token>? tokens;
+    Map<FogOpId, FogOp>? fogOps;
     for (final patch in patches) {
       switch (patch) {
         case Upsert(entity: final SceneSettings s):
           settings = s;
         case Upsert(entity: final Token t):
-          tokens[t.id] = t;
+          (tokens ??= {...this.tokens})[t.id] = t;
         case Upsert(entity: final FogOp f):
-          fogOps[f.id] = f;
+          (fogOps ??= {...this.fogOps})[f.id] = f;
         case Delete(kind: EntityKind.token, :final id):
-          tokens.remove(TokenId(id));
+          (tokens ??= {...this.tokens}).remove(TokenId(id));
         case Delete(kind: EntityKind.fogOp, :final id):
-          fogOps.remove(FogOpId(id));
+          (fogOps ??= {...this.fogOps}).remove(FogOpId(id));
         case Delete(kind: EntityKind.settings):
           throw ArgumentError('Scene settings cannot be deleted');
       }
     }
-    return Scene(settings: settings, tokens: tokens, fogOps: fogOps);
+    return Scene._(
+      settings,
+      tokens == null ? this.tokens : Map.unmodifiable(tokens),
+      fogOps == null ? this.fogOps : Map.unmodifiable(fogOps),
+    );
   }
+
+  Scene._(this.settings, this.tokens, this.fogOps);
 
   Json toJson() => {
         'format': format,

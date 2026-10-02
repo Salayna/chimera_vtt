@@ -47,6 +47,15 @@ void main() {
     expect(Scene.fromJson(decoded).toJson(), equals(scene.toJson()));
   });
 
+  test('patches leave the tables they do not touch untouched', () {
+    final scene = sceneWith([token('a')]);
+    final moved = scene.applyPatches([Upsert(token('a'))]);
+    expect(identical(moved.fogOps, scene.fogOps), isTrue);
+    expect(identical(moved.tokens, scene.tokens), isFalse);
+    expect(() => (moved.tokens as Map)[const TokenId('x')] = token('x'),
+        throwsUnsupportedError);
+  });
+
   group('reduce', () {
     final scene = sceneWith([
       token('mine', owner: alice.id),

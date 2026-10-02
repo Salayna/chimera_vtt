@@ -299,7 +299,7 @@ The thresholds below are first guesses, to be confirmed before the POC starts.
 
 | # | Hypothesis | Test | Pass |
 | --- | --- | --- | --- |
-| H1 | Flutter's web build draws a large map fast enough for both roles | Time the first load. Count frames with the 4096 px map and 50 tokens | First load ≤ 10 s on a 50 Mbit/s link. 60 fps on an M1-class laptop. ≥ 30 fps on a mid-range phone |
+| H1 | Flutter's web build draws a large map fast enough for both roles | Time the first load. Count frames with the 4096 px map and 50 tokens | First load ≤ 10 s on a 50 Mbit/s link. 60 fps on an M1-class laptop. (Phones are out of POC scope as of 2026-10-02; the ≥ 30 fps phone check moves to phase 7.) |
 | H2 | `supabase_flutter`'s Realtime is fast and reliable enough on desktop and web | Join, broadcast and presence from both builds. Time GM-to-player messages | All three work on both builds. p95 delay ≤ 200 ms within one region |
 | H3 | The GM-authoritative model keeps everyone in the same state | Two scripted players send 1,000 random requests | Each player's state hash equals the GM's filtered state hash |
 | H4 | Storage can serve images to the web build | Load the map through Storage in the browser, twice | No CORS errors. The cached second load takes ≤ 1 s |
@@ -327,6 +327,8 @@ Two weeks, ending with a go or no-go decision on the architecture.
 - A macOS build and a hosted web build
 - A short report with the measured number for each hypothesis
 - Decision statuses updated to accepted or rejected
+
+Measured 2026-10-02 (profile builds, GM and player views side by side, 4096 px map, 50 image tokens, 500+ fog strokes, live drag and fog painting): 60 fps with 0% dropped frames on macOS, Chrome skwasm and Chrome CanvasKit, raster p99 ≤ 4.5 ms. Frame rate for H1 and H5 passes; H1's first-load time is not measured yet. CanvasKit turns a picture into an image slowly (about 32 ms), so new fog ops are drawn into the mask in batches (after a 1 s pause or 32 ops) rather than per stroke. Rerun with `flutter run --profile --dart-define=BENCH=true` in `app/`.
 
 If H2 fails, a small WebSocket relay of our own replaces Realtime behind the same transport interface. If H1 fails, the map moves to a tiled renderer or to Flame before anything else changes.
 
@@ -374,7 +376,7 @@ Phases 1–4 alone make a usable VTT, and cinematic mode and the Solaris pack fo
 | Risk | Sign it's happening | Fallback |
 | --- | --- | --- |
 | Large maps stutter in the web build | Under 60 fps with a 4096 px map and 50 tokens on a laptop | Tile the map image, cache token layers as pictures, try Flame's renderer |
-| Web build too heavy for phones | First load over 10 s on mid-range phones | Deferred loading, compressed assets, a lighter player layout |
+| Web build too heavy for phones (phase 7) | First load over 10 s on mid-range phones | Deferred loading, compressed assets, a lighter player layout |
 | Free-tier message limits | Token drags exceed the quota in a test session | Throttle drags to about 15 updates/s and send the final position reliably |
 | GM closes the tab mid-session | Players lose the host | Players keep the last state, read-only. The GM rejoins and resumes from the saved campaign |
 | Scope creep in cinematic mode | Phase 5 grows past its plan | Ship phases 1–4 as a usable VTT first |
