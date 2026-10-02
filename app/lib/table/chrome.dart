@@ -84,6 +84,13 @@ class GmRail extends StatelessWidget {
                 label: 'Change map',
                 shortcut: 'M',
                 onPressed: onSetMap),
+            CvToolButton(
+                icon: Lucide.grid3x3,
+                label: 'Grid',
+                shortcut: 'G',
+                active: controller.gridOptions,
+                onPressed: () =>
+                    controller.gridOptions = !controller.gridOptions),
             const CvToolbarSeparator(),
             CvToolButton(
                 icon: Lucide.download,
@@ -164,6 +171,101 @@ class FogOptions extends StatelessWidget {
             ),
           );
         },
+      );
+}
+
+/// The grid's cell size, while the GM's grid panel is open. Applies each
+/// valid value as it's typed, so the GM sees the grid move over the map.
+class GridOptions extends StatefulWidget {
+  const GridOptions(
+      {super.key,
+      required this.controller,
+      required this.grid,
+      required this.onCellSize});
+
+  final TableController controller;
+  final Grid grid;
+  final ValueChanged<double> onCellSize;
+
+  static const minCell = 16;
+  static const maxCell = 1024;
+
+  @override
+  State<GridOptions> createState() => _GridOptionsState();
+}
+
+class _GridOptionsState extends State<GridOptions> {
+  late final _text = TextEditingController(text: _format(widget.grid.cellSize));
+  String? _error;
+
+  static String _format(double v) =>
+      v == v.roundToDouble() ? '${v.round()}' : '$v';
+
+  @override
+  void didUpdateWidget(GridOptions old) {
+    super.didUpdateWidget(old);
+    // Changed elsewhere (an imported scene): show it, unless it's what the
+    // field already says.
+    final size = widget.grid.cellSize;
+    if (size != old.grid.cellSize && double.tryParse(_text.text) != size) {
+      _text.text = _format(size);
+      _error = null;
+    }
+  }
+
+  @override
+  void dispose() {
+    _text.dispose();
+    super.dispose();
+  }
+
+  void _changed(String value) {
+    final size = double.tryParse(value.trim());
+    final valid = size != null &&
+        size >= GridOptions.minCell &&
+        size <= GridOptions.maxCell;
+    setState(() => _error = valid
+        ? null
+        : 'From ${GridOptions.minCell} to ${GridOptions.maxCell} px.');
+    if (valid && size != widget.grid.cellSize) widget.onCellSize(size);
+  }
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+        listenable: widget.controller,
+        builder: (context, child) => widget.controller.gridOptions
+            ? CvPopIn(child: child!)
+            : const SizedBox.shrink(),
+        child: CvPanel(
+          width: 220,
+          padding: const EdgeInsets.all(CvSpacing.s5),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            spacing: 10,
+            children: [
+              const Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [CvOverline('Grid'), CvKbd('G')]),
+              // Keys typed here are text, not the table's shortcuts.
+              Focus(
+                canRequestFocus: false,
+                skipTraversal: true,
+                onKeyEvent: (_, _) => KeyEventResult.skipRemainingHandlers,
+                child: CvTextInput(
+                  controller: _text,
+                  label: 'Cell size (px)',
+                  error: _error,
+                  onChanged: _changed,
+                ),
+              ),
+              if (_error == null)
+                Text('Match one square of the map image.',
+                    style: CvTypography.caption
+                        .copyWith(color: CvColors.textSecondary)),
+            ],
+          ),
+        ),
       );
 }
 
@@ -636,7 +738,7 @@ class _TokenCard extends StatelessWidget {
   }
 }
 
-/// The table's single-key shortcuts. GM: V B R tools, T add token, M map,
+/// The table's single-key shortcuts. GM: V B R tools, T add token, M map, G grid,
 /// E export, I import, X cover/reveal, S snap, Del remove. Everyone:
 /// + − 0 zoom, Esc deselect.
 class TableShortcuts extends StatelessWidget {
@@ -687,6 +789,7 @@ class TableShortcuts extends StatelessWidget {
           const CharacterActivator('s'): () => c.snap = !c.snap,
           const CharacterActivator('t'): () => onAddToken?.call(),
           const CharacterActivator('m'): () => onSetMap?.call(),
+          const CharacterActivator('g'): () => c.gridOptions = !c.gridOptions,
           const CharacterActivator('e'): () => onExport?.call(),
           const CharacterActivator('i'): () => onImport?.call(),
           const SingleActivator(LogicalKeyboardKey.delete): remove,

@@ -3,6 +3,7 @@ import 'package:chimera_vtt/room.dart';
 import 'package:chimera_vtt/table/chrome.dart';
 import 'package:chimera_vtt/table/table_view.dart';
 import 'package:chimera_vtt/ui/cv.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -69,5 +70,50 @@ void main() {
 
     await tester.tap(find.text('Snap'));
     expect(controller.snap, isFalse);
+  });
+
+  testWidgets('the grid panel sets the cell size, and typing is not shortcuts',
+      (tester) async {
+    tester.view.physicalSize = const Size(1440, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final controller = TableController();
+    addTearDown(controller.dispose);
+    final sizes = <double>[];
+    await tester.pumpWidget(cvApp(
+      title: 'test',
+      home: TableShortcuts(
+        controller: controller,
+        gm: true,
+        child: Stack(children: [
+          Positioned(left: 16, top: 100, child: GmRail(controller: controller)),
+          Positioned(
+              left: 100,
+              top: 100,
+              child: GridOptions(
+                  controller: controller,
+                  grid: const Grid(cellSize: 128),
+                  onCellSize: sizes.add)),
+        ]),
+      ),
+    ));
+    expect(find.text('GRID'), findsNothing);
+
+    await tester.tap(find.bySemanticsLabel('Grid'));
+    await tester.pumpAndSettle();
+    expect(find.text('GRID'), findsOneWidget);
+
+    await tester.enterText(find.byType(EditableText), '8');
+    await tester.pump();
+    expect(find.text('From 16 to 1024 px.'), findsOneWidget);
+    expect(sizes, isEmpty);
+
+    await tester.enterText(find.byType(EditableText), '70');
+    await tester.pump();
+    expect(sizes, [70]);
+
+    // B would pick the fog brush; in the field it's just a key.
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyB);
+    expect(controller.tool, Tool.move);
   });
 }

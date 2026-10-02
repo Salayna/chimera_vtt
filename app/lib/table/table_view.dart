@@ -35,6 +35,11 @@ class TableController extends ChangeNotifier {
   FogMode _fogMode = FogMode.cover;
   set fogMode(FogMode value) => _set(() => _fogMode = value);
 
+  /// The GM's grid panel is open.
+  bool get gridOptions => _gridOptions;
+  bool _gridOptions = false;
+  set gridOptions(bool value) => _set(() => _gridOptions = value);
+
   double get brushRadius => _brushRadius;
   double _brushRadius = 48;
   set brushRadius(double value) => _set(() => _brushRadius = value);

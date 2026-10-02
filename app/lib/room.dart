@@ -456,6 +456,18 @@ class _GmRoomState extends State<GmRoom> {
     }
   }
 
+  void _setCellSize(double size) {
+    final host = _host!;
+    final old = host.store.scene.settings;
+    host.execute(UpdateSettings(SceneSettings(
+      map: old.map,
+      width: old.width,
+      height: old.height,
+      grid: Grid(cellSize: size, offset: old.grid.offset),
+      fogByDefault: old.fogByDefault,
+    )));
+  }
+
   Future<void> _export() async {
     final now = DateTime.now();
     String two(int n) => n.toString().padLeft(2, '0');
@@ -628,8 +640,25 @@ class _GmRoomState extends State<GmRoom> {
           top: 0,
           bottom: 0,
           child: Center(
-            child: FogOptions(
-                controller: _controller, grid: host.store.scene.settings.grid),
+            child: StreamBuilder(
+              stream: host.store.changes,
+              initialData: host.store.scene,
+              builder: (context, snap) {
+                final grid = snap.requireData.settings.grid;
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  spacing: CvSpacing.s4,
+                  children: [
+                    GridOptions(
+                        controller: _controller,
+                        grid: grid,
+                        onCellSize: _setCellSize),
+                    FogOptions(controller: _controller, grid: grid),
+                  ],
+                );
+              },
+            ),
           ),
         ),
         Positioned(
