@@ -120,9 +120,12 @@ class TokenPainter extends CustomPainter {
       canvas.clipPath(Path()..addOval(rect));
       if (image != null) {
         imagePaint.color = Color.fromARGB(faceAlpha, 0, 0, 0);
+        // The middle square of the image, so a portrait isn't squashed.
+        final w = image.width.toDouble(), h = image.height.toDouble();
+        final side = math.min(w, h);
         canvas.drawImageRect(
           image,
-          Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
+          Rect.fromLTWH((w - side) / 2, (h - side) / 2, side, side),
           rect,
           imagePaint,
         );

@@ -121,6 +121,22 @@ void main() {
       expect(refusal(gm, const RemoveToken(TokenId('nope'))), Refusal.notFound);
     });
 
+    test('the GM updates a token whole; bad sizes are refused', () {
+      final mine = scene.tokens[const TokenId('mine')]!;
+      final pictured = mine.copyWith(image: const AssetId('face'));
+      expect(refusal(gm, UpdateToken(pictured)), isNull);
+      expect(Command.fromJson(UpdateToken(pictured).toJson()).toJson(),
+          UpdateToken(pictured).toJson());
+      expect(reduce(scene, gm, UpdateToken(pictured)),
+          isA<Accepted>().having((a) => a.patches.single, 'patch',
+              isA<Upsert>().having((u) => u.entity, 'entity', pictured)));
+      expect(refusal(alice, UpdateToken(pictured)), Refusal.gmOnly);
+      expect(refusal(gm, UpdateToken(token('nope'))), Refusal.notFound);
+      expect(refusal(gm, UpdateToken(mine.copyWith(size: 0))), Refusal.invalid);
+      expect(refusal(gm, UpdateToken(mine.copyWith(size: double.infinity))),
+          Refusal.invalid);
+    });
+
     test('fog ops get increasing orders', () {
       final store = SceneStore(scene);
       for (final id in ['f1', 'f2']) {

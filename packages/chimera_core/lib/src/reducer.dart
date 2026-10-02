@@ -41,6 +41,11 @@ Outcome reduce(Scene scene, Actor actor, Command command) {
     PlaceToken(:final token) => scene.tokens.containsKey(token.id)
         ? const Refused(Refusal.duplicateId)
         : Accepted([Upsert(token)]),
+    UpdateToken(:final token) => !scene.tokens.containsKey(token.id)
+        ? const Refused(Refusal.notFound)
+        : !token.position.isFinite || !(token.size > 0 && token.size.isFinite)
+            ? const Refused(Refusal.invalid)
+            : Accepted([Upsert(token)]),
     MoveToken(:final id, :final to) => _move(scene, actor, id, to),
     AssignOwner(:final id, :final owner) =>
       _editToken(scene, id, (t) => t.withOwner(owner)),

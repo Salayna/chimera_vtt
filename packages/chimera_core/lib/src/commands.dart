@@ -14,6 +14,8 @@ sealed class Command {
         'updateSettings' =>
           UpdateSettings(Entity.fromJson(json['settings'] as Json) as SceneSettings),
         'placeToken' => PlaceToken(Entity.fromJson(json['token'] as Json) as Token),
+        'updateToken' =>
+          UpdateToken(Entity.fromJson(json['token'] as Json) as Token),
         'moveToken' =>
           MoveToken(TokenId(json['id'] as String), pointFromJson(json['to'])),
         'assignOwner' => AssignOwner(TokenId(json['id'] as String),
@@ -48,6 +50,16 @@ final class PlaceToken extends Command {
 
   @override
   Json toJson() => {'type': 'placeToken', 'token': token.toJson()};
+}
+
+/// Replaces a token's fields (GM only): image, name, size and the rest.
+final class UpdateToken extends Command {
+  const UpdateToken(this.token);
+
+  final Token token;
+
+  @override
+  Json toJson() => {'type': 'updateToken', 'token': token.toJson()};
 }
 
 final class MoveToken extends Command {

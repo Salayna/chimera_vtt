@@ -162,6 +162,10 @@ class _TableViewState extends State<TableView> {
   AssetId? _mapId;
   ui.Image? _mapImage;
 
+  /// Uploaded token images, by asset id, as they arrive.
+  final _tokenImages = <AssetId, ui.Image>{};
+  final _loadingTokenImages = <AssetId>{};
+
   /// Pending fog ops bake after this long without a new one.
   static const bakeAfter = Duration(seconds: 1);
   Size? _fittedTo;
@@ -212,6 +216,21 @@ class _TableViewState extends State<TableView> {
           debugPrint('Map $mapId failed to load: $e');
         });
       }
+    }
+    for (final token in scene.tokens.values) {
+      final id = token.image;
+      if (id == null ||
+          widget.images(id) != null ||
+          _tokenImages.containsKey(id) ||
+          !_loadingTokenImages.add(id)) {
+        continue;
+      }
+      widget.loadAsset?.call(id).then((image) {
+        if (mounted) setState(() => _tokenImages[id] = image);
+      }, onError: (Object e) {
+        _loadingTokenImages.remove(id); // The next scene change retries.
+        debugPrint('Token image $id failed to load: $e');
+      });
     }
     if (!identical(scene.fogOps, _maskedOps)) {
       _maskedOps = scene.fogOps;
@@ -265,7 +284,7 @@ class _TableViewState extends State<TableView> {
               tokens: _scene.tokens,
               drag: _c.drag,
               selected: _c.selected,
-              images: widget.images,
+              images: (id) => widget.images(id) ?? _tokenImages[id],
               gm: widget.gm,
               self: widget.self,
             ),

@@ -195,6 +195,16 @@ final class Token extends Entity {
       owner: owner,
       hidden: hidden);
 
+  /// The owner can't be cleared here: use [withOwner].
+  Token copyWith({TokenId? id, Point? position, double? size, AssetId? image}) =>
+      Token(
+          id: id ?? this.id,
+          position: position ?? this.position,
+          size: size ?? this.size,
+          image: image ?? this.image,
+          owner: owner,
+          hidden: hidden);
+
   @override
   Json _fields() => {
         'id': id.value,

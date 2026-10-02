@@ -423,8 +423,10 @@ class _GmRoomState extends State<GmRoom> {
 
   String? _uploading;
 
-  /// Picks an image, uploads it, and makes it the scene's map.
-  Future<void> _setMap() async {
+  /// Picks an image and uploads it, then hands it to [use]. [what] names
+  /// it in the toasts ("Map", "Token image").
+  Future<void> _uploadImage(
+      String what, void Function(AssetId id, ui.Image image) use) async {
     if (_uploading != null) return;
     try {
       final file = await FilePicker.pickFile(type: FileType.image);
@@ -439,20 +441,32 @@ class _GmRoomState extends State<GmRoom> {
       final image = await decodeImage(bytes);
       final id = await widget.assets.upload(bytes, type);
       widget.assets.remember(id, image);
-      final host = _host!;
-      final old = host.store.scene.settings;
-      host.execute(UpdateSettings(old.copyWith(
-        map: id,
-        width: image.width.toDouble(),
-        height: image.height.toDouble(),
-      )));
-      _toasts.show('Map uploaded', tone: CvTone.ok);
+      use(id, image);
+      _toasts.show('$what uploaded', tone: CvTone.ok);
     } on Object catch (e) {
-      _toasts.show('The map failed to upload: $e', tone: CvTone.danger);
+      _toasts.show('$what failed to upload: $e', tone: CvTone.danger);
     } finally {
       if (mounted) setState(() => _uploading = null);
     }
   }
+
+  /// Makes an uploaded image the scene's map.
+  Future<void> _setMap() => _uploadImage('Map', (id, image) {
+        final old = _host!.store.scene.settings;
+        _host!.execute(UpdateSettings(old.copyWith(
+          map: id,
+          width: image.width.toDouble(),
+          height: image.height.toDouble(),
+        )));
+      });
+
+  /// Gives a token an uploaded image.
+  Future<void> _setTokenImage(TokenId token) =>
+      _uploadImage('Token image', (id, _) {
+        // The token may have changed (or gone) during the upload.
+        final current = _host!.store.scene.tokens[token];
+        if (current != null) _host!.execute(UpdateToken(current.copyWith(image: id)));
+      });
 
   void _setCellSize(double size) {
     final host = _host!;
@@ -605,6 +619,7 @@ class _GmRoomState extends State<GmRoom> {
             controller: _controller,
             send: host.execute,
             onRemove: _removeToken,
+            onSetImage: _uploading == null ? _setTokenImage : null,
           ),
         ),
         Positioned(
@@ -685,7 +700,7 @@ class _GmRoomState extends State<GmRoom> {
                       children: [
                         CvProgressBar(
                             label: 'Uploading $name', color: CvColors.amber500),
-                        Text('Players see the map when the upload finishes.',
+                        Text('Players see it when the upload finishes.',
                             style: CvTypography.caption
                                 .copyWith(color: CvColors.textSecondary)),
                       ],

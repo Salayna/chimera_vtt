@@ -521,6 +521,7 @@ class TokenCardLayer extends StatelessWidget {
     required this.controller,
     required this.send,
     required this.onRemove,
+    this.onSetImage,
   });
 
   final SceneStore store;
@@ -529,10 +530,13 @@ class TokenCardLayer extends StatelessWidget {
   final Outcome Function(Command) send;
   final void Function(TokenId) onRemove;
 
+  /// Picks and uploads a new image for the token; null while one uploads.
+  final void Function(TokenId)? onSetImage;
+
   static const width = 280.0;
 
   /// For keeping the card on screen; near enough to its real height.
-  static const height = 248.0;
+  static const height = 290.0;
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
@@ -572,6 +576,9 @@ class TokenCardLayer extends StatelessWidget {
                     session: session,
                     send: send,
                     onRemove: () => onRemove(token.id),
+                    onSetImage: onSetImage == null
+                        ? null
+                        : () => onSetImage!(token.id),
                     onClose: () => controller.selected.value = null,
                     arrowOnLeft: onRight,
                     arrowTop: arrow,
@@ -593,6 +600,7 @@ class _TokenCard extends StatelessWidget {
     required this.session,
     required this.send,
     required this.onRemove,
+    required this.onSetImage,
     required this.onClose,
     required this.arrowOnLeft,
     required this.arrowTop,
@@ -604,6 +612,7 @@ class _TokenCard extends StatelessWidget {
   final Session session;
   final Outcome Function(Command) send;
   final VoidCallback onRemove;
+  final VoidCallback? onSetImage;
   final VoidCallback onClose;
   final bool arrowOnLeft;
   final double arrowTop;
@@ -690,6 +699,13 @@ class _TokenCard extends StatelessWidget {
                         ],
                       );
                     },
+                  ),
+                  CvButton(
+                    label: 'Change image',
+                    icon: Lucide.imageUp,
+                    small: true,
+                    block: true,
+                    onPressed: onSetImage,
                   ),
                   CvSwitch(
                     value: token.hidden,
