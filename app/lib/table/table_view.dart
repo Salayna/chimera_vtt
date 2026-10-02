@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 
 import 'package:chimera_core/chimera_core.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/scheduler.dart' show Ticker;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
@@ -149,11 +150,15 @@ class TableView extends StatefulWidget {
   State<TableView> createState() => _TableViewState();
 }
 
-class _TableViewState extends State<TableView> {
-  /// Drags send at most this often; the drop is always sent.
-  static const dragInterval = Duration(milliseconds: 66);
-
+class _TableViewState extends State<TableView>
+    with SingleTickerProviderStateMixin {
   late Scene _scene;
+  final _glides = TokenGlides();
+  bool _hasScene = false;
+  late final Ticker _glideTicker = createTicker((elapsed) {
+    _glides.tick(elapsed);
+    if (!_glides.active) _glideTicker.stop();
+  });
   StreamSubscription<Scene>? _subscription;
   final _mask = FogMask();
   Map<FogOpId, FogOp>? _maskedOps;
@@ -173,7 +178,6 @@ class _TableViewState extends State<TableView> {
 
   // Gesture state.
   Offset? _grab;
-  final _sinceSend = Stopwatch();
   bool _panning = false;
   Offset? _downAt;
   bool _moved = false;
@@ -204,6 +208,25 @@ class _TableViewState extends State<TableView> {
   }
 
   void _setScene(Scene scene) {
+    // Moved tokens glide from where they're drawn now; one being dragged
+    // here glides from under the pointer onto its drop.
+    if (_hasScene) {
+      final drag = _c.drag.value;
+      for (final token in scene.tokens.values) {
+        final old = _scene.tokens[token.id];
+        if (old == null || old.position == token.position) continue;
+        if (!_glideTicker.isActive) {
+          _glides.restartClock();
+          _glideTicker.start();
+        }
+        _glides.start(
+            token.id,
+            drag?.id == token.id
+                ? drag!.position
+                : _glides.at(token.id, Offset(old.position.x, old.position.y)));
+      }
+    }
+    _hasScene = true;
     _scene = scene;
     final mapId = scene.settings.map;
     if (mapId != _mapId) {
@@ -256,6 +279,8 @@ class _TableViewState extends State<TableView> {
     _subscription?.cancel();
     _bakeTimer?.cancel();
     _mask.dispose();
+    _glideTicker.dispose();
+    _glides.dispose();
     super.dispose();
   }
 
@@ -289,6 +314,7 @@ class _TableViewState extends State<TableView> {
             painter: TokenPainter(
               tokens: _scene.tokens,
               drag: _c.drag,
+              glides: _glides,
               selected: _c.selected,
               images: (id) => widget.images(id) ?? _tokenImages[id],
               imagesRevision: _tokenImagesRevision,
@@ -370,9 +396,6 @@ class _TableViewState extends State<TableView> {
         final center = Offset(token.position.x, token.position.y);
         _grab = center - p;
         _c.drag.value = (id: token.id, position: center);
-        _sinceSend
-          ..reset()
-          ..start();
       }
     } else if (tool == Tool.fogBrush) {
       _strokePoints = [(x: p.dx, y: p.dy)];
@@ -390,12 +413,8 @@ class _TableViewState extends State<TableView> {
       _moved = true;
     }
     if (_c.drag.value case (:final id, position: _)) {
-      final position = p + _grab!;
-      _c.drag.value = (id: id, position: position);
-      if (_sinceSend.elapsed >= dragInterval) {
-        _sinceSend.reset();
-        widget.send(MoveToken(id, (x: position.dx, y: position.dy)));
-      }
+      // Only the drop is sent: the drag is this client's alone (H6).
+      _c.drag.value = (id: id, position: p + _grab!);
     } else if (_panning) {
       _c.view.value = Matrix4.translationValues(e.delta.dx, e.delta.dy, 0)
         ..multiply(_c.view.value);

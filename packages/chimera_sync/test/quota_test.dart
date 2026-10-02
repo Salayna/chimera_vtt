@@ -36,8 +36,8 @@ final class Counting implements Transport {
 const playerCount = 4;
 const minutes = 60;
 const heartbeatSeconds = 3; // GmRoom.heartbeatEvery
-const dragUpdatesPerSecond = 15; // TableView.dragInterval, 66 ms
-const dragSeconds = 2; // How long one move's drag lasts.
+// Only a drag's drop is sent (TableView), so each move is one update.
+const updatesPerMove = 1;
 const playerMovesPerMinute = 2; // Each player.
 const gmMovesPerMinute = 1;
 const fogStrokesPerHour = 100;
@@ -67,7 +67,7 @@ void main() {
     hub.flush();
     await Future.wait(joins);
 
-    const updates = dragSeconds * dragUpdatesPerSecond;
+    const updates = updatesPerMove;
     var x = 0.0;
     for (var minute = 0; minute < minutes; minute++) {
       for (var s = 0; s < 60; s += heartbeatSeconds) {

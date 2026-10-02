@@ -59,6 +59,42 @@ class GridPainter extends CustomPainter {
 /// The token being dragged, drawn at [position] instead of its stored one.
 typedef TokenDrag = ({TokenId id, Offset position});
 
+/// Tokens gliding to where they were dropped. Only drops are sent, so
+/// everyone but the one dragging sees a token jump; this eases it over
+/// instead. Driven by [tick] from the view's ticker.
+class TokenGlides extends ChangeNotifier {
+  static const duration = Duration(milliseconds: 300);
+
+  final _from = <TokenId, (Offset, Duration)>{};
+  Duration _now = Duration.zero;
+
+  bool get active => _from.isNotEmpty;
+
+  /// Starts [id] gliding from [from] to wherever it's stored now.
+  void start(TokenId id, Offset from) => _from[id] = (from, _now);
+
+  /// The ticker started again from zero.
+  void restartClock() {
+    _from.updateAll((_, g) => (g.$1, Duration.zero));
+    _now = Duration.zero;
+  }
+
+  void tick(Duration now) {
+    _now = now;
+    _from.removeWhere((_, g) => now - g.$2 >= duration);
+    notifyListeners();
+  }
+
+  /// Where [id] is drawn on its way to [to].
+  Offset at(TokenId id, Offset to) {
+    final glide = _from[id];
+    if (glide == null) return to;
+    final t = ((_now - glide.$2).inMicroseconds / duration.inMicroseconds)
+        .clamp(0.0, 1.0);
+    return Offset.lerp(glide.$1, to, Curves.easeOutCubic.transform(t))!;
+  }
+}
+
 /// Every token. A drag repaints this layer through [drag] without
 /// rebuilding any widget.
 ///
@@ -70,16 +106,18 @@ class TokenPainter extends CustomPainter {
   TokenPainter({
     required this.tokens,
     required this.drag,
+    required this.glides,
     required this.selected,
     required this.images,
     required this.gm,
     required this.self,
     this.imagesRevision = 0,
     // Owners' colours come from the member directory, which loads later.
-  }) : super(repaint: Listenable.merge([drag, selected, members]));
+  }) : super(repaint: Listenable.merge([drag, glides, selected, members]));
 
   final Map<TokenId, Token> tokens;
   final ValueNotifier<TokenDrag?> drag;
+  final TokenGlides glides;
   final ValueNotifier<TokenId?> selected;
   final ui.Image? Function(AssetId) images;
   final bool gm;
@@ -124,7 +162,7 @@ class TokenPainter extends CustomPainter {
       final isDragged = dragged?.id == token.id;
       final center = isDragged
           ? dragged!.position
-          : Offset(token.position.x, token.position.y);
+          : glides.at(token.id, Offset(token.position.x, token.position.y));
       final u = token.size / CvSizes.token; // One design pixel.
       final radius = token.size / 2;
       if (!visible.overlaps(

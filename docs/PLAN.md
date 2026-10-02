@@ -355,7 +355,7 @@ The POC passes when this session runs start to finish with no restart, once with
 1. The GM creates a room and uploads a map image of about 4096 × 4096 px. The app shows a room code.
 2. A player opens the web build, enters the code, and sees the map.
 3. The GM places two tokens and assigns one to the player.
-4. The player drags their token, and the GM sees it move live. Dragging the GM's token is refused.
+4. The player drags their token, and the GM sees it glide to where it was dropped. Dragging the GM's token is refused. (Revised 2026-10-02: drags are local and only the drop is sent, for H6; the demo first asked for a live drag.)
 5. The GM paints fog over half the map. The player's view goes dark there, and a token moved under the fog disappears for the player.
 6. The player closes the tab, reopens it, and is back in the same state.
 7. The GM saves the scene, restarts, and loads it again.
@@ -406,7 +406,7 @@ H4 measured 2026-10-02 on the local stack: a 9.7 MB, 4096 px JPEG map loads in t
 
 H1 first load measured 2026-10-02 on the hosted web build (Cloudflare), in Chrome with the cache off and the link throttled to 50 Mbit/s and 20 ms: 3.1 MB transferred, Flutter's first frame at 715–820 ms over three runs. Passes (≤ 10 s). The first frame is the sign-in screen; the lobby follows after one auth round trip.
 
-H6 estimated 2026-10-02 by `packages/chimera_sync/test/quota_test.dart`, a scripted hour over the loopback: the GM and four players, a heartbeat every 3 s, each player moving their token twice a minute and the GM once (2 s drags at 15 updates/s), and 100 fog strokes. 31,908 sends, which Supabase bills as 159,540 messages (each broadcast counts once per client in the room). That is about 12 hours of play a month on the Free plan (2M messages) and 31 on Pro (5M). Player drags are most of it: each update goes out twice, as the player's intent and the GM's patch. Passes for a weekly session on Pro; on Free, only about three 4-hour sessions a month fit.
+H6 estimated 2026-10-02 by `packages/chimera_sync/test/quota_test.dart`, a scripted hour over the loopback: the GM and four players, a heartbeat every 3 s, each player moving their token twice a minute and the GM once, and 100 fog strokes. Supabase bills each broadcast once per client in the room. With drags sent at 15 updates/s it came to about 160,000 messages an hour, about 12 hours a month on the Free plan (2M messages), which fails for a weekly session. Decided the same day: only a drag's drop is sent, and other clients ease the token to its new place (a 300 ms glide). That brings it to 2,328 sends, 11,640 billed messages an hour: about 170 hours a month on Free. Passes; heartbeats are now most of it.
 
 If H2 fails, a small WebSocket relay of our own replaces Realtime behind the same transport interface. If H1 fails, the map moves to a tiled renderer or to Flame before anything else changes.
 
@@ -484,7 +484,7 @@ A review of `~/Documents/dev/chimera_vtt` as created (Flutter 3.47.4, Dart SDK `
 - [ ] Hex grids in scope, or square only at first
 - [ ] Patch size: whole entities (simple) or only changed fields (smaller drags)? Whole entities for now; revisit if H6 fails.
 - [ ] Fog history grows with every stroke: when is it compacted into one mask image for new players?
-- [ ] Remote drags: send every throttled position, or only the path when dropped, plus interpolation?
+- [x] Remote drags: only the drop is sent, and other clients glide the token there (2026-10-02, for H6).
 - [ ] Access control: is a secret room code enough for the POC, or private channels with row-level security from day one?
 - [ ] GM disconnects: do players stay read-only until the GM returns, with no host migration? (Today: yes. Players keep their last state, and their intents expire unanswered.)
 - [x] Protocol versioning: refuse mismatched clients (`protocolVersion`, 2026-10-02).

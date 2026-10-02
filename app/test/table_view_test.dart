@@ -1,5 +1,6 @@
 import 'package:chimera_core/chimera_core.dart';
 import 'package:chimera_vtt/table/chrome.dart';
+import 'package:chimera_vtt/table/layers.dart';
 import 'package:chimera_vtt/table/table_view.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -88,5 +89,56 @@ void main() {
     await tester.pump();
     await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
     expect(controller.gridOptions, isTrue);
+  });
+
+  testWidgets('a drag sends one move: the drop', (tester) async {
+    final store = SceneStore(Scene(
+      settings: const SceneSettings(
+          width: 1024, height: 1024, grid: Grid(cellSize: 128)),
+      tokens: {id: const Token(id: id, position: (x: 192, y: 192), size: 128)},
+    ));
+    final controller = TableController();
+    addTearDown(controller.dispose);
+    final sent = <Command>[];
+    await tester.pumpWidget(Directionality(
+      textDirection: TextDirection.ltr,
+      child: TableView(
+        store: store,
+        controller: controller,
+        gm: true,
+        self: const PlayerId('gm'),
+        send: (command) {
+          sent.add(command);
+          return store.execute(const Gm(), command);
+        },
+      ),
+    ));
+    await tester.pump();
+    final gesture = await tester.startGesture(tokenOnScreen);
+    for (var i = 0; i < 20; i++) {
+      await gesture.moveBy(const Offset(5, 0));
+      // Real time, longer than the old 66 ms send throttle.
+      await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 70)));
+      await tester.pump();
+    }
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(sent, hasLength(1));
+    expect(sent.single, isA<MoveToken>());
+  });
+
+  test('a glide eases from where the token was to where it is', () {
+    final glides = TokenGlides();
+    addTearDown(glides.dispose);
+    glides.start(id, Offset.zero);
+    const to = Offset(100, 0);
+    glides.tick(TokenGlides.duration ~/ 2);
+    final mid = glides.at(id, to).dx;
+    expect(mid, greaterThan(50)); // Ease-out: past halfway at half time.
+    expect(mid, lessThan(100));
+    glides.tick(TokenGlides.duration);
+    expect(glides.active, isFalse);
+    expect(glides.at(id, to), to);
   });
 }
