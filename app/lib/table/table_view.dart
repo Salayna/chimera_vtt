@@ -280,7 +280,10 @@ class _TableViewState extends State<TableView> {
           constraints.hasBoundedWidth &&
           constraints.hasBoundedHeight) {
         _fittedTo = size;
-        _c.fit();
+        // After the frame: fit() notifies view, which can't be dirtied mid-build.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _c.fit();
+        });
       }
       return ClipRect(
         child: Listener(
