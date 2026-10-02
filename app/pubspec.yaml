@@ -32,15 +32,13 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # The following adds the Cupertino Icons font to your application.
-  # Use with the CupertinoIcons class for iOS style icons.
-  cupertino_icons: ^1.0.8
   chimera_core: any
   chimera_sync: any
   supabase_flutter: ^2.18.0
   shared_preferences: ^2.5.5
   crypto: ^3.0.7
   file_picker: ^13.1.0
+  flutter_svg: ^2.3.0
 
 dev_dependencies:
   flutter_test:
@@ -62,7 +60,18 @@ flutter:
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
   # the material Icons class.
-  uses-material-design: true
+  uses-material-design: false
+
+  # IBM Plex (SIL OFL, fonts/OFL.txt). Plex Sans is the variable font;
+  # CvTypography sets its weight axis.
+  fonts:
+    - family: IBM Plex Sans
+      fonts:
+        - asset: fonts/IBMPlexSans.ttf
+    - family: IBM Plex Mono
+      fonts:
+        - asset: fonts/IBMPlexMono-Medium.ttf
+          weight: 500
 
   # To add assets to your application, add an assets section, like this:
   # assets:

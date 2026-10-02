@@ -7,25 +7,45 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
+import '../theme.dart';
 import 'fog_mask.dart';
 import 'layers.dart';
 
 enum Tool { move, fogBrush, fogRect }
 
 /// The view's fast-changing state, outside the widget tree so it can change
-/// every frame without rebuilds. Owned by whoever creates it.
-class TableController {
+/// every frame without rebuilds. Owned by whoever creates it. Notifies when
+/// a tool option changes, for the chrome around the view.
+class TableController extends ChangeNotifier {
   final view = ValueNotifier<Matrix4>(Matrix4.identity());
   final drag = ValueNotifier<TokenDrag?>(null);
   final fogPreview = ValueNotifier<FogPreview?>(null);
   final selected = ValueNotifier<TokenId?>(null);
-  Tool tool = Tool.move;
+
+  Tool get tool => _tool;
+  Tool _tool = Tool.move;
+  set tool(Tool value) => _set(() => _tool = value);
 
   /// Dropped tokens snap to the grid. Holding Alt places one freely.
-  bool snap = true;
-  FogMode fogMode = FogMode.cover;
-  double brushRadius = 48;
+  bool get snap => _snap;
+  bool _snap = true;
+  set snap(bool value) => _set(() => _snap = value);
+
+  FogMode get fogMode => _fogMode;
+  FogMode _fogMode = FogMode.cover;
+  set fogMode(FogMode value) => _set(() => _fogMode = value);
+
+  double get brushRadius => _brushRadius;
+  double _brushRadius = 48;
+  set brushRadius(double value) => _set(() => _brushRadius = value);
+
+  void _set(void Function() change) {
+    change();
+    notifyListeners();
+  }
+
   Size _viewport = Size.zero;
+  Size _map = Size.zero;
 
   /// The scene point at the middle of the view, to place new things.
   Point get viewCenter {
@@ -34,11 +54,52 @@ class TableController {
     return (x: c.dx, y: c.dy);
   }
 
+  /// Screen pixels per map pixel. (Not getMaxScaleOnAxis: z stays 1, so
+  /// that never reads below 100%.)
+  double get zoom => view.value.entry(0, 0);
+
+  /// Zooms by [factor] around [focal], or the middle of the view.
+  void zoomBy(double factor, [Offset? focal]) {
+    final f = focal ?? _viewport.center(Offset.zero);
+    final clamped = (zoom * factor).clamp(0.05, 8.0) / zoom;
+    view.value = (Matrix4.translationValues(f.dx, f.dy, 0)
+          ..scaleByDouble(clamped, clamped, 1, 1)
+          ..translateByDouble(-f.dx, -f.dy, 0, 1))
+        ..multiply(view.value);
+  }
+
+  /// The whole map in view.
+  void fit() {
+    if (_viewport.isEmpty || _map.isEmpty) return;
+    final scale = math.min(
+        _viewport.width / _map.width, _viewport.height / _map.height);
+    view.value = Matrix4.identity()
+      ..translateByDouble((_viewport.width - _map.width * scale) / 2,
+          (_viewport.height - _map.height * scale) / 2, 0, 1)
+      ..scaleByDouble(scale, scale, 1, 1);
+  }
+
+  /// Puts [p] in the middle of the view, at no less than 100%.
+  // ponytail: jumps; the design eases over CvMotion.pan.
+  void centerOn(Point p) {
+    final z = math.max(zoom, 1.0);
+    final c = _viewport.center(Offset.zero);
+    view.value = Matrix4.identity()
+      ..translateByDouble(c.dx - p.x * z, c.dy - p.y * z, 0, 1)
+      ..scaleByDouble(z, z, 1, 1);
+  }
+
+  /// Where scene point [p] is on screen.
+  Offset toScreen(Point p) =>
+      MatrixUtils.transformPoint(view.value, Offset(p.x, p.y));
+
+  @override
   void dispose() {
     view.dispose();
     drag.dispose();
     fogPreview.dispose();
     selected.dispose();
+    super.dispose();
   }
 }
 
@@ -169,7 +230,7 @@ class _TableViewState extends State<TableView> {
       child: Stack(children: [
         RepaintBoundary(
           child: switch (settings.map == null ? widget.map : _mapImage) {
-            null => const ColoredBox(color: Color(0xFF2E3B2E)),
+            null => const ColoredBox(color: CvColors.bgSunken),
             final map => RawImage(
                   image: map,
                   width: size.width,
@@ -191,6 +252,7 @@ class _TableViewState extends State<TableView> {
               selected: _c.selected,
               images: widget.images,
               gm: widget.gm,
+              self: widget.self,
             ),
           ),
         ),
@@ -212,12 +274,13 @@ class _TableViewState extends State<TableView> {
 
     return LayoutBuilder(builder: (context, constraints) {
       _c._viewport = constraints.biggest;
+      _c._map = size;
       // Fit the map in view at first, and again when it changes size.
       if (_fittedTo != size &&
           constraints.hasBoundedWidth &&
           constraints.hasBoundedHeight) {
         _fittedTo = size;
-        _c.view.value = _fit(constraints.biggest, size);
+        _c.fit();
       }
       return ClipRect(
         child: Listener(
@@ -245,14 +308,6 @@ class _TableViewState extends State<TableView> {
         ),
       );
     });
-  }
-
-  static Matrix4 _fit(Size viewport, Size map) {
-    final scale = math.min(viewport.width / map.width, viewport.height / map.height);
-    return Matrix4.identity()
-      ..translateByDouble((viewport.width - map.width * scale) / 2,
-          (viewport.height - map.height * scale) / 2, 0, 1)
-      ..scaleByDouble(scale, scale, 1, 1);
   }
 
   Offset _toScene(Offset local) =>
@@ -348,24 +403,15 @@ class _TableViewState extends State<TableView> {
 
   void _signal(PointerSignalEvent e) {
     if (e is PointerScrollEvent) {
-      _zoomAt(e.localPosition, math.exp(-e.scrollDelta.dy / 400));
+      _c.zoomBy(math.exp(-e.scrollDelta.dy / 400), e.localPosition);
     }
   }
 
   void _panZoom(PointerPanZoomUpdateEvent e) {
     _c.view.value = Matrix4.translationValues(e.panDelta.dx, e.panDelta.dy, 0)
       ..multiply(_c.view.value);
-    _zoomAt(e.localPosition, e.scale / _lastPanZoomScale);
+    _c.zoomBy(e.scale / _lastPanZoomScale, e.localPosition);
     _lastPanZoomScale = e.scale;
-  }
-
-  void _zoomAt(Offset focal, double factor) {
-    final current = _c.view.value.getMaxScaleOnAxis();
-    final clamped = (current * factor).clamp(0.05, 8.0) / current;
-    _c.view.value = (Matrix4.translationValues(focal.dx, focal.dy, 0)
-          ..scaleByDouble(clamped, clamped, 1, 1)
-          ..translateByDouble(-focal.dx, -focal.dy, 0, 1))
-        ..multiply(_c.view.value);
   }
 
   /// The topmost token at [p] this client may move.

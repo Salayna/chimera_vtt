@@ -3,11 +3,14 @@ import 'dart:ui' as ui;
 
 import 'package:chimera_core/chimera_core.dart';
 import 'package:chimera_sync/chimera_sync.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 
 import 'demo_assets.dart';
+import 'room.dart' show StatusScreen;
+import 'table/chrome.dart';
 import 'table/table_view.dart';
-import 'table/toolbar.dart';
+import 'theme.dart';
+import 'ui/cv.dart';
 
 /// The GM and one player side by side, over loopback.
 class LoopbackDemo extends StatefulWidget {
@@ -76,18 +79,16 @@ class _LoopbackDemoState extends State<LoopbackDemo> {
   @override
   Widget build(BuildContext context) {
     final player = _playerStore;
-    return MaterialApp(
+    const pad = CvSizes.insetScreen;
+    return cvApp(
       title: 'Chimera VTT',
-      theme: ThemeData.dark(useMaterial3: true),
-      home: Scaffold(
-        body: Row(children: [
-          Expanded(
-            child: Column(children: [
-              Padding(
-                padding: const EdgeInsets.all(8),
-                child: GmToolbar(controller: _gm),
-              ),
-              Expanded(
+      home: Row(children: [
+        Expanded(
+          child: TableShortcuts(
+            controller: _gm,
+            gm: true,
+            child: Stack(children: [
+              Positioned.fill(
                 child: TableView(
                   store: _host.store,
                   controller: _gm,
@@ -98,30 +99,65 @@ class _LoopbackDemoState extends State<LoopbackDemo> {
                   images: (id) => _images[id],
                 ),
               ),
-            ]),
-          ),
-          const VerticalDivider(width: 4),
-          Expanded(
-            child: Column(children: [
-              const SizedBox(
-                  height: 48, child: Center(child: Text('Player: alice'))),
-              Expanded(
-                child: player == null
-                    ? const Center(child: CircularProgressIndicator())
-                    : TableView(
-                        store: player,
-                        controller: _playerView,
-                        gm: false,
-                        self: alice,
-                        send: _player.request,
-                        map: _map,
-                        images: (id) => _images[id],
-                      ),
+              Positioned.fill(
+                child: TokenCardLayer(
+                  store: _host.store,
+                  session: _host,
+                  controller: _gm,
+                  send: _host.execute,
+                  onRemove: (id) => _host.execute(RemoveToken(id)),
+                ),
+              ),
+              Positioned(
+                left: pad,
+                top: 0,
+                bottom: 0,
+                child: Center(child: GmRail(controller: _gm)),
+              ),
+              Positioned(
+                left: pad + CvSizes.rail + CvSpacing.s4,
+                top: 0,
+                bottom: 0,
+                child: Center(
+                  child: FogOptions(
+                      controller: _gm, grid: _host.store.scene.settings.grid),
+                ),
+              ),
+              Positioned(
+                right: pad,
+                bottom: pad,
+                child: ZoomCluster(controller: _gm, snap: true),
               ),
             ]),
           ),
-        ]),
-      ),
+        ),
+        Container(width: 4, color: CvColors.borderSubtle),
+        Expanded(
+          child: player == null
+              ? const StatusScreen(
+                  title: 'Waiting for the GM to open the room…',
+                  spinner: CvColors.teal500)
+              : Stack(children: [
+                  Positioned.fill(
+                    child: TableView(
+                      store: player,
+                      controller: _playerView,
+                      gm: false,
+                      self: alice,
+                      send: _player.request,
+                      map: _map,
+                      images: (id) => _images[id],
+                    ),
+                  ),
+                  Positioned(
+                    left: pad,
+                    top: pad,
+                    child: YourTokens(
+                        store: player, self: alice, controller: _playerView),
+                  ),
+                ]),
+        ),
+      ]),
     );
   }
 }

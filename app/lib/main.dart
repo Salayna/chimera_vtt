@@ -1,5 +1,5 @@
 import 'package:chimera_core/chimera_core.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter/semantics.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -8,6 +8,8 @@ import 'bench.dart';
 import 'demo_assets.dart';
 import 'loopback_demo.dart';
 import 'room.dart';
+import 'theme.dart';
+import 'ui/cv.dart';
 
 /// Defaults point at the local stack from `supabase start`; its publishable
 /// key is the CLI's well-known local one, not a secret. Pass both with
@@ -74,7 +76,7 @@ class _ChimeraAppState extends State<ChimeraApp> {
         _art = (map: generateMap(4096), tokens: generateTokenImages(4));
       });
     } on Object catch (e) {
-      setState(() => _error = 'Could not sign in: $e');
+      setState(() => _error = '$e');
     }
   }
 
@@ -93,9 +95,8 @@ class _ChimeraAppState extends State<ChimeraApp> {
     final me = _me;
     final art = _art;
     final room = _room;
-    return MaterialApp(
+    return cvApp(
       title: 'Chimera VTT',
-      theme: ThemeData.dark(useMaterial3: true),
       home: switch ((me, art, room)) {
         (final me?, final art?, final room?) when room.gm => GmRoom(
             key: ValueKey(room),
@@ -116,16 +117,17 @@ class _ChimeraAppState extends State<ChimeraApp> {
             onLeave: _leave,
           ),
         (_?, _?, null) => Lobby(onEnter: _enter),
-        _ => Scaffold(
-            body: Center(
-              child: _error == null
-                  ? const CircularProgressIndicator()
-                  : Column(mainAxisSize: MainAxisSize.min, children: [
-                      Text(_error!),
-                      TextButton(onPressed: _boot, child: const Text('Retry')),
-                    ]),
-            ),
+        _ when _error != null => StatusScreen(
+            title: 'Could not sign in.',
+            message: _error,
+            icon: Lucide.triangleAlert,
+            tone: CvTone.danger,
+            actions: [
+              CvButton(
+                  label: 'Try again', icon: Lucide.refreshCw, onPressed: _boot),
+            ],
           ),
+        _ => const StatusScreen(title: 'Signing in…', spinner: CvColors.bone100),
       },
     );
   }

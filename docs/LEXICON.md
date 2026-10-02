@@ -61,6 +61,7 @@ One word, one meaning. When code, docs and conversation disagree, this file wins
 | **Apply** | `applyPatches` | The only way a scene changes. It's the same function for the GM and for players. |
 | **Visibility filter** | `visibleTo`, `patchesFor` | Removes what a viewer may not see from a scene or a patch list. |
 | **Store** | `SceneStore` | Holds the current scene and notifies listeners when patches are applied. |
+| **Scene file** | `sceneToFile`, `sceneFromFile` | A scene exported as indented JSON (the save format). The map stays in Storage; the file holds its hash. Importing replaces the scene for everyone, after a confirmation. |
 | **Schema version** | `v` | The version number stored with each entity's JSON, used to migrate old saves. |
 | **Save format** | `Scene.format` | The version at the top of a scene's JSON, checked before any entity is parsed. |
 

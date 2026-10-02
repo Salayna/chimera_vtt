@@ -1,8 +1,10 @@
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:chimera_core/chimera_core.dart';
 import 'package:flutter/widgets.dart';
 
+import '../theme.dart';
 import 'fog_mask.dart';
 
 /// Grid lines. Repaints only when the grid or the map size changes.
@@ -45,6 +47,11 @@ typedef TokenDrag = ({TokenId id, Offset position});
 
 /// Every token. A drag repaints this layer through [drag] without
 /// rebuilding any widget.
+///
+/// Rings follow the design system: teal for the viewer's own tokens, bone
+/// for other players', dashed slate for unowned, amber with a halo when
+/// selected. Hidden tokens (GM only) are faded with a dashed ring. Ring
+/// sizes are the design's 56 px token, scaled to the token.
 class TokenPainter extends CustomPainter {
   TokenPainter({
     required this.tokens,
@@ -52,6 +59,7 @@ class TokenPainter extends CustomPainter {
     required this.selected,
     required this.images,
     required this.gm,
+    required this.self,
   }) : super(repaint: Listenable.merge([drag, selected]));
 
   final Map<TokenId, Token> tokens;
@@ -59,28 +67,46 @@ class TokenPainter extends CustomPainter {
   final ValueNotifier<TokenId?> selected;
   final ui.Image? Function(AssetId) images;
   final bool gm;
+  final PlayerId self;
 
   @override
   void paint(Canvas canvas, Size size) {
     final visible = canvas.getLocalClipBounds();
     final dragged = drag.value;
-    final ring = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 3;
+    final stroke = Paint()..style = PaintingStyle.stroke;
     final fill = Paint();
     final imagePaint = Paint()..filterQuality = FilterQuality.medium;
     for (final token in tokens.values) {
-      final center = dragged?.id == token.id
+      final isDragged = dragged?.id == token.id;
+      final center = isDragged
           ? dragged!.position
           : Offset(token.position.x, token.position.y);
-      final rect = Rect.fromCenter(
-          center: center, width: token.size, height: token.size);
-      if (!visible.overlaps(rect)) continue;
-      // Hidden tokens only ever reach the GM, who sees them faded.
-      final alpha = token.hidden ? 0x80 : 0xFF;
+      final u = token.size / CvSizes.token; // One design pixel.
+      final radius = token.size / 2;
+      if (!visible.overlaps(
+          Rect.fromCircle(center: center, radius: radius + 12 * u))) {
+        continue;
+      }
+      final isSelected = selected.value == token.id;
+      if (isDragged) {
+        // ponytail: only the dragged token casts a shadow; a blur per
+        // token per frame costs too much on a full map.
+        canvas.drawCircle(
+            center + Offset(0, 8 * u),
+            radius,
+            Paint()
+              ..color = const Color(0x66000000)
+              ..maskFilter = MaskFilter.blur(BlurStyle.normal, 10 * u));
+      }
+
+      // Face.
+      final faceAlpha = token.hidden ? 0x73 : 0xFF;
+      final rect = Rect.fromCircle(center: center, radius: radius);
       final image = token.image == null ? null : images(token.image!);
+      canvas.save();
+      canvas.clipPath(Path()..addOval(rect));
       if (image != null) {
-        imagePaint.color = Color.fromARGB(alpha, 0, 0, 0);
+        imagePaint.color = Color.fromARGB(faceAlpha, 0, 0, 0);
         canvas.drawImageRect(
           image,
           Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
@@ -88,27 +114,54 @@ class TokenPainter extends CustomPainter {
           imagePaint,
         );
       } else {
-        fill.color = _ownerColor(token.owner).withAlpha(alpha);
-        canvas.drawCircle(center, token.size / 2, fill);
+        fill.color = (token.owner == null
+                ? CvColors.slate300
+                : playerColor(token.owner!))
+            .withAlpha(faceAlpha);
+        canvas.drawCircle(center, radius, fill);
       }
-      final isSelected = selected.value == token.id;
-      ring
-        ..color = isSelected
-            ? const Color(0xFFFFD54F)
-            : const Color(0xFF000000).withAlpha(alpha)
-        ..strokeWidth = isSelected ? 8 : 3;
-      canvas.drawCircle(center, token.size / 2, ring);
+      canvas.restore();
+
+      // Ring, centred on the face's edge plus half its width.
+      final ringWidth = CvRadii.ringToken * u;
+      final ringRadius = radius + ringWidth / 2;
+      final (ringColor, dashed) = switch (token) {
+        _ when isSelected => (CvColors.amber500, false),
+        Token(hidden: true) => (CvColors.slate300, true),
+        Token(owner: null) => (CvColors.slate400, true),
+        Token(:final owner) when owner == self => (CvColors.teal500, false),
+        _ => (CvColors.bone100, false),
+      };
+      stroke
+        ..color = ringColor
+        ..strokeWidth = ringWidth;
+      if (dashed) {
+        _dashedCircle(canvas, center, ringRadius, stroke, dash: 6 * u);
+      } else {
+        canvas.drawCircle(center, ringRadius, stroke);
+      }
+      if (isSelected) {
+        stroke
+          ..color = CvColors.amber500
+          ..strokeWidth = 2 * u;
+        canvas.drawCircle(center, radius + 8 * u, stroke);
+      }
+    }
+  }
+
+  static void _dashedCircle(Canvas canvas, Offset center, double radius,
+      Paint paint, {required double dash}) {
+    final rect = Rect.fromCircle(center: center, radius: radius);
+    final count = math.max(4, (2 * math.pi * radius / (dash * 2)).floor());
+    final step = 2 * math.pi / count;
+    for (var i = 0; i < count; i++) {
+      canvas.drawArc(rect, i * step, step / 2, false, paint);
     }
   }
 
   @override
   bool shouldRepaint(TokenPainter old) =>
-      !identical(old.tokens, tokens) || old.gm != gm;
-
-  static Color _ownerColor(PlayerId? owner) => owner == null
-      ? const Color(0xFF9E9E9E)
-      : HSVColor.fromAHSV(1, (owner.value.hashCode % 360).toDouble(), 0.6, 0.9)
-          .toColor();
+      !identical(old.tokens, tokens) || old.gm != gm || old.self != self;
 }
 
 /// The fog stroke being painted, before it becomes a fog op.
@@ -142,7 +195,7 @@ class FogPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final image = mask.image;
     // Players see opaque fog; the GM sees through it.
-    final color = Color.fromARGB(gm ? 0x99 : 0xFF, 0x10, 0x10, 0x18);
+    final color = gm ? CvColors.fogGm : CvColors.fogPlayer;
     if (naiveOps case final ops?) {
       canvas.saveLayer(Offset.zero & size, Paint()..color = color);
       for (final op in ops) {
@@ -176,8 +229,8 @@ class FogPainter extends CustomPainter {
       // Always drawn as paint: a reveal preview must not clear the mask.
       paintFogShape(canvas, shape, FogMode.cover,
           color: mode == FogMode.cover
-              ? const Color(0x66000000)
-              : const Color(0x66FFFFFF));
+              ? CvColors.fogCoverPreview
+              : CvColors.fogRevealPreview);
     }
   }
 
