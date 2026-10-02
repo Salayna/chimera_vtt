@@ -486,3 +486,127 @@ class FogPainter extends CustomPainter {
   bool shouldRepaint(FogPainter old) =>
       old.revision != revision || old.gm != gm;
 }
+
+/// A label pill, as the ruler draws it, centred on [center]. [u] is one
+/// design pixel in scene units.
+void _pill(Canvas canvas, String text, Offset center, double u,
+    {Color color = CvColors.textPrimary}) {
+  final label = TextPainter(
+    text: TextSpan(
+        text: text,
+        style: CvTypography.label.copyWith(
+            fontSize: 14 * u, fontFamily: CvTypography.mono, color: color)),
+    textDirection: TextDirection.ltr,
+  )..layout();
+  final pill = Rect.fromCenter(
+    center: center,
+    width: label.width + 16 * u,
+    height: label.height + 8 * u,
+  );
+  canvas.drawRRect(RRect.fromRectAndRadius(pill, Radius.circular(8 * u)),
+      Paint()..color = CvColors.surfacePanelSolid);
+  label.paint(canvas, pill.center - Offset(label.width / 2, label.height / 2));
+}
+
+/// Regions: a wash and an outline, and their tags along the top edge.
+/// Players only get regions that carry tags; the GM sees every one, hidden
+/// ones dimmer, and the one being drawn.
+class RegionPainter extends CustomPainter {
+  RegionPainter(
+      {required this.scene,
+      required this.draft,
+      required this.selected,
+      required this.gm})
+      : super(repaint: Listenable.merge([draft, selected]));
+
+  final Scene scene;
+  final ValueListenable<(Point, Point)?> draft;
+  final ValueListenable<RegionId?> selected;
+  final bool gm;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final u = scene.settings.grid.cellSize / CvSizes.token;
+    for (final r in scene.regions.values) {
+      if (!gm && r.tags.isEmpty) continue;
+      final rect = Rect.fromPoints(Offset(r.from.x, r.from.y), Offset(r.to.x, r.to.y));
+      final picked = r.id == selected.value;
+      final alpha = r.hidden ? 0.5 : 1.0;
+      canvas
+        ..drawRect(
+            rect,
+            Paint()
+              ..color = (picked ? CvColors.amberTint : const Color(0x24E8E6E1))
+                  .withValues(alpha: (picked ? 0.16 : 0.14) * alpha))
+        ..drawRect(
+            rect.deflate(u),
+            Paint()
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 2 * u
+              ..color = (picked ? CvColors.amber500 : CvColors.slate300)
+                  .withValues(alpha: 0.9 * alpha));
+      final tags = [
+        for (final MapEntry(:key, :value) in r.tags.entries)
+          value == null ? key : '$key $value',
+      ];
+      final text = [if (r.hidden) 'Hidden', ...tags].join(' · ');
+      if (text.isNotEmpty) {
+        _pill(canvas, text, Offset(rect.center.dx, rect.top + 14 * u), u,
+            color: r.hidden ? CvColors.textSecondary : CvColors.textPrimary);
+      }
+    }
+    if (draft.value case (final a, final b)) {
+      canvas.drawRect(
+          Rect.fromPoints(Offset(a.x, a.y), Offset(b.x, b.y)),
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 2 * u
+            ..color = CvColors.amber500);
+    }
+  }
+
+  @override
+  bool shouldRepaint(RegionPainter old) =>
+      !identical(old.scene.regions, scene.regions) ||
+      old.scene.settings != scene.settings ||
+      old.gm != gm;
+}
+
+/// While this client drags a token: what the move costs in the pack's
+/// unit, the checks the regions it enters ask for, and whether one is full.
+class MovePainter extends CustomPainter {
+  MovePainter(this.drag, this.scene, {required this.snap}) : super(repaint: drag);
+
+  final ValueListenable<TokenDrag?> drag;
+  final Scene scene;
+
+  /// Measures to where the token will land, as the drop snaps it.
+  final bool snap;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final d = drag.value;
+    final token = d == null ? null : scene.tokens[d.id];
+    if (d == null || token == null) return;
+    final Point at = (x: d.position.dx, y: d.position.dy);
+    final to = snap ? scene.settings.grid.snap(at, token.size) : at;
+    if (to == token.position) return;
+    final engine = engineFor(scene);
+    final move = engine.checkMove(token.position, to, occupants: [
+      for (final t in scene.tokens.values)
+        if (t.id != token.id) t.position,
+    ]);
+    final text = [
+      formatDistance(move.cost, engine.pack.unit),
+      ...move.checks.map((c) => '$c check'),
+      if (move.blocked) 'full',
+    ].join(' · ');
+    final u = scene.settings.grid.cellSize / CvSizes.token;
+    _pill(canvas, text, Offset(to.x, to.y - token.size / 2 - 18 * u), u,
+        color: move.blocked ? CvColors.ember400 : CvColors.textPrimary);
+  }
+
+  @override
+  bool shouldRepaint(MovePainter old) =>
+      old.scene != scene || old.snap != snap || old.drag != drag;
+}

@@ -13,7 +13,7 @@ import 'fog_mask.dart';
 import 'layers.dart';
 
 /// Move, ruler and ping are everyone's; the rest are the GM's.
-enum Tool { move, ruler, ping, fogBrush, fogRect, gridFit }
+enum Tool { move, ruler, ping, fogBrush, fogRect, gridFit, region }
 
 /// The view's fast-changing state, outside the widget tree so it can change
 /// every frame without rebuilds. Owned by whoever creates it. Notifies when
@@ -26,6 +26,12 @@ class TableController extends ChangeNotifier {
   /// The grid fitted to the box being drawn with [Tool.gridFit].
   final gridFit = ValueNotifier<Grid?>(null);
   final selected = ValueNotifier<TokenId?>(null);
+
+  /// The region being drawn with [Tool.region], corner to corner.
+  final regionDraft = ValueNotifier<(Point, Point)?>(null);
+
+  /// The region the GM is editing.
+  final selectedRegion = ValueNotifier<RegionId?>(null);
 
   /// The ruler being dragged, from and to, in scene units.
   final ruler = ValueNotifier<(Point, Point)?>(null);
@@ -48,7 +54,10 @@ class TableController extends ChangeNotifier {
 
   Tool get tool => _tool;
   Tool _tool = Tool.move;
-  set tool(Tool value) => _set(() => _tool = value);
+  set tool(Tool value) => _set(() {
+        _tool = value;
+        if (value != Tool.region) selectedRegion.value = null;
+      });
 
   /// Dropped tokens snap to the grid. Holding Alt places one freely.
   bool get snap => _snap;
@@ -132,6 +141,8 @@ class TableController extends ChangeNotifier {
     fogPreview.dispose();
     gridFit.dispose();
     selected.dispose();
+    regionDraft.dispose();
+    selectedRegion.dispose();
     pings.dispose();
     ruler.dispose();
     otherRulers.dispose();
@@ -217,6 +228,7 @@ class _TableViewState extends State<TableView>
   bool _moved = false;
   Offset? _fogStart;
   Offset? _fitStart;
+  Offset? _regionStart;
   List<Point> _strokePoints = [];
   double _lastPanZoomScale = 1;
 
@@ -343,6 +355,17 @@ class _TableViewState extends State<TableView>
         RepaintBoundary(
           child: CustomPaint(
             size: size,
+            painter: RegionPainter(
+              scene: _scene,
+              draft: _c.regionDraft,
+              selected: _c.selectedRegion,
+              gm: widget.gm,
+            ),
+          ),
+        ),
+        RepaintBoundary(
+          child: CustomPaint(
+            size: size,
             painter: TokenPainter(
               tokens: _scene.tokens,
               drag: _c.drag,
@@ -373,6 +396,12 @@ class _TableViewState extends State<TableView>
           child: CustomPaint(
             size: size,
             painter: RulerPainter(_c.ruler, _c.otherRulers, _scene),
+          ),
+        ),
+        RepaintBoundary(
+          child: CustomPaint(
+            size: size,
+            painter: MovePainter(_c.drag, _scene, snap: _c.snap),
           ),
         ),
         // Above the fog: a ping under it still shows where to look.
@@ -467,6 +496,8 @@ class _TableViewState extends State<TableView>
       _previewStroke();
     } else if (tool == Tool.fogRect) {
       _fogStart = p;
+    } else if (tool == Tool.region) {
+      _regionStart = p;
     } else {
       _fitStart = p;
     }
@@ -488,6 +519,8 @@ class _TableViewState extends State<TableView>
     } else if (_fitStart case final start?) {
       _c.gridFit.value =
           Grid.fitted((x: start.dx, y: start.dy), (x: p.dx, y: p.dy));
+    } else if (_regionStart case final start? when _moved) {
+      _c.regionDraft.value = _regionBox(start, p);
     } else if (_fogStart != null) {
       _c.fogPreview.value = (
         shape: FogRect((x: _fogStart!.dx, y: _fogStart!.dy), (x: p.dx, y: p.dy)),
@@ -553,6 +586,16 @@ class _TableViewState extends State<TableView>
       _click();
     } else if (_c.fogPreview.value case (:final shape, :final mode) when send) {
       widget.send(AddFogOp(FogOpId(newId()), mode, shape));
+    } else if (_regionStart case final start? when send) {
+      if (_c.regionDraft.value case (final from, final to)
+          when from.x != to.x && from.y != to.y) {
+        final region = Region(id: RegionId(newId()), from: from, to: to);
+        if (widget.send(PlaceRegion(region)) is Accepted) {
+          _c.selectedRegion.value = region.id;
+        }
+      } else if (!_moved) {
+        _c.selectedRegion.value = _regionAt(start)?.id;
+      }
     } else if (_c.gridFit.value case final grid? when send && grid.valid) {
       widget.send(UpdateSettings(_scene.settings.copyWith(grid: grid)));
       _c.tool = Tool.move;
@@ -561,6 +604,8 @@ class _TableViewState extends State<TableView>
     _c.gridFit.value = null;
     _c.ruler.value = null;
     _fitStart = null;
+    _regionStart = null;
+    _c.regionDraft.value = null;
     _panning = false;
     _downAt = null;
     _fogStart = null;
@@ -583,6 +628,37 @@ class _TableViewState extends State<TableView>
       ..multiply(_c.view.value);
     _c.zoomBy(e.scale / _lastPanZoomScale, e.localPosition);
     _lastPanZoomScale = e.scale;
+  }
+
+  /// The box from [a] to [b] widened to whole cells, or exactly with Alt.
+  (Point, Point) _regionBox(Offset a, Offset b) {
+    final grid = _scene.settings.grid;
+    final (x0, x1) = (math.min(a.dx, b.dx), math.max(a.dx, b.dx));
+    final (y0, y1) = (math.min(a.dy, b.dy), math.max(a.dy, b.dy));
+    if (HardwareKeyboard.instance.isAltPressed) {
+      return ((x: x0, y: y0), (x: x1, y: y1));
+    }
+    final s = grid.cellSize, o = grid.offset;
+    double down(double v, double origin) => origin + ((v - origin) / s).floor() * s;
+    double up(double v, double origin) => origin + ((v - origin) / s).ceil() * s;
+    return (
+      (x: down(x0, o.x), y: down(y0, o.y)),
+      (x: math.max(up(x1, o.x), down(x0, o.x) + s), y: math.max(up(y1, o.y), down(y0, o.y) + s)),
+    );
+  }
+
+  /// The smallest region at [p], so one inside another can be picked.
+  Region? _regionAt(Offset p) {
+    Region? best;
+    double area(Region r) => ((r.to.x - r.from.x) * (r.to.y - r.from.y)).abs();
+    for (final r in _scene.regions.values) {
+      final inside = p.dx >= math.min(r.from.x, r.to.x) &&
+          p.dx <= math.max(r.from.x, r.to.x) &&
+          p.dy >= math.min(r.from.y, r.to.y) &&
+          p.dy <= math.max(r.from.y, r.to.y);
+      if (inside && (best == null || area(r) < area(best))) best = r;
+    }
+    return best;
   }
 
   /// The topmost token at [p] this client may move.

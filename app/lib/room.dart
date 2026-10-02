@@ -1173,6 +1173,10 @@ class _GmRoomState extends State<GmRoom> {
                         pack: settings.pack,
                         onPack: _setPack),
                     FogOptions(controller: _controller, grid: grid),
+                    RegionOptions(
+                        controller: _controller,
+                        store: host.store,
+                        send: host.execute),
                   ],
                 );
               },

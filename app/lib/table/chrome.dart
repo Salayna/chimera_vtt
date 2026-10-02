@@ -180,6 +180,7 @@ class GmRail extends StatelessWidget {
             const CvToolbarSeparator(),
             tool(Tool.fogBrush, Lucide.paintbrush, 'Fog brush', 'B'),
             tool(Tool.fogRect, Lucide.squareDashed, 'Fog rectangle', 'R'),
+            tool(Tool.region, Lucide.scan, 'Regions', 'A'),
             const CvToolbarSeparator(),
             CvToolButton(
                 icon: Lucide.circlePlus,
@@ -238,6 +239,92 @@ class PlayerRail extends StatelessWidget {
               onPressed: () => controller.tool = t,
             ),
         ]),
+      );
+}
+
+/// While the region tool is out: how to draw one, or the selected region's
+/// tags, whether players see it, and deleting it.
+class RegionOptions extends StatelessWidget {
+  const RegionOptions(
+      {super.key,
+      required this.controller,
+      required this.store,
+      required this.send});
+
+  final TableController controller;
+  final SceneStore store;
+  final Outcome Function(Command) send;
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+        listenable: Listenable.merge([controller, controller.selectedRegion]),
+        builder: (context, _) => controller.tool != Tool.region
+            ? const SizedBox.shrink()
+            : StreamBuilder(
+                stream: store.changes,
+                initialData: store.scene,
+                builder: (context, snapshot) {
+                  final scene = snapshot.requireData;
+                  final region = scene.regions[controller.selectedRegion.value];
+                  final pack = packOf(scene);
+                  return CvPopIn(
+                    child: CvPanel(
+                      width: 260,
+                      padding: const EdgeInsets.all(CvSpacing.s5),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        spacing: 10,
+                        children: [
+                          const Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [CvOverline('Region'), CvKbd('A')]),
+                          if (region == null)
+                            Text(
+                                'Drag over the map to mark a region, cell by '
+                                'cell (Alt for exact). Click one to give it '
+                                'tags such as cover or difficult terrain.',
+                                style: CvTypography.caption
+                                    .copyWith(color: CvColors.textSecondary))
+                          else ...[
+                            _TagEditor(
+                              key: ValueKey(region.id),
+                              title: 'Tags',
+                              tags: region.tags,
+                              pack: pack,
+                              offered: pack.regionTags,
+                              placeholder: 'Add: Heavy Cover, Darkness 2…',
+                              onSet: (name, value) => send(UpdateRegion(
+                                  region.copyWith(
+                                      tags: {...region.tags, name: value}))),
+                              onRemove: (name) => send(UpdateRegion(
+                                  region.copyWith(
+                                      tags: {...region.tags}..remove(name)))),
+                            ),
+                            CvSwitch(
+                              value: region.hidden,
+                              onChanged: (hidden) => send(
+                                  UpdateRegion(region.copyWith(hidden: hidden))),
+                              label: const Text('Hidden from players'),
+                            ),
+                            CvButton(
+                              label: 'Delete region',
+                              icon: Lucide.trash2,
+                              variant: CvButtonVariant.dangerGhost,
+                              small: true,
+                              block: true,
+                              onPressed: () {
+                                send(RemoveRegion(region.id));
+                                controller.selectedRegion.value = null;
+                              },
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
       );
 }
 
@@ -835,7 +922,14 @@ class _TokenCard extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: CvTypography.weight(CvTypography.body, 600)),
-                      Text(cellName(token.position, grid),
+                      Text(
+                          [
+                            cellName(token.position, grid),
+                            for (final t in engineFor(scene).tagsAt(token.position))
+                              t.value == null ? t.name : '${t.name} ${t.value}',
+                          ].join(' · '),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                           style: CvTypography.caption.copyWith(
                               fontFamily: CvTypography.mono,
                               fontWeight: FontWeight.w500,
@@ -941,7 +1035,15 @@ class _TokenCard extends StatelessWidget {
                       ]),
                     ),
                   ],
-                  _Conditions(token: token, send: send, pack: packOf(scene)),
+                  _TagEditor(
+                    title: 'Conditions',
+                    tags: token.conditions,
+                    pack: packOf(scene),
+                    offered: packOf(scene).conditions,
+                    onSet: (name, value) =>
+                        send(SetCondition(token.id, name, value)),
+                    onRemove: (name) => send(RemoveCondition(token.id, name)),
+                  ),
                 ],
               ),
             ),
@@ -1064,6 +1166,7 @@ class TableShortcuts extends StatelessWidget {
         if (gm) ...{
           const CharacterActivator('b'): () => c.tool = Tool.fogBrush,
           const CharacterActivator('r'): () => c.tool = Tool.fogRect,
+          const CharacterActivator('a'): () => c.tool = Tool.region,
           const CharacterActivator('x'): () => c.fogMode =
               c.fogMode == FogMode.cover ? FogMode.reveal : FogMode.cover,
           const CharacterActivator('s'): () => c.snap = !c.snap,
@@ -1157,31 +1260,36 @@ class _NameFieldState extends State<_NameField> {
       );
 }
 
-/// A token's conditions as chips, each removable, and a line to add one:
-/// "Prone", or "Darkness 2" for one with a value.
-class _Conditions extends StatefulWidget {
-  const _Conditions(
-      {required this.token, required this.send, required this.pack});
+/// Tags as chips, each removable and explained by the pack on hover, a
+/// menu of the pack's [offered] tags, and a line to type one: "Prone", or
+/// "Darkness 2" for one with a value. Token conditions and region tags.
+class _TagEditor extends StatefulWidget {
+  const _TagEditor({
+    super.key,
+    required this.title,
+    required this.tags,
+    required this.pack,
+    required this.offered,
+    required this.onSet,
+    required this.onRemove,
+    this.placeholder = 'Add: Prone, Darkness 2…',
+  });
 
-  final Token token;
-  final Outcome Function(Command) send;
-
-  /// Offers its conditions, and explains them.
+  final String title;
+  final Map<String, int?> tags;
   final SystemPack pack;
+  final Iterable<TagDef> offered;
+  final Outcome Function(String name, int? value) onSet;
+  final void Function(String name) onRemove;
+  final String placeholder;
 
   @override
-  State<_Conditions> createState() => _ConditionsState();
+  State<_TagEditor> createState() => _TagEditorState();
 }
 
-class _ConditionsState extends State<_Conditions> {
+class _TagEditorState extends State<_TagEditor> {
   final _text = TextEditingController();
   bool _invalid = false;
-
-  /// The pack's conditions the token doesn't have yet.
-  List<TagDef> _offered(Token token) => [
-        for (final t in widget.pack.conditions)
-          if (!token.conditions.containsKey(t.name)) t,
-      ];
 
   /// [child] with the rules [text] on hover, when there is any.
   static Widget _explained(String? text, Widget child) =>
@@ -1200,7 +1308,7 @@ class _ConditionsState extends State<_Conditions> {
     final name = m[1]!;
     if (name.isEmpty) return;
     final value = m[2] == null ? null : int.parse(m[2]!);
-    final outcome = widget.send(SetCondition(widget.token.id, name, value));
+    final outcome = widget.onSet(name, value);
     setState(() {
       _invalid = outcome is Refused;
       if (!_invalid) _text.clear();
@@ -1209,16 +1317,19 @@ class _ConditionsState extends State<_Conditions> {
 
   @override
   Widget build(BuildContext context) {
-    final token = widget.token;
+    final offered = [
+      for (final t in widget.offered)
+        if (!widget.tags.containsKey(t.name)) t,
+    ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: 6,
       children: [
-        Text('Conditions',
+        Text(widget.title,
             style: CvTypography.label.copyWith(color: CvColors.textSecondary)),
-        if (token.conditions.isNotEmpty)
+        if (widget.tags.isNotEmpty)
           Wrap(spacing: 6, runSpacing: 6, children: [
-            for (final MapEntry(key: name, :value) in token.conditions.entries)
+            for (final MapEntry(key: name, :value) in widget.tags.entries)
               _explained(widget.pack.tags[name]?.text, Container(
                 height: 28,
                 padding: const EdgeInsets.only(left: 10),
@@ -1231,8 +1342,7 @@ class _ConditionsState extends State<_Conditions> {
                   Text(value == null ? name : '$name $value',
                       style: CvTypography.bodySm),
                   CvPressable(
-                    onTap: () =>
-                        widget.send(RemoveCondition(token.id, name)),
+                    onTap: () => widget.onRemove(name),
                     label: 'Remove $name',
                     radius: CvRadii.pill,
                     builder: (s) => SizedBox(
@@ -1248,7 +1358,7 @@ class _ConditionsState extends State<_Conditions> {
                 ]),
               )),
           ]),
-        if (_offered(token) case final offered when offered.isNotEmpty)
+        if (offered.isNotEmpty)
           CvDropdown<String?>(
             entries: [
               for (final t in offered)
@@ -1257,15 +1367,15 @@ class _ConditionsState extends State<_Conditions> {
             value: null,
             placeholder: 'Add from ${widget.pack.name}…',
             onChanged: (name) {
-              if (name == null) return;
-              final def = widget.pack.tags[name]!;
-              widget.send(SetCondition(token.id, name, def.valued ? 1 : null));
+              if (name != null) {
+                widget.onSet(name, widget.pack.tags[name]!.valued ? 1 : null);
+              }
             },
           ),
         TextKeysOnly(
           child: CvTextInput(
             controller: _text,
-            placeholder: 'Add: Prone, Darkness 2…',
+            placeholder: widget.placeholder,
             maxLength: maxConditionName + 3,
             error: _invalid ? 'Up to 30 letters, and a value up to 99.' : null,
             keepFocus: true,

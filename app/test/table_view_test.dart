@@ -226,6 +226,44 @@ void main() {
     expect(sent.single, isA<MoveToken>());
   });
 
+  testWidgets('the region tool marks whole cells, and a click picks one',
+      (tester) async {
+    final store = SceneStore(Scene(
+      settings: const SceneSettings(
+          width: 1024, height: 1024, grid: Grid(cellSize: 128)),
+    ));
+    final controller = TableController()..tool = Tool.region;
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(Directionality(
+      textDirection: TextDirection.ltr,
+      child: TableView(
+        store: store,
+        controller: controller,
+        gm: true,
+        self: const PlayerId('gm'),
+        send: (command) => store.execute(const Gm(), command),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    final gesture =
+        await tester.startGesture(controller.toScreen((x: 140, y: 140)));
+    await gesture.moveTo(controller.toScreen((x: 220, y: 180)));
+    await gesture.moveTo(controller.toScreen((x: 300, y: 200)));
+    await gesture.up();
+    await tester.pump();
+    final region = store.scene.regions.values.single;
+    expect((region.from, region.to), ((x: 128.0, y: 128.0), (x: 384.0, y: 256.0)));
+    expect(controller.selectedRegion.value, region.id);
+
+    controller.selectedRegion.value = null;
+    await tester.tapAt(controller.toScreen((x: 200, y: 200)));
+    await tester.pump();
+    expect(controller.selectedRegion.value, region.id);
+    await tester.tapAt(controller.toScreen((x: 600, y: 600)));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(controller.selectedRegion.value, isNull);
+  });
+
   test('a glide eases from where the token was to where it is', () {
     final glides = TokenGlides();
     addTearDown(glides.dispose);
