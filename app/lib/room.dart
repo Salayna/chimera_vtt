@@ -15,6 +15,7 @@ import 'package:supabase_flutter/supabase_flutter.dart' show SupabaseClient;
 import 'account.dart';
 import 'assets.dart';
 import 'campaigns.dart';
+import 'library.dart';
 import 'members.dart';
 import 'table/chrome.dart';
 import 'table/table_view.dart';
@@ -703,10 +704,13 @@ class _GmRoomState extends State<GmRoom> {
 
   String? _uploading;
 
-  /// Picks an image and uploads it, then hands it to [use]. [what] names
-  /// it in the toasts ("Map", "Token image").
-  Future<void> _uploadImage(
-      String what, void Function(AssetId id, ui.Image image) use) async {
+  late final _library = Library(widget.client, widget.assets);
+
+  /// Picks an image and uploads it, files it in the GM's library under
+  /// [kind], then hands it to [use]. [what] names it in the toasts ("Map",
+  /// "Token image").
+  Future<void> _uploadImage(String what, LibraryKind kind,
+      void Function(AssetId id, ui.Image image) use) async {
     if (_uploading != null) return;
     try {
       final file = await FilePicker.pickFile(type: FileType.image);
@@ -723,6 +727,10 @@ class _GmRoomState extends State<GmRoom> {
       widget.assets.remember(id, image);
       use(id, image);
       _toasts.show('$what uploaded', tone: CvTone.ok);
+      // The library is a convenience: a failure there doesn't undo the upload.
+      final name = file.name.replaceFirst(RegExp(r'\.[^.]*$'), '');
+      _library.add(kind, name.isEmpty ? what : name, id, image).catchError(
+          (Object e) => debugPrint('$what not added to the library: $e'));
     } on Object catch (e) {
       _toasts.show('$what failed to upload: $e', tone: CvTone.danger);
     } finally {
@@ -731,7 +739,7 @@ class _GmRoomState extends State<GmRoom> {
   }
 
   /// Makes an uploaded image the scene's map.
-  Future<void> _setMap() => _uploadImage('Map', (id, image) {
+  Future<void> _setMap() => _uploadImage('Map', LibraryKind.map, (id, image) {
         final old = _host!.store.scene.settings;
         _host!.execute(UpdateSettings(old.copyWith(
           map: id,
@@ -742,7 +750,7 @@ class _GmRoomState extends State<GmRoom> {
 
   /// Gives a token an uploaded image.
   Future<void> _setTokenImage(TokenId token) =>
-      _uploadImage('Token image', (id, _) {
+      _uploadImage('Token image', LibraryKind.token, (id, _) {
         // The token may have changed (or gone) during the upload.
         final current = _host!.store.scene.tokens[token];
         if (current != null) _host!.execute(UpdateToken(current.copyWith(image: id)));
