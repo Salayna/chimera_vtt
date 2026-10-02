@@ -211,7 +211,7 @@ A gap in sequence numbers makes a player ask for a fresh snapshot. Patches recei
 
 ## Campaigns (proposal)
 
-Proposed 2026-10-02, decisions below. Today a room holds one scene, autosaved in the GM's browser, and players are anonymous ids. Prep needs more: several scenes ready to switch between, and tokens given to players before they join. Both belong to a campaign, so the campaign comes first and scenes hang off it.
+Proposed and built 2026-10-02, decisions below. Today a room holds one scene, autosaved in the GM's browser, and players are anonymous ids. Prep needs more: several scenes ready to switch between, and tokens given to players before they join. Both belong to a campaign, so the campaign comes first and scenes hang off it.
 
 ### Who signs in
 
@@ -241,6 +241,8 @@ Tables in Postgres, behind row-level security:
 - Images stay in Storage, named by content hash (ADR 006).
 
 ### Bricks
+
+All five built 2026-10-02, on the local stack. A hosted project needs `supabase db push` for the campaigns, scenes and members migrations.
 
 1. GM sign-in with email and password.
 2. Campaigns: create, list and open them from the lobby; change the room code.
