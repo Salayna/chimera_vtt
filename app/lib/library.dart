@@ -39,6 +39,13 @@ class Library {
     }, onConflict: 'owner,kind,asset', ignoreDuplicates: true);
   }
 
+  Future<void> rename(String id, String name) =>
+      _client.from('library').update({'name': name}).eq('id', id);
+
+  /// Drops the entry. The image stays in Storage: scenes may still use it.
+  Future<void> delete(String id) =>
+      _client.from('library').delete().eq('id', id);
+
   Future<List<LibraryEntry>> list(LibraryKind kind) async => [
         for (final r in await _client
             .from('library')
@@ -130,6 +137,69 @@ class _LibraryPanelState extends State<LibraryPanel> {
   List<LibraryEntry>? _entries;
   String? _error;
 
+  /// Editing: tapping renames, and each entry has a delete button.
+  bool _editing = false;
+
+  Future<void> _rename(LibraryEntry entry) async {
+    final text = TextEditingController(text: entry.name);
+    final name = await showCvDialog<String>(
+      context: context,
+      title: 'Rename ${entry.name}',
+      icon: Lucide.pencil,
+      body: CvTextInput(
+        controller: text,
+        label: 'Name',
+        maxLength: 80,
+        onSubmitted: (v) => Navigator.pop(context, v),
+      ),
+      actions: (context) => [
+        CvButton(
+            label: 'Cancel',
+            variant: CvButtonVariant.ghost,
+            onPressed: () => Navigator.pop(context)),
+        CvButton(
+            label: 'Rename',
+            variant: CvButtonVariant.primary,
+            onPressed: () => Navigator.pop(context, text.text)),
+      ],
+    );
+    // Not disposed: the dialog still shows it while it animates away.
+    final trimmed = name?.trim() ?? '';
+    if (trimmed.isEmpty || trimmed == entry.name) return;
+    await _run(() => widget.library.rename(entry.id, trimmed));
+  }
+
+  Future<void> _delete(LibraryEntry entry) async {
+    final confirmed = await showCvDialog<bool>(
+      context: context,
+      title: 'Delete ${entry.name}?',
+      icon: Lucide.trash2,
+      tone: CvTone.danger,
+      body: const Text('It leaves your library. Scenes already using it '
+          'keep it.'),
+      actions: (context) => [
+        CvButton(
+            label: 'Cancel',
+            variant: CvButtonVariant.ghost,
+            onPressed: () => Navigator.pop(context, false)),
+        CvButton(
+            label: 'Delete',
+            variant: CvButtonVariant.danger,
+            onPressed: () => Navigator.pop(context, true)),
+      ],
+    );
+    if (confirmed ?? false) await _run(() => widget.library.delete(entry.id));
+  }
+
+  Future<void> _run(Future<void> Function() change) async {
+    try {
+      await change();
+      await _load();
+    } on Object catch (e) {
+      if (mounted) setState(() => _error = '$e');
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -163,7 +233,17 @@ class _LibraryPanelState extends State<LibraryPanel> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           spacing: 10,
           children: [
-            CvOverline(widget.title),
+            Row(children: [
+              Expanded(child: CvOverline(widget.title)),
+              if (entries?.isNotEmpty ?? false)
+                CvToolButton(
+                  icon: _editing ? Lucide.check : Lucide.pencil,
+                  label: _editing ? 'Done' : 'Rename or delete',
+                  active: _editing,
+                  tooltipSide: AxisDirection.up,
+                  onPressed: () => setState(() => _editing = !_editing),
+                ),
+            ]),
             if (_error case final error?)
               Text(error,
                   style: CvTypography.caption.copyWith(color: CvColors.ember400))
@@ -180,8 +260,8 @@ class _LibraryPanelState extends State<LibraryPanel> {
                   child: Wrap(spacing: 8, runSpacing: 8, children: [
                     for (final e in entries)
                       CvPressable(
-                        onTap: () => widget.onPick(e),
-                        label: e.name,
+                        onTap: () => _editing ? _rename(e) : widget.onPick(e),
+                        label: _editing ? 'Rename ${e.name}' : e.name,
                         builder: (s) => SizedBox(
                           width: 80,
                           child: Column(spacing: 4, children: [
@@ -197,7 +277,28 @@ class _LibraryPanelState extends State<LibraryPanel> {
                                           ? CvColors.amber500
                                           : CvColors.borderSubtle),
                                 ),
-                                child: LibraryThumb(assets: widget.assets, entry: e),
+                                child: Stack(fit: StackFit.expand, children: [
+                                  LibraryThumb(assets: widget.assets, entry: e),
+                                  if (_editing)
+                                    Positioned(
+                                      right: 2,
+                                      top: 2,
+                                      child: DecoratedBox(
+                                        decoration: BoxDecoration(
+                                          color: CvColors.surfacePanelSolid,
+                                          borderRadius:
+                                              BorderRadius.circular(CvRadii.md),
+                                        ),
+                                        child: CvToolButton(
+                                          icon: Lucide.trash2,
+                                          label: 'Delete ${e.name}',
+                                          danger: true,
+                                          tooltipSide: AxisDirection.up,
+                                          onPressed: () => _delete(e),
+                                        ),
+                                      ),
+                                    ),
+                                ]),
                               ),
                             ),
                             Text(e.name,
