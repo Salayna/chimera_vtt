@@ -909,6 +909,106 @@ class YourTokens extends StatelessWidget {
       );
 }
 
+enum _TokenAction { sheet, image, hide, show, duplicate, remove }
+
+/// A right-clicked token's menu, at the click: what the token card does,
+/// with its keys. The [gm] may change the token; anyone may open the sheet
+/// of a character they own, the GM any. Fill the table's stack with it.
+class TokenMenuLayer extends StatelessWidget {
+  const TokenMenuLayer({
+    super.key,
+    required this.store,
+    required this.controller,
+    required this.send,
+    this.gm = false,
+    this.self,
+    this.onOpenSheet,
+    this.onSetImage,
+    this.onDuplicate,
+    this.onRemove,
+  });
+
+  final SceneStore store;
+  final TableController controller;
+  final Outcome Function(Command) send;
+  final bool gm;
+  final PlayerId? self;
+  final ValueChanged<CharacterId>? onOpenSheet;
+  final void Function(TokenId)? onSetImage;
+  final void Function(TokenId)? onDuplicate;
+  final void Function(TokenId)? onRemove;
+
+  static const width = 220.0;
+
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder(
+        valueListenable: controller.tokenMenu,
+        builder: (context, menu, _) {
+          final scene = store.scene;
+          final token = scene.tokens[menu?.id];
+          if (menu == null || token == null) return const SizedBox.shrink();
+          final character = scene.characters[token.character];
+          final entries = <CvMenuEntry<_TokenAction>>[
+            if (character != null &&
+                onOpenSheet != null &&
+                (gm || character.owner == self))
+              const CvMenuItem(_TokenAction.sheet, 'Open sheet'),
+            if (gm) ...[
+              if (onSetImage != null)
+                const CvMenuItem(_TokenAction.image, 'Set image'),
+              token.hidden
+                  ? const CvMenuItem(_TokenAction.show, 'Show to players')
+                  : const CvMenuItem(_TokenAction.hide, 'Hide from players'),
+              if (onDuplicate != null)
+                const CvMenuItem(_TokenAction.duplicate, 'Duplicate',
+                    shortcut: 'D'),
+              if (onRemove != null) ...[
+                const CvMenuDivider(),
+                const CvMenuItem(_TokenAction.remove, 'Remove',
+                    shortcut: '⌫', danger: true),
+              ],
+            ],
+          ];
+          if (entries.isEmpty) return const SizedBox.shrink();
+          void close() => controller.tokenMenu.value = null;
+          void run(_TokenAction action) {
+            close();
+            switch (action) {
+              case _TokenAction.sheet:
+                onOpenSheet!(character!.id);
+              case _TokenAction.image:
+                onSetImage!(token.id);
+              case _TokenAction.hide || _TokenAction.show:
+                send(SetTokenHidden(token.id, action == _TokenAction.hide));
+              case _TokenAction.duplicate:
+                onDuplicate!(token.id);
+              case _TokenAction.remove:
+                onRemove!(token.id);
+            }
+          }
+
+          return LayoutBuilder(builder: (context, constraints) {
+            const pad = CvSizes.insetScreen;
+            final view = constraints.biggest;
+            final height = CvMenu.heightOf(entries);
+            return Stack(children: [
+              Positioned(
+                left: math.min(menu.at.dx, view.width - pad - width),
+                top: math.min(menu.at.dy, view.height - pad - height),
+                child: TapRegion(
+                  onTapOutside: (_) => close(),
+                  child: CvPopIn(
+                    child: CvMenu<_TokenAction>(
+                        width: width, entries: entries, onSelected: run),
+                  ),
+                ),
+              ),
+            ]);
+          });
+        },
+      );
+}
+
 /// The selected token's card, floating beside it: conditions and, for the
 /// GM, owner, hidden, remove. Fill the table's stack with it; it follows the
 /// token as the view moves.
@@ -1406,6 +1506,7 @@ class TableShortcuts extends StatelessWidget {
             onPalette?.call(),
         const SingleActivator(LogicalKeyboardKey.escape): () {
           onEscape?.call();
+          c.tokenMenu.value = null;
           c.selected.value = null;
           c.tool = Tool.move;
           c.align.value = null;

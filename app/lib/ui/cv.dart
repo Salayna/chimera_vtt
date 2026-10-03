@@ -1095,11 +1095,18 @@ sealed class CvMenuEntry<T> {
 }
 
 class CvMenuItem<T> extends CvMenuEntry<T> {
-  const CvMenuItem(this.value, this.label, {this.leading});
+  const CvMenuItem(this.value, this.label,
+      {this.leading, this.shortcut, this.danger = false});
 
   final T value;
   final String label;
   final Widget? leading;
+
+  /// Its key, shown at the end of the row.
+  final String? shortcut;
+
+  /// Undoes something: removing, deleting.
+  final bool danger;
 }
 
 class CvMenuDivider<T> extends CvMenuEntry<T> {
@@ -1435,7 +1442,13 @@ class _CvMenuState<T> extends State<CvMenu<T>> {
                 CvMenuHeading(:final text) => Padding(
                     padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
                     child: CvOverline(text)),
-                CvMenuItem(:final value, :final label, :final leading) =>
+                CvMenuItem(
+                  :final value,
+                  :final label,
+                  :final leading,
+                  :final shortcut,
+                  :final danger
+                ) =>
                   CvPressable(
                     onTap: () => widget.onSelected(value),
                     label: label,
@@ -1458,10 +1471,13 @@ class _CvMenuState<T> extends State<CvMenu<T>> {
                           child: Text(label,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: value == widget.value
-                                  ? CvTypography.weight(CvTypography.body, 500)
-                                  : CvTypography.body),
+                              style: (value == widget.value
+                                      ? CvTypography.weight(CvTypography.body, 500)
+                                      : CvTypography.body)
+                                  .copyWith(
+                                      color: danger ? CvColors.ember400 : null)),
                         ),
+                        if (shortcut case final keys?) CvKbd(keys),
                       ]),
                     ),
                   ),

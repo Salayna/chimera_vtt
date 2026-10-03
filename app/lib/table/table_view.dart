@@ -38,6 +38,9 @@ class TableController extends ChangeNotifier {
   final align = ValueNotifier<GridAlign?>(null);
   final selected = ValueNotifier<TokenId?>(null);
 
+  /// The token right-clicked, and where on screen: its menu is open.
+  final tokenMenu = ValueNotifier<({TokenId id, Offset at})?>(null);
+
   /// The region being drawn with [Tool.region], corner to corner.
   final regionDraft = ValueNotifier<(Point, Point)?>(null);
 
@@ -167,6 +170,7 @@ class TableController extends ChangeNotifier {
     gridFit.dispose();
     align.dispose();
     selected.dispose();
+    tokenMenu.dispose();
     regionDraft.dispose();
     selectedRegion.dispose();
     pings.dispose();
@@ -251,6 +255,9 @@ class _TableViewState extends State<TableView>
   Offset? _grab;
   bool _panning = false;
   Offset? _downAt;
+
+  /// The token under a right-click, whose menu opens if it isn't a drag.
+  TokenId? _menuToken;
   bool _moved = false;
   Offset? _fogStart;
 
@@ -522,6 +529,8 @@ class _TableViewState extends State<TableView>
     final p = _toScene(e.localPosition);
     _downAt = e.localPosition;
     _moved = false;
+    _c.tokenMenu.value = null;
+    _menuToken = e.buttons == kSecondaryButton ? _tokenAt(p)?.id : null;
     // Players have no buttons for the GM's tools.
     final tool = _c.tool;
     if (e.buttons != kPrimaryButton || tool == Tool.move) {
@@ -614,7 +623,9 @@ class _TableViewState extends State<TableView>
     // its shortcuts again. On release: a text field being left unfocuses on
     // the press, which would undo this.
     Focus.maybeOf(context)?.requestFocus();
-    if (_c.drag.value case (:final id, :final position)) {
+    if (_menuToken case final id? when send && !_moved) {
+      _c.tokenMenu.value = (id: id, at: _downAt!);
+    } else if (_c.drag.value case (:final id, :final position)) {
       if (send && _moved) {
         final Point to = (x: position.dx, y: position.dy);
         final token = _scene.tokens[id];
@@ -656,6 +667,7 @@ class _TableViewState extends State<TableView>
     _regionStart = null;
     _c.regionDraft.value = null;
     _panning = false;
+    _menuToken = null;
     _downAt = null;
     _fogStart = null;
     _strokePoints = [];

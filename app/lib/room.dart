@@ -1381,6 +1381,19 @@ class _GmRoomState extends State<GmRoom> {
           ),
         ),
         Positioned.fill(
+          child: TokenMenuLayer(
+            store: host.store,
+            controller: _controller,
+            send: host.execute,
+            gm: true,
+            self: widget.me,
+            onOpenSheet: (id) => setState(() => _sheet = id),
+            onSetImage: (id) => _openTokens(forToken: id),
+            onDuplicate: _duplicateToken,
+            onRemove: _removeToken,
+          ),
+        ),
+        Positioned.fill(
           child: GridAlignLayer(
             controller: _controller,
             onDone: (grid) => host.execute(UpdateSettings(
@@ -1773,6 +1786,15 @@ class _PlayerRoomState extends State<PlayerRoom> {
             controller: _controller,
             send: session.request,
             gm: false,
+            self: widget.me,
+            onOpenSheet: (id) => setState(() => _sheet = id),
+          ),
+        ),
+        Positioned.fill(
+          child: TokenMenuLayer(
+            store: store,
+            controller: _controller,
+            send: session.request,
             self: widget.me,
             onOpenSheet: (id) => setState(() => _sheet = id),
           ),
