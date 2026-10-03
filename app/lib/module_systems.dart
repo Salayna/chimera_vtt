@@ -123,10 +123,14 @@ Widget _hint(String text) =>
 
 /// Sheet fields: each one's name, label, type and what its type needs.
 class _FieldsEditor extends StatelessWidget {
-  const _FieldsEditor({required this.fields, required this.change, this.kinds = const []});
+  const _FieldsEditor(
+      {required this.fields, required this.change, this.kinds = const [], this.onRename});
 
   final List<Object?> fields;
   final _Change change;
+
+  /// Told when a field is renamed, from and to.
+  final void Function(Object? from, Object? to)? onRename;
 
   /// The compendium's kinds, for items fields; none for a kind's own.
   final List<String> kinds;
@@ -144,9 +148,18 @@ class _FieldsEditor extends StatelessWidget {
               children: [
                 Row(crossAxisAlignment: CrossAxisAlignment.start, spacing: 8, children: [
                   SizedBox(
-                      width: 150,
-                      child: _JsonField(f, 'name',
-                          change: change, placeholder: 'Name: DEX.mod', text: true, maxLength: 30)),
+                    width: 150,
+                    child: _Field(
+                      value: _show(f['name']),
+                      placeholder: 'Name: DEX.mod',
+                      maxLength: 30,
+                      onChanged: (v) => change(() {
+                        final from = f['name'];
+                        _put(f, 'name', v, text: true);
+                        onRename?.call(from, f['name']);
+                      }),
+                    ),
+                  ),
                   SizedBox(
                       width: 170,
                       child: _JsonField(f, 'label',
@@ -474,7 +487,20 @@ class _CompendiumTabState extends State<_CompendiumTab> {
                   const CvOverline('Fields'),
                   _hint('What each entry fills in, and trackers each item keeps: ammo, '
                       'at most capacity.'),
-                  _FieldsEditor(fields: _listAt(kind, 'fields'), change: change),
+                  _FieldsEditor(
+                    fields: _listAt(kind, 'fields'),
+                    change: change,
+                    // Its entries' values follow the field.
+                    onRename: (from, to) {
+                      for (final e in entries.cast<Json>()) {
+                        final values = e['values'];
+                        if (e['kind'] == kind['name'] && values is Map && values.containsKey(from)) {
+                          final v = values.remove(from);
+                          if (to != null) values[to] = v;
+                        }
+                      }
+                    },
+                  ),
                   const CvOverline('Actions'),
                   _hint('Buttons every item of the kind has: Reload.'),
                   _ActionsEditor(actions: _listAt(kind, 'actions'), change: change),

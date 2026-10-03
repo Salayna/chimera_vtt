@@ -36,6 +36,7 @@ final class FieldDef {
     this.options = const [],
     this.formula,
     this.kind,
+    this.was = const [],
   }) : label = label ?? name;
 
   final String name;
@@ -68,6 +69,10 @@ final class FieldDef {
   /// An items field's compendium kind.
   final String? kind;
 
+  /// Its former names: a character saved before the module renamed it
+  /// keeps its value.
+  final List<String> was;
+
   Json toJson() => {
         'name': name,
         if (label != name) 'label': label,
@@ -79,6 +84,7 @@ final class FieldDef {
         if (options.isNotEmpty) 'options': options,
         if (formula != null) 'formula': formula!.text,
         if (kind != null) 'kind': kind,
+        if (was.isNotEmpty) 'was': was,
       };
 
   factory FieldDef.fromJson(Json json) {
@@ -129,6 +135,7 @@ final class FieldDef {
               '$name formula')
           : null,
       kind: type == FieldType.items ? _text(json['kind'], '$name kind', 30) : null,
+      was: _was(json['was'], name),
     );
   }
 }
@@ -161,6 +168,11 @@ final class SheetDef {
         if (f.type == FieldType.tracker) ...['${f.name}.min', '${f.name}.max'],
       ]) {
         if (!seen.add(n)) throw FormatException('Two fields are called "$n"');
+      }
+    }
+    for (final f in fields) {
+      for (final w in f.was) {
+        if (seen.contains(w)) throw FormatException('${f.name} was "$w", which is still a field');
       }
     }
     for (final f in fields) {
@@ -308,7 +320,8 @@ final class SheetDef {
   /// Sheets come from players, so everything read is cleaned first.
   Map<String, Object> clean(Map<String, Object?> values) => {
         for (final f in fields)
-          if (values[f.name] case final v?) f.name: ?_clean(f, v),
+          if (values[f.name] ?? f.was.map((w) => values[w]).nonNulls.firstOrNull case final v?)
+            f.name: ?_clean(f, v),
       };
 
   Object? _clean(FieldDef f, Object v) => switch (f.type) {
@@ -438,7 +451,10 @@ final class SheetValues {
 /// kind's fields, and a card. A character's item is a copy of one.
 final class Entry {
   const Entry(this.kind, this.name,
-      {this.values = const {}, this.card = const [], this.actions = const []});
+      {this.values = const {},
+      this.card = const [],
+      this.actions = const [],
+      this.was = const []});
 
   final String kind;
   final String name;
@@ -448,12 +464,16 @@ final class Entry {
   /// Its own buttons, beside its kind's: a weapon's attack profiles.
   final List<ActionDef> actions;
 
+  /// Its former names, which items copied from it may still carry.
+  final List<String> was;
+
   Json toJson() => {
         'kind': kind,
         'name': name,
         if (values.isNotEmpty) 'values': values,
         if (card.isNotEmpty) 'card': _cardJson(card),
         if (actions.isNotEmpty) 'actions': _actionsJson(actions),
+        if (was.isNotEmpty) 'was': was,
       };
 }
 
@@ -461,8 +481,21 @@ final class Entry {
 /// sheet's: data (a weapon's AP cost) and trackers (its ammo, at most its
 /// `capacity`). Kinds can't read items.
 final class Compendium {
-  Compendium(this.kinds, List<Entry> entries)
+  Compendium(this.kinds, List<Entry> entries, {this.kindsWere = const {}})
       : entries = {for (final e in entries) e.name: e};
+
+  /// Each kind's former names, by kind.
+  final Map<String, List<String>> kindsWere;
+
+  /// The kind or entry an item names now: its own, or the one it was
+  /// renamed to.
+  String kindNow(String kind) => kinds.containsKey(kind)
+      ? kind
+      : kindsWere.entries.where((e) => e.value.contains(kind)).firstOrNull?.key ?? kind;
+
+  String entryNow(String name) => entries.containsKey(name)
+      ? name
+      : entries.values.where((e) => e.was.contains(name)).firstOrNull?.name ?? name;
 
   static const maxKinds = 20;
   static const maxEntries = 1000;
@@ -486,6 +519,7 @@ final class Compendium {
               'name': name,
               'fields': [for (final f in sheet.fields) f.toJson()],
               if (sheet.actions.isNotEmpty) 'actions': _actionsJson(sheet.actions),
+              if (kindsWere[name] case final was? when was.isNotEmpty) 'was': was,
             },
         ],
         'entries': [for (final e in entries.values) e.toJson()],
@@ -493,8 +527,10 @@ final class Compendium {
 
   factory Compendium.fromJson(Json json) {
     final kinds = <String, SheetDef>{};
+    final kindsWere = <String, List<String>>{};
     for (final k in _list(json['kinds'], 'compendium kinds', maxKinds)) {
       final name = _text((k as Json)['name'], 'kind name', 30);
+      kindsWere[name] = _was(k['was'], name);
       if (kinds.containsKey(name)) throw FormatException('Two kinds are called "$name"');
       kinds[name] = SheetDef.fromJson({
         'sections': [
@@ -515,14 +551,25 @@ final class Compendium {
           key as String: value as Object,
       };
       final clean = sheet.clean(values);
-      for (final key in values.keys) {
-        if (clean[key] != values[key]) throw FormatException('$name: not a value for "$key"');
+      for (final MapEntry(:key, :value) in values.entries) {
+        // A value may still be under a field's former name.
+        final field = sheet.fields.where((f) => f.name == key || f.was.contains(key)).firstOrNull;
+        if (field == null || clean[field.name] != value) {
+          throw FormatException('$name: not a value for "$key"');
+        }
       }
       entries.add(Entry(kind, name,
           values: clean,
           card: _cardFromJson(e['card'], 10),
-          actions: _actionsFromJson(e['actions'])));
+          actions: _actionsFromJson(e['actions']),
+          was: _was(e['was'], name)));
     }
-    return Compendium(kinds, entries);
+    return Compendium(kinds, entries, kindsWere: kindsWere);
   }
 }
+
+/// Former names: up to 5, each a name it no longer has.
+List<String> _was(Object? json, String name) => [
+      for (final w in _list(json, '$name was', 5))
+        if (_text(w, '$name was', 60) != name) w as String,
+    ];

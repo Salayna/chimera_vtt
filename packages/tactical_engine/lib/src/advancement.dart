@@ -15,9 +15,13 @@ final class AdvancementNode {
     this.items = const [],
     this.x,
     this.y,
+    this.was = const [],
   });
 
   final String name;
+
+  /// Its former names, which characters who took it may still carry.
+  final List<String> was;
   final String text;
 
   /// What it counts as: `count("Archetype")` counts taken nodes of a group
@@ -60,6 +64,7 @@ final class AdvancementNode {
         if (items.isNotEmpty) 'items': items,
         if (x != null) 'x': x,
         if (y != null) 'y': y,
+        if (was.isNotEmpty) 'was': was,
       };
 
   factory AdvancementNode.fromJson(Json json) {
@@ -95,6 +100,7 @@ final class AdvancementNode {
       items: names('items'),
       x: at('x')?.toDouble(),
       y: at('y')?.toDouble(),
+      was: _was(json['was'], name),
     );
   }
 }
@@ -116,6 +122,11 @@ final class Advancement {
 
   /// By name, in the file's order.
   final Map<String, AdvancementNode> nodes;
+
+  /// The node [name] is now: itself, or the one it was renamed to.
+  String nodeNow(String name) => nodes.containsKey(name)
+      ? name
+      : nodes.values.where((n) => n.was.contains(name)).firstOrNull?.name ?? name;
 
   /// The groups nodes count as, for `count`.
   Set<String> get groups => {for (final n in nodes.values) ?n.group};

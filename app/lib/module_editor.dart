@@ -43,7 +43,55 @@ class ModuleDraft {
         forms = _jsonList(base?.toJson()['forms']),
         sheet = _copy(base?.sheet?.toJson()),
         compendium = _copy(base?.compendium?.toJson()),
-        advancement = _copy(base?.advancement?.toJson());
+        advancement = _copy(base?.advancement?.toJson()) {
+    // Each named row remembers the name it came with, so renaming it
+    // records its former name for characters who still carry it.
+    for (final row in _named()) {
+      row[_loaded] = row['name'];
+    }
+  }
+
+  static const _loaded = r'$name';
+
+  /// The rows characters keep by name: sheet and kind fields, kinds,
+  /// entries and nodes.
+  Iterable<Json> _named() sync* {
+    Iterable<Json> rows(Object? list) => (list as List? ?? const []).whereType<Json>();
+    for (final s in rows(sheet?['sections'])) {
+      yield* rows(s['fields']);
+    }
+    for (final k in rows(compendium?['kinds'])) {
+      yield k;
+      yield* rows(k['fields']);
+    }
+    yield* rows(compendium?['entries']);
+    yield* rows(advancement?['nodes']);
+  }
+
+  /// The draft's JSON as the format has it: a renamed row's former name in
+  /// its `was`, the editor's own marks gone.
+  Json? _saved(Json? json) {
+    if (json == null) return null;
+    for (final row in _named()) {
+      final from = row[_loaded];
+      if (from is String && from.isNotEmpty && from != row['name']) {
+        final was = [for (final w in row['was'] as List? ?? const []) '$w'];
+        if (!was.contains(from)) row['was'] = [...was, from].reversed.take(5).toList().reversed.toList();
+      }
+    }
+    final copy = _copy(json)!;
+    void strip(Object? node) {
+      if (node is Map) {
+        node.remove(_loaded);
+        node.values.forEach(strip);
+      } else if (node is List) {
+        node.forEach(strip);
+      }
+    }
+
+    strip(copy);
+    return copy;
+  }
 
   /// A mutable copy of [json], which the editor changes in place.
   static Json? _copy(Json? json) =>
@@ -136,9 +184,9 @@ class ModuleDraft {
       'forms': forms,
       'tokens': [for (final t in tokens) t.toJson()],
       'tags': [for (final t in tags) t.toJson()],
-      'sheet': ?sheet,
-      'compendium': ?compendium,
-      'advancement': ?advancement,
+      'sheet': ?_saved(sheet),
+      'compendium': ?_saved(compendium),
+      'advancement': ?_saved(advancement),
     });
   }
 }

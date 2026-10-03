@@ -99,6 +99,10 @@ A sheet is sections of fields. Each field has a `name` that formulas read (lette
 
 Formulas are those of [SYSTEMS.md](SYSTEMS.md): they read the sheet's names, never roll dice, and a field can't depend on itself. A bad sheet refuses the whole pack with the reason. Limits: 20 sections, 200 fields.
 
+### Former names
+
+A field, a kind, an entry or a node can list up to 5 former names in `was`: `{"name": "finesse", "was": ["FIN"]}`. A character saved under an earlier version keeps what it had under a former name (a value, an item's kind or entry, a taken node), read under the new one. The editor adds them when one is renamed. A former name can't be another field's name.
+
 ### Compendium
 
 ```json

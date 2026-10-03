@@ -74,18 +74,32 @@ class SavedCharacters {
       _client.from('characters').delete().eq('id', id.value);
 }
 
-/// [c] with its values cleaned against its system's sheet, and its items'
-/// against their kinds, as anything read from the table is: sheets come
-/// from players. Items of a kind the system lacks are kept as they are.
+/// [c] as its system reads it now, as anything read from the table is,
+/// since sheets come from players: values cleaned against the sheet, items
+/// against their kinds, and what the module renamed since (fields, kinds,
+/// entries, nodes) under its new name, so a character outlives a module's
+/// update. Items of a kind the system lacks are kept as they are.
 Character cleaned(Character c, SystemPack? system) {
   final sheet = system?.sheet;
   if (sheet == null) return c;
-  final kinds = system!.compendium?.kinds ?? const {};
+  final compendium = system!.compendium;
+  final advancement = system.advancement;
   return c.copyWith(
     values: sheet.clean(c.values),
     items: [
       for (final i in c.items)
-        if (kinds[i.kind] case final kind?) i.withValues(kind.clean(i.values)) else i,
+        switch (compendium?.kinds[compendium.kindNow(i.kind)]) {
+          final kind? => Item(
+              id: i.id,
+              kind: compendium!.kindNow(i.kind),
+              name: compendium.entryNow(i.name),
+              values: kind.clean(i.values),
+              card: i.card),
+          null => i,
+        },
+    ],
+    nodes: [
+      for (final n in c.nodes) advancement?.nodeNow(n) ?? n,
     ],
   );
 }
