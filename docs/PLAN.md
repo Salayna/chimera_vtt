@@ -15,13 +15,14 @@ Chimera VTT is one Flutter app for desktop, web and phones, used by GMs and play
 7. [Campaigns (proposal)](#campaigns-proposal)
 8. [Tactical engine](#tactical-engine)
 9. [Customization: tiered scripting](#customization-tiered-scripting)
-10. [Web constraints](#web-constraints)
-11. [Proof of concept](#proof-of-concept)
-12. [Roadmap](#roadmap)
-13. [Architecture decision records](#architecture-decision-records)
-14. [Risks and fallbacks](#risks-and-fallbacks)
-15. [Repository review](#repository-review)
-16. [Open questions](#open-questions)
+10. [System building (proposal)](#system-building-proposal)
+11. [Web constraints](#web-constraints)
+12. [Proof of concept](#proof-of-concept)
+13. [Roadmap](#roadmap)
+14. [Architecture decision records](#architecture-decision-records)
+15. [Risks and fallbacks](#risks-and-fallbacks)
+16. [Repository review](#repository-review)
+17. [Open questions](#open-questions)
 
 ---
 
@@ -337,6 +338,12 @@ Proposal: three levels, each used only when the one below falls short.
 3. **Event hooks that return commands**, such as `on_enter_region`, `on_turn_start` and `on_hit`. A hook never changes state itself. It returns commands that go through the same checks and reducer as a player's click, with a step limit per call.
 
 A full scripting language (for example Lua) would come only if real packs outgrow level 3. It lives in the tactical engine, not in `chimera_core`. It is proposed as ADR 013 and is not yet in the decision log.
+
+---
+
+## System building (proposal)
+
+Proposed 2026-10-03: modules bring a system's character sheets, compendium, items as cards, actions and advancement, so a campaign plays like its game. See [SYSTEMS.md](SYSTEMS.md).
 
 ---
 

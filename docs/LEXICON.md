@@ -23,7 +23,7 @@ One word, one meaning. When code, docs and conversation disagree, this file wins
 | **Player** | `Player` | Anyone at the table who isn't the GM. Sees a filtered copy of the scene. |
 | **Campaign** | `Campaign` | Everything one group plays with: scenes, its system, assets and members. Owned by one signed-in GM. Every scene in it plays with its system. |
 | **Member** | — | A player who has entered a campaign's room at least once, with the name and colour they chose. Signed in or anonymous. The GM can remove one. A token's owner is a member. |
-| **Home** | `GmHome` | A signed-in GM's screen outside any room: their campaigns, their library, and joining someone else's room as a player. Signed out, the lobby shows sign-in and joining instead. |
+| **Home** | `GmHome` | A signed-in user's screen outside any room: their campaigns, their library, their characters (planned), and joining someone else's room as a player. Signed out, the lobby shows sign-in and joining instead. |
 | **Scene** | `Scene` | One map and everything on it. A set of entities keyed by id. |
 | **Map** | — | The background image of a scene. It's an asset, referenced from the scene settings. |
 | **Library** | — | A GM's maps, token pictures and scenes, shared by all their campaigns, each named and picked instead of made again. A library scene is a template: campaigns get a copy. |
@@ -116,7 +116,7 @@ Otherwise it's a field of some entity.
 | Term | Code | Meaning |
 | --- | --- | --- |
 | **Tactical engine** | `tactical_engine` | The pure-Dart rules package: topology, regions, measurement, sight and tag effects. It knows no game system. |
-| **System pack** | `SystemPack` | A module defining a game system: its units, range bands, conditions and region tags with their effects, initiative and trackers, and the ready-made tokens it brings. JSON in the format of [PACKS.md](PACKS.md). A campaign names the one it's played with, and each scene carries it. |
+| **System pack** | `SystemPack` | A module defining a game system: its units, range bands, conditions and region tags with their effects, initiative and trackers, and the ready-made tokens it brings. JSON in the format of [PACKS.md](PACKS.md); what more it will bring is in [SYSTEMS.md](SYSTEMS.md). A campaign names the one it's played with, and each scene carries it. |
 | **Module** | `SystemPack`, `ModuleEditor` | What the GM makes, installs and shares: a system pack with its images (token pictures, card art, cover). Made in the app or installed from a file. |
 | **Module bundle** | `.chimera`, `ModuleBundle` | A module as one file: a zip of `module.json` and its images, each named by its SHA-256. |
 | **Installed pack** | `InstalledPacks`, `packs` | A pack a GM added from a file (a pack file or an Atlas preset) to their account, for all their campaigns. Listed on the hub's Systems page and in the Grid panel's System menu. |
@@ -139,6 +139,14 @@ Otherwise it's a field of some entity.
 | **Initiative** | `Initiative` | The turn order while a fight is on: a single-instance entity listing tokens from highest value to lowest, the round, and whose turn it is. The GM rolls the pack's formula for everyone on the map. Players don't see hidden tokens in it, nor their turns. |
 | **Turn** | `Initiative.current`, `EndTurn` | One token's go. Ending it passes to the next in the order, and after the last a new **round** starts. |
 | **Precise movement** | — | Solaris' option to use exact positions inside sectors. |
+| **Character** | `Character` (planned) | A player's character, made on their home for one system and owned by them. Linked to campaigns of that system, and to a token in the room. Holds a sheet. |
+| **Sheet** | `SheetDef` (planned) | What a pack says a character holds: sections of fields, computed fields and trackers. A character's sheet is its values. |
+| **Formula** | `Formula` (planned) | An expression in a pack, read at install, never compiled into the app: `END + WIL + threatLevel`. No loops or side effects; dice from the GM's roller. Level 2 of the tiered scripting. |
+| **Compendium** | — (planned) | A pack's entries, grouped in kinds. |
+| **Entry** | `Entry` (planned) | One thing in a compendium, such as a weapon or a talent, with the fields, trackers and card its kind declares. Pack tokens become entries of a Threat kind. |
+| **Item** | — (planned) | A character's own copy of an entry, shown as a card with its own tracker values (a rifle with 4 of 6 shots). |
+| **Action** | `ActionDef` (planned) | A button on a sheet or item card: a cost, a roll and outcome bands. It logs the band and its text and changes nothing on the target; the target's owner applies the damage. |
+| **Advancement** | — (planned) | A pack's graph of nodes a character unlocks: each with a cost, requirements and what it grants. D&D's levels are a chain; Solaris' Constellation a graph. |
 
 ## Project
 
