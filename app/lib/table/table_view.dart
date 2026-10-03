@@ -13,7 +13,7 @@ import 'fog_mask.dart';
 import 'layers.dart';
 
 /// Move, ruler and ping are everyone's; the rest are the GM's.
-enum Tool { move, ruler, ping, fogBrush, fogRect, gridFit, region }
+enum Tool { move, ruler, ping, fogBrush, fogRect, fogErase, gridFit, region }
 
 /// The view's fast-changing state, outside the widget tree so it can change
 /// every frame without rebuilds. Owned by whoever creates it. Notifies when
@@ -22,6 +22,12 @@ class TableController extends ChangeNotifier {
   final view = ValueNotifier<Matrix4>(Matrix4.identity());
   final drag = ValueNotifier<TokenDrag?>(null);
   final fogPreview = ValueNotifier<FogPreview?>(null);
+
+  /// Where the fog brush would paint, under the pointer, before a press.
+  final fogCursor = ValueNotifier<Point?>(null);
+
+  /// The fog op a click would erase, under the pointer.
+  final fogHover = ValueNotifier<FogOpId?>(null);
 
   /// The grid fitted to the box being drawn with [Tool.gridFit].
   final gridFit = ValueNotifier<Grid?>(null);
@@ -57,6 +63,8 @@ class TableController extends ChangeNotifier {
   set tool(Tool value) => _set(() {
         _tool = value;
         if (value != Tool.region) selectedRegion.value = null;
+        if (value != Tool.fogBrush) fogCursor.value = null;
+        if (value != Tool.fogErase) fogHover.value = null;
       });
 
   /// Dropped tokens snap to the grid. Holding Alt places one freely.
@@ -65,7 +73,8 @@ class TableController extends ChangeNotifier {
   set snap(bool value) => _set(() => _snap = value);
 
   FogMode get fogMode => _fogMode;
-  FogMode _fogMode = FogMode.cover;
+  // Reveal first: the usual way is to hide the whole map, then open it up.
+  FogMode _fogMode = FogMode.reveal;
   set fogMode(FogMode value) => _set(() => _fogMode = value);
 
   /// The GM's grid panel is open. Closing it puts away the fit tool.
@@ -79,6 +88,12 @@ class TableController extends ChangeNotifier {
   double get brushRadius => _brushRadius;
   double _brushRadius = 48;
   set brushRadius(double value) => _set(() => _brushRadius = value);
+
+  /// The brush's size, in cells across, from 1 to 8.
+  int brushCells(double cellSize) =>
+      (brushRadius * 2 / cellSize).round().clamp(1, 8);
+  void setBrushCells(int cells, double cellSize) =>
+      brushRadius = cells.clamp(1, 8) * cellSize / 2;
 
   void _set(void Function() change) {
     change();
@@ -139,6 +154,8 @@ class TableController extends ChangeNotifier {
     view.dispose();
     drag.dispose();
     fogPreview.dispose();
+    fogCursor.dispose();
+    fogHover.dispose();
     gridFit.dispose();
     selected.dispose();
     regionDraft.dispose();
@@ -227,6 +244,10 @@ class _TableViewState extends State<TableView>
   Offset? _downAt;
   bool _moved = false;
   Offset? _fogStart;
+
+  /// The mode of the fog being drawn: the panel's, or its opposite with
+  /// Shift held at the press.
+  FogMode _fogDrawMode = FogMode.cover;
   Offset? _fitStart;
   Offset? _regionStart;
   List<Point> _strokePoints = [];
@@ -385,6 +406,10 @@ class _TableViewState extends State<TableView>
               mask: _mask,
               revision: _fogRevision,
               preview: _c.fogPreview,
+              cursor: widget.gm ? _c.fogCursor : null,
+              erasing: widget.gm ? _c.fogHover : null,
+              ops: _scene.fogOps,
+              brush: (radius: _c.brushRadius, mode: _c.fogMode),
               gm: widget.gm,
               naiveOps: FogPainter.naive ? _scene.fogInOrder : null,
               naiveRepaint: FogPainter.naive ? _c.drag : null,
@@ -441,26 +466,40 @@ class _TableViewState extends State<TableView>
         });
       }
       return ClipRect(
-        child: Listener(
-          behavior: HitTestBehavior.opaque,
-          onPointerDown: _down,
-          onPointerMove: _move,
-          onPointerUp: (_) => _up(send: true),
-          onPointerCancel: (_) => _up(send: false),
-          onPointerSignal: _signal,
-          onPointerPanZoomStart: (_) => _lastPanZoomScale = 1,
-          onPointerPanZoomUpdate: _panZoom,
-          child: ValueListenableBuilder(
-            valueListenable: _c.view,
-            builder: (context, matrix, child) =>
-                Transform(transform: matrix, child: child),
-            child: OverflowBox(
-              alignment: Alignment.topLeft,
-              minWidth: 0,
-              minHeight: 0,
-              maxWidth: double.infinity,
-              maxHeight: double.infinity,
-              child: layers,
+        child: MouseRegion(
+          onExit: (_) {
+            _c.fogCursor.value = null;
+            _c.fogHover.value = null;
+          },
+          child: Listener(
+            behavior: HitTestBehavior.opaque,
+            onPointerDown: _down,
+            onPointerMove: _move,
+            onPointerHover: (e) {
+              final p = _toScene(e.localPosition);
+              if (_c.tool == Tool.fogBrush) {
+                _c.fogCursor.value = (x: p.dx, y: p.dy);
+              } else if (_c.tool == Tool.fogErase) {
+                _c.fogHover.value = _fogOpAt(p)?.id;
+              }
+            },
+            onPointerUp: (_) => _up(send: true),
+            onPointerCancel: (_) => _up(send: false),
+            onPointerSignal: _signal,
+            onPointerPanZoomStart: (_) => _lastPanZoomScale = 1,
+            onPointerPanZoomUpdate: _panZoom,
+            child: ValueListenableBuilder(
+              valueListenable: _c.view,
+              builder: (context, matrix, child) =>
+                  Transform(transform: matrix, child: child),
+              child: OverflowBox(
+                alignment: Alignment.topLeft,
+                minWidth: 0,
+                minHeight: 0,
+                maxWidth: double.infinity,
+                maxHeight: double.infinity,
+                child: layers,
+              ),
             ),
           ),
         ),
@@ -491,11 +530,20 @@ class _TableViewState extends State<TableView>
       _c.ruler.value = (at, at);
     } else if (tool == Tool.ping) {
       widget.onPing?.call((x: p.dx, y: p.dy));
-    } else if (tool == Tool.fogBrush) {
-      _strokePoints = [(x: p.dx, y: p.dy)];
-      _previewStroke();
-    } else if (tool == Tool.fogRect) {
-      _fogStart = p;
+    } else if (tool == Tool.fogBrush || tool == Tool.fogRect) {
+      _fogDrawMode = HardwareKeyboard.instance.isShiftPressed
+          ? (_c.fogMode == FogMode.cover ? FogMode.reveal : FogMode.cover)
+          : _c.fogMode;
+      _c.fogCursor.value = null;
+      if (tool == Tool.fogRect) {
+        _fogStart = p;
+      } else {
+        _strokePoints = [(x: p.dx, y: p.dy)];
+        _previewStroke();
+      }
+    } else if (tool == Tool.fogErase) {
+      // Erases on release, if the press didn't turn into a pan.
+      _c.fogHover.value = _fogOpAt(p)?.id;
     } else if (tool == Tool.region) {
       _regionStart = p;
     } else {
@@ -520,12 +568,10 @@ class _TableViewState extends State<TableView>
       _c.gridFit.value =
           Grid.fitted((x: start.dx, y: start.dy), (x: p.dx, y: p.dy));
     } else if (_regionStart case final start? when _moved) {
-      _c.regionDraft.value = _regionBox(start, p);
+      _c.regionDraft.value = _cellBox(start, p);
     } else if (_fogStart != null) {
-      _c.fogPreview.value = (
-        shape: FogRect((x: _fogStart!.dx, y: _fogStart!.dy), (x: p.dx, y: p.dy)),
-        mode: _c.fogMode,
-      );
+      final (from, to) = _cellBox(_fogStart!, p);
+      _c.fogPreview.value = (shape: FogRect(from, to), mode: _fogDrawMode);
     } else if (_strokePoints.isNotEmpty) {
       final last = _strokePoints.last;
       // Skip points closer than a quarter brush: invisible, but they'd
@@ -586,6 +632,11 @@ class _TableViewState extends State<TableView>
       _click();
     } else if (_c.fogPreview.value case (:final shape, :final mode) when send) {
       widget.send(AddFogOp(FogOpId(newId()), mode, shape));
+    } else if (_c.tool == Tool.fogErase && send && !_moved) {
+      if (_c.fogHover.value case final id?) {
+        widget.send(RemoveFogOp(id));
+        _c.fogHover.value = null;
+      }
     } else if (_regionStart case final start? when send) {
       if (_c.regionDraft.value case (final from, final to)
           when from.x != to.x && from.y != to.y) {
@@ -614,7 +665,7 @@ class _TableViewState extends State<TableView>
 
   void _previewStroke() => _c.fogPreview.value = (
         shape: FogBrush(List.of(_strokePoints), _c.brushRadius),
-        mode: _c.fogMode,
+        mode: _fogDrawMode,
       );
 
   void _signal(PointerSignalEvent e) {
@@ -631,7 +682,7 @@ class _TableViewState extends State<TableView>
   }
 
   /// The box from [a] to [b] widened to whole cells, or exactly with Alt.
-  (Point, Point) _regionBox(Offset a, Offset b) {
+  (Point, Point) _cellBox(Offset a, Offset b) {
     final grid = _scene.settings.grid;
     final (x0, x1) = (math.min(a.dx, b.dx), math.max(a.dx, b.dx));
     final (y0, y1) = (math.min(a.dy, b.dy), math.max(a.dy, b.dy));
@@ -645,6 +696,14 @@ class _TableViewState extends State<TableView>
       (x: down(x0, o.x), y: down(y0, o.y)),
       (x: math.max(up(x1, o.x), down(x0, o.x) + s), y: math.max(up(y1, o.y), down(y0, o.y) + s)),
     );
+  }
+
+  /// The latest fog op covering [p]: the one an erase takes away.
+  FogOp? _fogOpAt(Offset p) {
+    final at = (x: p.dx, y: p.dy);
+    return _scene.fogInOrder.reversed
+        .where((op) => op.shape.contains(at))
+        .firstOrNull;
   }
 
   /// The smallest region at [p], so one inside another can be picked.

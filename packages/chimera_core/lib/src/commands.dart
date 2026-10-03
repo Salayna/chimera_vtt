@@ -28,6 +28,7 @@ sealed class Command {
             FogMode.values.byName(json['mode'] as String),
             FogShape.fromJson(json['shape'] as Json),
           ),
+        'removeFogOp' => RemoveFogOp(FogOpId(json['id'] as String)),
         'setCondition' => SetCondition(TokenId(json['id'] as String),
             json['name'] as String, json['value'] as int?),
         'removeCondition' => RemoveCondition(
@@ -137,6 +138,16 @@ final class AddFogOp extends Command {
         'mode': mode.name,
         'shape': shape.toJson(),
       };
+}
+
+/// Takes one fog op away, as if it had never been drawn.
+final class RemoveFogOp extends Command {
+  const RemoveFogOp(this.id);
+
+  final FogOpId id;
+
+  @override
+  Json toJson() => {'type': 'removeFogOp', 'id': id.value};
 }
 
 /// Adds a condition to a token, or changes its value. Players may, on their

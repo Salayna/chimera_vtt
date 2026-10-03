@@ -264,6 +264,86 @@ void main() {
     expect(controller.selectedRegion.value, isNull);
   });
 
+  testWidgets('the fog box covers whole cells; Shift does the opposite',
+      (tester) async {
+    final store = SceneStore(Scene(
+      settings: const SceneSettings(
+          width: 1024, height: 1024, grid: Grid(cellSize: 128)),
+    ));
+    final controller = TableController()..tool = Tool.fogRect;
+    addTearDown(controller.dispose);
+    final sent = <AddFogOp>[];
+    await tester.pumpWidget(Directionality(
+      textDirection: TextDirection.ltr,
+      child: TableView(
+        store: store,
+        controller: controller,
+        gm: true,
+        self: const PlayerId('gm'),
+        send: (command) {
+          sent.add(command as AddFogOp);
+          return store.execute(const Gm(), command);
+        },
+      ),
+    ));
+    await tester.pumpAndSettle();
+    Future<void> box() async {
+      final g = await tester.startGesture(controller.toScreen((x: 140, y: 140)));
+      await g.moveTo(controller.toScreen((x: 220, y: 180)));
+      await g.moveTo(controller.toScreen((x: 300, y: 200)));
+      await g.up();
+      await tester.pump();
+    }
+
+    await box();
+    final rect = sent.single.shape as FogRect;
+    expect((rect.from, rect.to), ((x: 128.0, y: 128.0), (x: 384.0, y: 256.0)));
+    expect(sent.single.mode, FogMode.reveal);
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await box();
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    expect(sent.last.mode, FogMode.cover);
+    expect(controller.fogMode, FogMode.reveal); // The panel's mode stays.
+  });
+
+  testWidgets('erasing takes away the latest fog under the click',
+      (tester) async {
+    FogOp op(String id, int order, FogMode mode) => FogOp(
+        id: FogOpId(id),
+        order: order,
+        mode: mode,
+        shape: FogRect(order == 1 ? (x: 0, y: 0) : (x: 100, y: 100),
+            order == 1 ? (x: 1024, y: 1024) : (x: 300, y: 300)));
+    final store = SceneStore(Scene(
+      settings: const SceneSettings(
+          width: 1024, height: 1024, grid: Grid(cellSize: 128)),
+      fogOps: {
+        for (final o in [op('all', 1, FogMode.cover), op('room', 2, FogMode.reveal)])
+          o.id: o,
+      },
+    ));
+    final controller = TableController()..tool = Tool.fogErase;
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(Directionality(
+      textDirection: TextDirection.ltr,
+      child: TableView(
+        store: store,
+        controller: controller,
+        gm: true,
+        self: const PlayerId('gm'),
+        send: (command) => store.execute(const Gm(), command),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tapAt(controller.toScreen((x: 200, y: 200)));
+    await tester.pump();
+    expect(store.scene.fogOps.keys, [const FogOpId('all')]);
+    await tester.tapAt(controller.toScreen((x: 600, y: 600)));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(store.scene.fogOps, isEmpty);
+  });
+
   test('a glide eases from where the token was to where it is', () {
     final glides = TokenGlides();
     addTearDown(glides.dispose);

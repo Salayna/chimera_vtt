@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'geometry.dart';
 import 'ids.dart';
 
@@ -304,6 +306,9 @@ sealed class FogShape {
 
   Json toJson();
 
+  /// Whether [p] is inside the shape or on its edge.
+  bool contains(Point p);
+
   static FogShape fromJson(Json json) => switch (json['type']) {
         'rect' => FogRect(pointFromJson(json['from']), pointFromJson(json['to'])),
         'brush' => FogBrush(
@@ -323,6 +328,13 @@ final class FogRect extends FogShape {
 
   @override
   Json toJson() => {'type': 'rect', 'from': from.toJson(), 'to': to.toJson()};
+
+  @override
+  bool contains(Point p) =>
+      p.x >= math.min(from.x, to.x) &&
+      p.x <= math.max(from.x, to.x) &&
+      p.y >= math.min(from.y, to.y) &&
+      p.y <= math.max(from.y, to.y);
 }
 
 /// A stroke: a polyline swept by a circle of [radius].
@@ -338,6 +350,22 @@ final class FogBrush extends FogShape {
         'points': [for (final p in points) p.toJson()],
         'radius': radius,
       };
+
+  /// Within [radius] of the line through [points].
+  @override
+  bool contains(Point p) {
+    for (var i = 0; i < points.length; i++) {
+      final a = points[i], b = points[math.min(i + 1, points.length - 1)];
+      final dx = b.x - a.x, dy = b.y - a.y;
+      final length = dx * dx + dy * dy;
+      final t = length == 0
+          ? 0.0
+          : (((p.x - a.x) * dx + (p.y - a.y) * dy) / length).clamp(0.0, 1.0);
+      final ex = a.x + t * dx - p.x, ey = a.y + t * dy - p.y;
+      if (ex * ex + ey * ey <= radius * radius) return true;
+    }
+    return false;
+  }
 }
 
 /// One fog operation. Fog is every op applied by ascending [order].

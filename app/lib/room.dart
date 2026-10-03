@@ -874,6 +874,18 @@ class _GmRoomState extends State<GmRoom> {
         old.copyWith(grid: Grid(cellSize: size, offset: old.grid.offset))));
   }
 
+  /// One fog op over the whole map: a clean slate, covered or revealed,
+  /// that undo takes back like any other.
+  void _fillFog(FogMode mode) {
+    final host = _host!;
+    final s = host.store.scene.settings;
+    host.execute(AddFogOp(
+        FogOpId(newId()), mode, FogRect((x: 0, y: 0), (x: s.width, y: s.height))));
+    // Revealing everything leaves only covering to do, and the reverse.
+    _controller.fogMode =
+        mode == FogMode.cover ? FogMode.reveal : FogMode.cover;
+  }
+
   void _setPack(String pack) {
     final host = _host!;
     host.execute(UpdateSettings(host.store.scene.settings.copyWith(pack: pack)));
@@ -1007,6 +1019,7 @@ class _GmRoomState extends State<GmRoom> {
       onDuplicate: _duplicateToken,
       onUndo: host.undo,
       onRedo: host.redo,
+      grid: () => host.store.scene.settings.grid,
       child: Stack(children: [
         Positioned.fill(
           child: TableView(
@@ -1069,8 +1082,6 @@ class _GmRoomState extends State<GmRoom> {
               onSetMap: () => _toggleLibrary(LibraryKind.map),
               mapsOpen: _libraryOpen == LibraryKind.map,
               tokensOpen: _libraryOpen == LibraryKind.token,
-              onExport: _export,
-              onImport: _import,
               onUndo: host.undo,
               onRedo: host.redo,
               scenesOpen: _scenesOpen,
@@ -1161,6 +1172,8 @@ class _GmRoomState extends State<GmRoom> {
                         onRename: _renameScene,
                         onDelete: _deleteScene,
                         onSaveToLibrary: _saveSceneToLibrary,
+                        onExport: _export,
+                        onImport: _import,
                         onFromLibrary: () => _toggleLibrary(LibraryKind.scene),
                         fromLibraryOpen: _libraryOpen == LibraryKind.scene,
                       ),
@@ -1186,7 +1199,8 @@ class _GmRoomState extends State<GmRoom> {
                         onVisible: _setGridVisible,
                         pack: settings.pack,
                         onPack: _setPack),
-                    FogOptions(controller: _controller, grid: grid),
+                    FogOptions(
+                        controller: _controller, grid: grid, onFill: _fillFog),
                     RegionOptions(
                         controller: _controller,
                         store: host.store,

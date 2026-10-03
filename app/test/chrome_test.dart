@@ -118,12 +118,16 @@ void main() {
         ]),
       ),
     ));
-    expect(find.text('FOG BRUSH'), findsNothing);
+    expect(find.text('FOG'), findsNothing);
 
-    await tester.tap(find.bySemanticsLabel('Fog brush'));
+    await tester.tap(find.bySemanticsLabel('Fog'));
     await tester.pumpAndSettle();
     expect(controller.tool, Tool.fogBrush);
-    expect(find.text('FOG BRUSH'), findsOneWidget);
+    expect(find.text('FOG'), findsOneWidget);
+    await tester.tap(find.text('Box'));
+    await tester.pumpAndSettle();
+    expect(controller.tool, Tool.fogRect);
+    expect(find.text('FOG'), findsOneWidget); // Still out: the same panel.
 
     await tester.tap(find.text('Reveal'));
     expect(controller.fogMode, FogMode.reveal);

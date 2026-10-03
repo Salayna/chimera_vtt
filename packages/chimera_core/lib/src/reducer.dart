@@ -95,6 +95,9 @@ Outcome reduce(Scene scene, Actor actor, Command command) {
               Upsert(i.without(id)),
           ])
         : const Refused(Refusal.notFound),
+    RemoveFogOp(:final id) => scene.fogOps.containsKey(id)
+        ? Accepted([Delete(EntityKind.fogOp, id.value)])
+        : const Refused(Refusal.notFound),
     PlaceRegion(:final region) => scene.regions.containsKey(region.id)
         ? const Refused(Refusal.duplicateId)
         : _validRegion(region),

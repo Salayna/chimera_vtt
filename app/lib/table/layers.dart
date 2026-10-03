@@ -422,9 +422,23 @@ class FogPainter extends CustomPainter {
     required this.revision,
     required this.preview,
     required this.gm,
+    this.cursor,
+    this.brush,
+    this.erasing,
+    this.ops = const {},
     this.naiveOps,
     Listenable? naiveRepaint,
-  }) : super(repaint: Listenable.merge([preview, naiveRepaint]));
+  }) : super(repaint: Listenable.merge([preview, cursor, erasing, naiveRepaint]));
+
+  /// The op an erase click would take away, shown in red; looked up in
+  /// [ops].
+  final ValueListenable<FogOpId?>? erasing;
+  final Map<FogOpId, FogOp> ops;
+
+  /// The brush outline under the pointer, at [brush]'s size, in its mode's
+  /// colour: what a press would paint.
+  final ValueListenable<Point?>? cursor;
+  final ({double radius, FogMode mode})? brush;
 
   /// Benchmark baseline only (`--dart-define=NAIVE_FOG=true`): replays every
   /// op in a saveLayer, repainting whenever [naiveRepaint] fires, as a single
@@ -473,6 +487,24 @@ class FogPainter extends CustomPainter {
         canvas.restore();
       }
     }
+    if ((cursor?.value, brush) case (final at?, final b?)) {
+      final reveal = b.mode == FogMode.reveal;
+      canvas.drawCircle(
+          Offset(at.x, at.y),
+          b.radius,
+          Paint()
+            ..color = reveal ? CvColors.fogRevealPreview : CvColors.fogCoverPreview);
+      canvas.drawCircle(
+          Offset(at.x, at.y),
+          b.radius,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = b.radius / 24
+            ..color = reveal ? CvColors.teal300 : CvColors.bone100);
+    }
+    if (ops[erasing?.value] case final op?) {
+      paintFogShape(canvas, op.shape, FogMode.cover, color: CvColors.emberTint);
+    }
     if (preview.value case (:final shape, :final mode)) {
       // Always drawn as paint: a reveal preview must not clear the mask.
       paintFogShape(canvas, shape, FogMode.cover,
@@ -484,7 +516,10 @@ class FogPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(FogPainter old) =>
-      old.revision != revision || old.gm != gm;
+      old.revision != revision ||
+      old.gm != gm ||
+      old.brush != brush ||
+      !identical(old.ops, ops);
 }
 
 /// A label pill, as the ruler draws it, centred on [center]. [u] is one

@@ -110,8 +110,6 @@ class GmRail extends StatelessWidget {
     required this.controller,
     this.onAddToken,
     this.onSetMap,
-    this.onExport,
-    this.onImport,
     this.onUndo,
     this.onRedo,
     this.onScenes,
@@ -131,8 +129,6 @@ class GmRail extends StatelessWidget {
   final bool tokensOpen;
   final VoidCallback? onAddToken;
   final VoidCallback? onSetMap;
-  final VoidCallback? onExport;
-  final VoidCallback? onImport;
   final VoidCallback? onUndo;
   final VoidCallback? onRedo;
 
@@ -178,8 +174,16 @@ class GmRail extends StatelessWidget {
             tool(Tool.ruler, Lucide.ruler, 'Ruler', 'L'),
             tool(Tool.ping, Lucide.radio, 'Ping', 'P'),
             const CvToolbarSeparator(),
-            tool(Tool.fogBrush, Lucide.paintbrush, 'Fog brush', 'B'),
-            tool(Tool.fogRect, Lucide.squareDashed, 'Fog rectangle', 'R'),
+            // One button for both fog tools; the fog panel switches shape.
+            CvToolButton(
+              icon: Lucide.paintbrush,
+              label: 'Fog',
+              shortcut: 'B',
+              active: controller.tool == Tool.fogBrush ||
+                  controller.tool == Tool.fogRect ||
+                  controller.tool == Tool.fogErase,
+              onPressed: () => controller.tool = Tool.fogBrush,
+            ),
             tool(Tool.region, Lucide.scan, 'Regions', 'A'),
             const CvToolbarSeparator(),
             CvToolButton(
@@ -200,17 +204,6 @@ class GmRail extends StatelessWidget {
                 shortcut: 'G',
                 active: controller.gridOptions,
                 onPressed: controller.toggleGridOptions),
-            const CvToolbarSeparator(),
-            CvToolButton(
-                icon: Lucide.download,
-                label: 'Export scene',
-                shortcut: 'E',
-                onPressed: onExport),
-            CvToolButton(
-                icon: Lucide.upload,
-                label: 'Import scene',
-                shortcut: 'I',
-                onPressed: onImport),
           ]);
         },
       );
@@ -330,37 +323,63 @@ class RegionOptions extends StatelessWidget {
 
 /// Cover or reveal, and the brush size, while a fog tool is out.
 class FogOptions extends StatelessWidget {
-  const FogOptions({super.key, required this.controller, required this.grid});
+  const FogOptions(
+      {super.key, required this.controller, required this.grid, this.onFill});
 
   final TableController controller;
   final Grid grid;
+
+  /// Covers or reveals the whole map at once.
+  final void Function(FogMode mode)? onFill;
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
         listenable: controller,
         builder: (context, _) {
           final tool = controller.tool;
-          if (tool != Tool.fogBrush && tool != Tool.fogRect) {
+          if (tool != Tool.fogBrush &&
+              tool != Tool.fogRect &&
+              tool != Tool.fogErase) {
             return const SizedBox.shrink();
           }
-          // The brush is sized in cells across; the controller holds a radius.
-          final cells = (controller.brushRadius * 2 / grid.cellSize)
-              .round()
-              .clamp(1, 8);
+          final cells = controller.brushCells(grid.cellSize);
           return CvPopIn(
             child: CvPanel(
-              width: 220,
+              width: 248,
               padding: const EdgeInsets.all(CvSpacing.s5),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 spacing: 10,
                 children: [
-                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                    CvOverline(
-                        tool == Tool.fogBrush ? 'Fog brush' : 'Fog rectangle'),
-                    const CvKbd('X'),
-                  ]),
+                  const Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [CvOverline('Fog'), CvKbd('X')]),
+                  CvSegmentedControl<Tool>(
+                    value: tool,
+                    onChanged: (t) => controller.tool = t,
+                    segments: const [
+                      (
+                        value: Tool.fogBrush,
+                        label: 'Brush',
+                        icon: Lucide.paintbrush,
+                        checked: null
+                      ),
+                      (
+                        value: Tool.fogRect,
+                        label: 'Box',
+                        icon: Lucide.squareDashed,
+                        checked: null
+                      ),
+                      (
+                        value: Tool.fogErase,
+                        label: 'Erase',
+                        icon: Lucide.eraser,
+                        checked: CvColors.ember400
+                      ),
+                    ],
+                  ),
+                  if (tool != Tool.fogErase)
                   CvSegmentedControl<FogMode>(
                     value: controller.fogMode,
                     onChanged: (m) => controller.fogMode = m,
@@ -387,8 +406,40 @@ class FogOptions extends StatelessWidget {
                       max: 8,
                       format: (v) => v == 1 ? '1 cell' : '$v cells',
                       onChanged: (v) =>
-                          controller.brushRadius = v * grid.cellSize / 2,
+                          controller.setBrushCells(v, grid.cellSize),
                     ),
+                  Text(
+                      switch (tool) {
+                        Tool.fogBrush => 'Paint over the map. Hold Shift to '
+                            'do the opposite; [ and ] change the size.',
+                        Tool.fogRect => 'Drag over whole cells (Alt for '
+                            'exact). Hold Shift to do the opposite.',
+                        _ => 'Click fog you drew to take it away, the '
+                            'latest first. Undo puts it back.',
+                      },
+                      style: CvTypography.caption
+                          .copyWith(color: CvColors.textSecondary)),
+                  if (onFill case final fill?)
+                    Row(spacing: 6, children: [
+                      Expanded(
+                        child: CvButton(
+                          label: 'Hide all',
+                          icon: Lucide.eyeOff,
+                          small: true,
+                          block: true,
+                          onPressed: () => fill(FogMode.cover),
+                        ),
+                      ),
+                      Expanded(
+                        child: CvButton(
+                          label: 'Reveal all',
+                          icon: Lucide.eye,
+                          small: true,
+                          block: true,
+                          onPressed: () => fill(FogMode.reveal),
+                        ),
+                      ),
+                    ]),
                 ],
               ),
             ),
@@ -1127,11 +1178,15 @@ class TableShortcuts extends StatelessWidget {
     this.onDuplicate,
     this.onUndo,
     this.onRedo,
+    this.grid,
   });
 
   final TableController controller;
   final Widget child;
   final bool gm;
+
+  /// The scene's grid, which the brush size keys count in.
+  final Grid Function()? grid;
   final VoidCallback? onAddToken;
   final VoidCallback? onSetMap;
   final VoidCallback? onExport;
@@ -1144,6 +1199,7 @@ class TableShortcuts extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = controller;
+    double cellSize() => grid?.call().cellSize ?? 128;
     void undo() => onUndo?.call();
     void redo() => onRedo?.call();
     void remove() {
@@ -1166,6 +1222,10 @@ class TableShortcuts extends StatelessWidget {
         if (gm) ...{
           const CharacterActivator('b'): () => c.tool = Tool.fogBrush,
           const CharacterActivator('r'): () => c.tool = Tool.fogRect,
+          const CharacterActivator('['): () => c.setBrushCells(
+              c.brushCells(cellSize()) - 1, cellSize()),
+          const CharacterActivator(']'): () => c.setBrushCells(
+              c.brushCells(cellSize()) + 1, cellSize()),
           const CharacterActivator('a'): () => c.tool = Tool.region,
           const CharacterActivator('x'): () => c.fogMode =
               c.fogMode == FogMode.cover ? FogMode.reveal : FogMode.cover,

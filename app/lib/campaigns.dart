@@ -677,12 +677,18 @@ class ScenesPanel extends StatelessWidget {
     required this.onRename,
     required this.onDelete,
     this.onSaveToLibrary,
+    this.onExport,
+    this.onImport,
     this.onFromLibrary,
     this.fromLibraryOpen = false,
   });
 
   final List<SceneEntry> scenes;
   final VoidCallback? onSaveToLibrary;
+
+  /// The live scene to a file, or a file into the live scene (E and I).
+  final VoidCallback? onExport;
+  final VoidCallback? onImport;
   final VoidCallback? onFromLibrary;
   final bool fromLibraryOpen;
   final String? live;
@@ -775,6 +781,29 @@ class ScenesPanel extends StatelessWidget {
                 block: true,
                 onPressed: onSaveToLibrary,
               ),
+            if (onExport != null || onImport != null)
+              Row(spacing: 6, children: [
+                Expanded(
+                  child: CvButton(
+                    label: 'Export',
+                    icon: Lucide.download,
+                    variant: CvButtonVariant.ghost,
+                    small: true,
+                    block: true,
+                    onPressed: onExport,
+                  ),
+                ),
+                Expanded(
+                  child: CvButton(
+                    label: 'Import',
+                    icon: Lucide.upload,
+                    variant: CvButtonVariant.ghost,
+                    small: true,
+                    block: true,
+                    onPressed: onImport,
+                  ),
+                ),
+              ]),
           ],
         ),
       ),

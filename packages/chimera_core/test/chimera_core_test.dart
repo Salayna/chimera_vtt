@@ -402,4 +402,24 @@ void main() {
       expect(Scene.fromJson(decoded).settings.pack, 'dnd5e');
     });
   });
+
+  test('the GM erases a fog op; players may not; a shape knows what it covers', () {
+    final scene = sceneWith([]).applyPatches([
+      Upsert(FogOp(
+          id: const FogOpId('f'),
+          order: 1,
+          mode: FogMode.reveal,
+          shape: const FogBrush([(x: 0, y: 0), (x: 100, y: 0)], 10))),
+    ]);
+    expect(reduce(scene, alice, const RemoveFogOp(FogOpId('f'))), isA<Refused>());
+    final erased = reduce(scene, gm, const RemoveFogOp(FogOpId('f'))) as Accepted;
+    expect(scene.applyPatches(erased.patches).fogOps, isEmpty);
+    expect(reduce(scene, gm, const RemoveFogOp(FogOpId('nope'))), isA<Refused>());
+
+    const brush = FogBrush([(x: 0, y: 0), (x: 100, y: 0)], 10);
+    expect(brush.contains((x: 50, y: 9)), isTrue);
+    expect(brush.contains((x: 50, y: 11)), isFalse);
+    expect(const FogBrush([(x: 5, y: 5)], 3).contains((x: 7, y: 5)), isTrue);
+    expect(const FogRect((x: 10, y: 10), (x: 0, y: 0)).contains((x: 5, y: 5)), isTrue);
+  });
 }
