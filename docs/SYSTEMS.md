@@ -1,6 +1,6 @@
 # Chimera VTT — System building
 
-As of 2026-10-03 · Proposal · Companion to [PLAN.md](PLAN.md), the [Lexicon](LEXICON.md) and [PACKS.md](PACKS.md)
+As of 2026-10-03 · Built (bricks 1 to 12) · Companion to [PLAN.md](PLAN.md), the [Lexicon](LEXICON.md) and [PACKS.md](PACKS.md)
 
 The app plays D&D well, but systems differ in more than conditions and grids: Solaris Arcanum's initiative is nothing like D&D's, nor are its damage (Stress and wound types by hit tier), its character sheet, or its leveling (a skill tree, the Constellation). A module has to bring all of that, so a campaign plays like its game.
 
@@ -17,11 +17,11 @@ Three building blocks, all data in the module file, none compiled into the app:
 | Piece | What it is | In Solaris Arcanum |
 | --- | --- | --- |
 | **Character sheet** | The module's `sheet`: sections of fields, computed fields, and trackers whose bounds are formulas. | AP at most 8, less armor and wounds; the Stress threshold |
-| **Compendium** | The module's entries, grouped in kinds (Weapon, Armor, Talent…). Each kind declares its fields, trackers and card. Today's pack tokens become one kind, Threat. | Weapon data cards with their AP costs, hit profiles and ammo |
+| **Compendium** | The module's entries, grouped in kinds (Weapon, Armor, Talent…). Each kind declares its fields, trackers and actions; each entry its values, card and actions. Pack tokens stay their own list for now. | Weapon data cards with their AP costs, hit profiles and ammo |
 | **Items** | A character owns copies of entries, shown as cards, each with its own tracker values. | A rifle with 4 of 6 shots left |
 | **Actions** | Buttons on a sheet or an item card that pay their cost, roll, and log the outcome band with its text. They change nothing on the target. | Lethal Shot: 3 AP, the hit tiers, the wounds dealt |
 | **Advancement** | A graph of nodes: a cost in a field (CP, XP), what each requires (other nodes, or a rule such as "at most 3 archetypes") and what it grants (field changes, entries). D&D levels are a chain; Solaris draws its graph as the Constellation. | Ranks give CP, spent on the Constellation's six paths |
-| **Initiative** | Done: a roll or turn forms. The roll formula will read the sheet (`d20 + DEX.mod`). | Combat Forms |
+| **Initiative** | Done: a roll or turn forms. The roll doesn't read the sheet yet (`d20 + DEX.mod`). | Combat Forms |
 
 Decks of cards (draw, shuffle, hands) wait for a system that needs them.
 

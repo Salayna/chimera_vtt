@@ -343,7 +343,7 @@ A full scripting language (for example Lua) would come only if real packs outgro
 
 ## System building (proposal)
 
-Proposed 2026-10-03: modules bring a system's character sheets, compendium, items as cards, actions and advancement, so a campaign plays like its game. See [SYSTEMS.md](SYSTEMS.md).
+Proposed and built 2026-10-03: modules bring a system's character sheets, compendium, items as cards, actions and advancement, so a campaign plays like its game, and GMs make them in the app. See [SYSTEMS.md](SYSTEMS.md).
 
 ---
 

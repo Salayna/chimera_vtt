@@ -1,6 +1,6 @@
 # Chimera VTT — Lexicon
 
-As of 2026-09-29 · Companion to [PLAN.md](PLAN.md)
+As of 2026-10-03 · Companion to [PLAN.md](PLAN.md)
 
 One word, one meaning. When code, docs and conversation disagree, this file wins. Change it first, then rename in the code. The **Code** column gives the Dart name where one exists or is planned.
 
