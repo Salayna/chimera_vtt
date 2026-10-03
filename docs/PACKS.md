@@ -39,6 +39,7 @@ Installed packs belong to the GM's account and serve all their campaigns. A scen
 | `unit`, `unitsPerStep` | What a step (a cell) is worth: `"ft"` and `5` for D&D 5e. Units longer than two letters get an "s" in the plural. |
 | `bands` | Range bands in ascending `max` (in units, inclusive). A band without `max` catches the rest. |
 | `initiative` | The dice formula each token rolls, as typed in the log (`d20`, `2d6+1`). |
+| `forms` | Turn order without a roll, as Solaris' Combat Forms: `name`, `value` (higher goes first), `npc` (for the GM's tokens), `default` (where a side starts) and `text`. A fight starts everyone in their side's default form, and the GM clicks a token's form in the turn order to change it. |
 | `trackers` | Numbers on every token: `name`, optional `min` (default 0), `max` and `text`. Players change their own tokens'. |
 | `tags` | Conditions (`"condition": true`, set on tokens) and region tags (the rest; `"sector": true` marks sector tags). Each may be `valued`, have a `color` (`#rrggbb`), `text` and `effects`. |
 
@@ -52,4 +53,4 @@ An entry of Atlas' `userPresets` installs as a pack: Atlas conditions become con
 
 ## Shipped modules
 
-- `packs/solaris-arcanum.json`: a starter for Solaris Arcanum with the sectors, range bands and sector tags the plan names. Its rules text, the remaining Appendix C tags, trackers and initiative are for whoever has the book to fill in.
+- `packs/solaris-arcanum.json`: Solaris Arcanum from the Core Rulebook and Appendix C, summarised: 20 ft sectors at 1 AP each, the four range bands, the 15 sector tags (Line of Sight Breaker blocks sight; Difficult Terrain and Zero-g ask for Traversal; Bottleneck holds one), the status, wound and archetype tags as conditions, Combat Forms for turn order, and trackers for AP, Stress, Armor Grade and each system's wounds.

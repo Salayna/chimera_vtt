@@ -164,6 +164,39 @@ final class TrackerDef {
   }
 }
 
+/// A place in the turn order a token is put in instead of rolling, as
+/// Solaris' Combat Forms (Rush, Steady, Poise). Higher [value]s go first.
+final class TurnForm {
+  const TurnForm(this.name,
+      {required this.value, this.npc = false, this.byDefault = false, this.text = ''});
+
+  final String name;
+  final int value;
+
+  /// For the GM's tokens (no owner) rather than players'.
+  final bool npc;
+
+  /// The form a token starts a fight in, one for each side.
+  final bool byDefault;
+  final String text;
+
+  Json toJson() => {
+        'name': name,
+        'value': value,
+        if (npc) 'npc': true,
+        if (byDefault) 'default': true,
+        if (text.isNotEmpty) 'text': text,
+      };
+
+  factory TurnForm.fromJson(Json json) => TurnForm(
+        _text(json['name'], 'form name', 30),
+        value: json['value'] as int,
+        npc: json['npc'] as bool? ?? false,
+        byDefault: json['default'] as bool? ?? false,
+        text: _text(json['text'] ?? '', 'form text', 500, empty: true),
+      );
+}
+
 /// A named distance bracket. [max] is inclusive, in pack units; null means
 /// no limit.
 final class RangeBand {
@@ -189,6 +222,7 @@ final class SystemPack {
     this.unitsPerStep = 1,
     this.bands = const [],
     this.initiative,
+    this.forms = const [],
     this.trackers = const [],
     List<TagDef> tags = const [],
   }) : tags = {for (final t in tags) t.name: t};
@@ -220,6 +254,16 @@ final class SystemPack {
   /// The dice formula each side rolls for initiative, for example `d20`.
   /// Null when the pack has no initiative roll.
   final String? initiative;
+
+  /// Turn order by form instead of a roll, when not empty.
+  final List<TurnForm> forms;
+
+  /// The form a token starts a fight in: the default for its side, or the
+  /// side's first.
+  TurnForm? startingForm({required bool npc}) {
+    final side = forms.where((f) => f.npc == npc);
+    return side.where((f) => f.byDefault).firstOrNull ?? side.firstOrNull;
+  }
   final List<TrackerDef> trackers;
   final Map<String, TagDef> tags;
 
@@ -259,6 +303,7 @@ final class SystemPack {
             for (final b in bands) {'name': b.name, if (b.max != null) 'max': b.max},
           ],
         if (initiative != null) 'initiative': initiative,
+        if (forms.isNotEmpty) 'forms': [for (final f in forms) f.toJson()],
         if (trackers.isNotEmpty) 'trackers': [for (final t in trackers) t.toJson()],
         'tags': [for (final t in tags.values) t.toJson()],
       };
@@ -303,6 +348,9 @@ final class SystemPack {
           final String formula => _text(formula, 'initiative', 100),
           _ => null,
         },
+        forms: [
+          for (final f in _list(json['forms'], 'forms', 20)) TurnForm.fromJson(f as Json),
+        ],
         trackers: [
           for (final t in _list(json['trackers'], 'trackers', 20))
             TrackerDef.fromJson(t as Json),

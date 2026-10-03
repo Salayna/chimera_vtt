@@ -2,26 +2,509 @@
   "format": 1,
   "id": "solaris-arcanum",
   "name": "Solaris Arcanum",
-  "version": 1,
+  "version": 2,
   "topology": "square",
   "diagonal": "chebyshev",
   "unit": "sector",
   "unitsPerStep": 1,
   "bands": [
-    {"name": "Point Blank", "max": 0},
-    {"name": "Adjacent", "max": 1},
-    {"name": "Medium", "max": 10},
-    {"name": "Far"}
+    {
+      "name": "Point Blank",
+      "max": 0
+    },
+    {
+      "name": "Adjacent",
+      "max": 1
+    },
+    {
+      "name": "Medium",
+      "max": 10
+    },
+    {
+      "name": "Far"
+    }
+  ],
+  "forms": [
+    {
+      "name": "Pre-Rush",
+      "value": 7,
+      "npc": true,
+      "text": "Threats fast enough to act before every PC."
+    },
+    {
+      "name": "Rush",
+      "value": 6,
+      "text": "Act first among the PCs, at -2 AP."
+    },
+    {
+      "name": "Rush (NPC)",
+      "value": 5,
+      "npc": true,
+      "text": "Threats acting after the PCs who Rush."
+    },
+    {
+      "name": "Steady",
+      "value": 4,
+      "default": true,
+      "text": "Act in the middle, with no AP change."
+    },
+    {
+      "name": "Steady (NPC)",
+      "value": 3,
+      "npc": true,
+      "default": true,
+      "text": "Threats acting after the Steady PCs."
+    },
+    {
+      "name": "Poise",
+      "value": 2,
+      "text": "Act late among the PCs, at +2 AP."
+    },
+    {
+      "name": "Poise (NPC)",
+      "value": 1,
+      "npc": true,
+      "text": "Threats acting last."
+    }
+  ],
+  "trackers": [
+    {
+      "name": "AP",
+      "text": "Action Points: 8 at most unless modified; armor, shields and wounds lower the maximum. Moving one sector costs 1 AP."
+    },
+    {
+      "name": "Stress",
+      "text": "Threshold: END + WIL + Threat Level. Reaching it calls for an Overload check."
+    },
+    {
+      "name": "Armor Grade",
+      "text": "Absorbs Systemic Wounds until spent; a spent armor loses its tags."
+    },
+    {
+      "name": "Temp Armor Grade",
+      "text": "Spent before the Armor Grade."
+    },
+    {
+      "name": "PsW",
+      "text": "Psychic Wounds: 4 slots for PCs (Shaken 1, Shaken 2, Delirious, Mental Collapse)."
+    },
+    {
+      "name": "CvW",
+      "text": "Cardiovascular Wounds: 4 slots for PCs (Bleeding 2, Bleeding 4, Bleeding 10, Cardiac Rupture)."
+    },
+    {
+      "name": "ReW",
+      "text": "Respiratory Wounds: 4 slots for PCs (Shallow Breathing twice, Lungs Collapsed, Suffocating)."
+    },
+    {
+      "name": "NvW",
+      "text": "Nervous Wounds: 4 slots for PCs (Disrupted, System Shock, Paralyzed, Nerves Collapse)."
+    },
+    {
+      "name": "MsW Left Arm",
+      "text": "Musculoskeletal Wounds: Crippled 1, Crippled 2, Broken, Torn Out."
+    },
+    {
+      "name": "MsW Right Arm",
+      "text": "Musculoskeletal Wounds: Crippled 1, Crippled 2, Broken, Torn Out."
+    },
+    {
+      "name": "MsW Left Leg",
+      "text": "Musculoskeletal Wounds: Crippled 1, Crippled 2, Broken, Torn Out."
+    },
+    {
+      "name": "MsW Right Leg",
+      "text": "Musculoskeletal Wounds: Crippled 1, Crippled 2, Broken, Torn Out."
+    }
   ],
   "tags": [
-    {"name": "Heavy Cover", "sector": true},
-    {"name": "Darkness", "sector": true, "valued": true},
-    {"name": "Zero-g", "sector": true},
-    {"name": "Line of Sight Breaker", "sector": true,
-     "effects": [{"type": "blocksSight"}],
-     "text": "Line of sight can't pass through this sector."},
-    {"name": "Difficult Terrain", "sector": true,
-     "effects": [{"type": "entryCheck", "check": "Traversal"}],
-     "text": "Entering this sector needs a Traversal check."}
+    {
+      "name": "Advanced Firing Position",
+      "sector": true,
+      "text": "A commanding, prepared position above the enemy. Ranged Attack rolls have Advantage (ALL)."
+    },
+    {
+      "name": "Artificial Gravity",
+      "sector": true,
+      "text": "A Move Action that starts here covers 1 more sector (20 ft)."
+    },
+    {
+      "name": "Bottleneck",
+      "sector": true,
+      "effects": [
+        {
+          "type": "occupantLimit",
+          "max": 1
+        }
+      ],
+      "text": "Room for one character, or two fighting in melee."
+    },
+    {
+      "name": "Darkness",
+      "sector": true,
+      "valued": true,
+      "text": "Characters here see at most X sectors."
+    },
+    {
+      "name": "Difficult Terrain",
+      "sector": true,
+      "effects": [
+        {
+          "type": "entryCheck",
+          "check": "Traversal (DR 15)"
+        }
+      ],
+      "text": "Moving in, out of or through needs a Traversal check (DR 15 or more). A failure uses up 1 sector of movement."
+    },
+    {
+      "name": "Environmental Object",
+      "sector": true,
+      "text": "A mission-critical spot (terminal, cache, reactor) to interact with as the GM allows."
+    },
+    {
+      "name": "Firing Position",
+      "sector": true,
+      "effects": [
+        {
+          "type": "roll",
+          "edge": 1
+        }
+      ],
+      "text": "An elevated position over the enemy. Ranged Attack rolls have Advantage (1)."
+    },
+    {
+      "name": "Heavy Cover",
+      "sector": true,
+      "text": "Sturdy protection: only Devastating Hits deal damage. Suppressing attacks deal none but still Suppress."
+    },
+    {
+      "name": "Kill Zone",
+      "sector": true,
+      "text": "Out of any cover and exposed."
+    },
+    {
+      "name": "Light Cover",
+      "sector": true,
+      "text": "Some protection: Grazing Hits miss and Precise Hits count as Grazing. Suppressing attacks deal none but still Suppress."
+    },
+    {
+      "name": "Line of Sight Breaker",
+      "sector": true,
+      "effects": [
+        {
+          "type": "blocksSight"
+        }
+      ],
+      "text": "Too large to see over or around: no sight or Ranged Attack across it."
+    },
+    {
+      "name": "Mined Sector",
+      "sector": true,
+      "text": "A hidden mine or trap that goes off on entry. Found with a Scan and an Awareness check (Basic DR 20, Advanced DR 10); disarmed from next door with Engineering (DR 20), or crossed knowingly with Traversal (DR 20). Hide the region from players."
+    },
+    {
+      "name": "Narrow Opening",
+      "sector": true,
+      "text": "Connects two sectors through a gap. A character starting or ending a Move here may Block: nobody passes, and sight between the sectors only reaches the blocker."
+    },
+    {
+      "name": "Obscured",
+      "sector": true,
+      "text": "Smoke, fog or dust: attacks at or through it have Disadvantage (ALL); Stealth checks have Advantage (ALL)."
+    },
+    {
+      "name": "Zero-g",
+      "sector": true,
+      "effects": [
+        {
+          "type": "entryCheck",
+          "check": "Traversal (DR 15)"
+        }
+      ],
+      "text": "Moving in, out of or through needs a Traversal check (DR 15); a failure ends the Move. Attacks have Disadvantage (ALL). A Ballistic or Propelled ranged attack pushes the shooter 1 sector away from the target."
+    },
+    {
+      "name": "Advantage",
+      "condition": true,
+      "valued": true,
+      "effects": [
+        {
+          "type": "roll",
+          "edge": 1,
+          "scaled": true
+        }
+      ],
+      "text": "Advantage (X) on rolls."
+    },
+    {
+      "name": "Disadvantage",
+      "condition": true,
+      "valued": true,
+      "effects": [
+        {
+          "type": "roll",
+          "edge": -1,
+          "scaled": true
+        }
+      ],
+      "text": "Disadvantage (X) on rolls."
+    },
+    {
+      "name": "Blinded",
+      "condition": true,
+      "effects": [
+        {
+          "type": "roll",
+          "edge": -2
+        }
+      ],
+      "text": "Disadvantage (2)."
+    },
+    {
+      "name": "Concussed",
+      "condition": true,
+      "effects": [
+        {
+          "type": "roll",
+          "edge": -1
+        }
+      ],
+      "text": "Disadvantage (1)."
+    },
+    {
+      "name": "Disoriented",
+      "condition": true,
+      "text": "Can only target entities within Adjacent range."
+    },
+    {
+      "name": "Electrocuted",
+      "condition": true,
+      "text": "No Armor Resistance until the end of their next turn."
+    },
+    {
+      "name": "Exposed",
+      "condition": true,
+      "text": "Can't benefit from cover."
+    },
+    {
+      "name": "Frozen",
+      "condition": true,
+      "effects": [
+        {
+          "type": "roll",
+          "edge": -1
+        }
+      ],
+      "text": "Can't Move or take Reactions. Attacks with Disadvantage (1); attacks against them have Advantage (1)."
+    },
+    {
+      "name": "Immobile",
+      "condition": true,
+      "text": "Can't take the Move Action."
+    },
+    {
+      "name": "Poisoned",
+      "condition": true,
+      "text": "Vulnerable to Cardiovascular Wounds until a Medical item removes it."
+    },
+    {
+      "name": "Restrained",
+      "condition": true,
+      "text": "Loses 2 max AP at the start of each turn (a threat: one Attack and one Reaction slot) and can't Move. The opposed check is rolled again each turn."
+    },
+    {
+      "name": "Slowed",
+      "condition": true,
+      "text": "-1 AP (a threat: one fewer Movement slot)."
+    },
+    {
+      "name": "Stunned",
+      "condition": true,
+      "text": "Can't Move or take any Action."
+    },
+    {
+      "name": "Suppressed",
+      "condition": true,
+      "text": "Line of sight limited to their own sector until their next turn starts."
+    },
+    {
+      "name": "Winded",
+      "condition": true,
+      "text": "Moves cost +1 AP (a threat needs two Movement slots per sector)."
+    },
+    {
+      "name": "Concealed",
+      "condition": true,
+      "text": "Can't be targeted except by Area of Effect. Lost on a failed Stealth check or any attack."
+    },
+    {
+      "name": "Invisible",
+      "condition": true,
+      "text": "Can't be seen or targeted except by Area of Effect; Stealth checks have Advantage (ALL). Lost on a failed Stealth check or any attack."
+    },
+    {
+      "name": "Bleeding",
+      "condition": true,
+      "valued": true,
+      "text": "Takes X Stress at the start of each turn. Bleeding attacks also make the target Vulnerable to Cardiovascular Wounds."
+    },
+    {
+      "name": "Cardiac Rupture",
+      "condition": true,
+      "text": "Incapacitated and bleeding out: dies in 2 rounds unless stabilized."
+    },
+    {
+      "name": "Shaken",
+      "condition": true,
+      "valued": true,
+      "effects": [
+        {
+          "type": "roll",
+          "edge": -1,
+          "scaled": true
+        }
+      ],
+      "text": "Disadvantage (X)."
+    },
+    {
+      "name": "Delirious",
+      "condition": true,
+      "text": "Disadvantage (ALL)."
+    },
+    {
+      "name": "Mental Collapse",
+      "condition": true,
+      "text": "Incapacitated, not dead."
+    },
+    {
+      "name": "Crippled",
+      "condition": true,
+      "valued": true,
+      "effects": [
+        {
+          "type": "roll",
+          "edge": -1,
+          "scaled": true
+        }
+      ],
+      "text": "Arm: Disadvantage (X). Leg: Moves cost 1 more AP."
+    },
+    {
+      "name": "Broken",
+      "condition": true,
+      "text": "Arm: Disadvantage (ALL). Leg: can't take the Move Action."
+    },
+    {
+      "name": "Torn Out",
+      "condition": true,
+      "text": "The limb is lost; Incapacitated, and dies in 3 rounds unless stabilized."
+    },
+    {
+      "name": "Shallow Breathing",
+      "condition": true,
+      "valued": true,
+      "text": "Maximum AP -2 for each."
+    },
+    {
+      "name": "Lungs Collapsed",
+      "condition": true,
+      "text": "Maximum AP -4."
+    },
+    {
+      "name": "Suffocating",
+      "condition": true,
+      "text": "Air cut off: Incapacitated in 2 rounds, dead in 3, unless a Respiratory wound is healed. Life Support armor prevents it."
+    },
+    {
+      "name": "Disrupted",
+      "condition": true,
+      "text": "Disadvantage (ALL)."
+    },
+    {
+      "name": "System Shock",
+      "condition": true,
+      "text": "All cybernetics stop working until this wound is treated."
+    },
+    {
+      "name": "Paralyzed",
+      "condition": true,
+      "text": "Incapacitated until medical aid heals the wound."
+    },
+    {
+      "name": "Nerves Collapse",
+      "condition": true,
+      "text": "Incapacitated and seizing: dies in 3 rounds unless stabilized."
+    },
+    {
+      "name": "Incapacitated",
+      "condition": true,
+      "text": "Out of the fight until helped."
+    },
+    {
+      "name": "Channeling",
+      "condition": true,
+      "text": "Mid-ritual. Taking damage calls for a Mental Prowess check (Magus DR 15, Theurgist DR 20) or the spell Miscasts."
+    },
+    {
+      "name": "Deranged",
+      "condition": true,
+      "text": "Cortex Knight: AP set to 5, spent attacking the closest entity."
+    },
+    {
+      "name": "Ambusher",
+      "condition": true,
+      "text": "Noctis Commando: Grazing Hits become Precise Hits."
+    },
+    {
+      "name": "Marked For Death",
+      "condition": true,
+      "text": "The Sniper's Precise Hits on this target become Devastating and ignore Light Cover."
+    },
+    {
+      "name": "Ghost",
+      "condition": true,
+      "text": "Saboteur: stands on a sector corner; the four sectors around are Point Blank. Lost on damage or losing Concealed."
+    },
+    {
+      "name": "Soaring Combatant",
+      "condition": true,
+      "text": "Interdictor: may take another action at any sector passed during a Move."
+    },
+    {
+      "name": "Access",
+      "condition": true,
+      "text": "Harrower: protocol effects can be used on this entity."
+    },
+    {
+      "name": "Flow Rupture",
+      "condition": true,
+      "valued": true,
+      "text": "Harrower protocols can target this entity."
+    },
+    {
+      "name": "Rigged to Blow",
+      "condition": true,
+      "text": "Saboteur: this vehicle detonates after its next Move Action."
+    },
+    {
+      "name": "Unpleasant Surprise",
+      "condition": true,
+      "text": "Saboteur: a hidden charge. On detonation, 2 MsW ignoring armor and 3 Stress; 2 Stress to others in the sector."
+    },
+    {
+      "name": "Vicissitual Infection",
+      "condition": true,
+      "text": "Infected by a Vector's microorganism."
+    },
+    {
+      "name": "Glowing",
+      "condition": true,
+      "text": "Homunculus: entities within Medium range have Disadvantage (1) on Stealth."
+    },
+    {
+      "name": "Synthetic",
+      "condition": true,
+      "text": "Made synthetically: open to Cyberwarfare, passes Mental Prowess checks."
+    }
   ]
 }

@@ -467,9 +467,10 @@ Phase 6 status 2026-10-03: game systems are modules, as asked: a system is added
 - **Installing:** the hub's Systems page lists the built-in and installed systems and installs a pack file or an Atlas VTT preset (its conditions and sector tags, units and bands). Installed packs live in Postgres (`packs`, owner-only); installing the same id again updates it. The Grid panel's System menu offers them and installs too.
 - **Scenes carry their pack:** a scene played with an installed pack holds its file (`ScenePack`), so players and scene files get the system with nothing installed. Built-in packs aren't carried.
 - **Trackers:** numbers a pack keeps on tokens (HP, Stress), stepped or typed on the token card within their bounds, and shown on the token's label. Players track their own.
-- **Solaris:** `packs/solaris-arcanum.json` is a starter module with sectors, the range bands and the sector tags this plan names. The rest of Appendix C, rules text, trackers and initiative need the book.
+- **Solaris:** `packs/solaris-arcanum.json` is the full module, from the rulebook in the GM's notes: the 15 sector tags of Appendix C, status, wound and archetype tags as conditions, trackers for AP, Stress, Armor Grade and wounds, and **Combat Forms** (Pre-Rush, Rush, Steady, Poise) ordering turns instead of a roll. Packs can now declare such forms.
+- **Token cards** list only the trackers a token has, with a menu adding the others, and scroll when long.
 
-Not yet: threat cards, Fantasy Statblocks and `.atlasmap` scene import, pack-defined sheet fields, and editing a pack inside the app (a pack is edited as a file and installed again). Protocol is version 4.
+Not yet: threat cards (NPC data cards with their own slot counts), Fantasy Statblocks and `.atlasmap` scene import, pack-defined sheet fields, and editing a pack inside the app (a pack is edited as a file and installed again). Protocol is version 4.
 
 ---
 

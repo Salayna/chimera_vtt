@@ -21,7 +21,7 @@ void main() {
   test('pack files: modules and Atlas presets read; built-in ids are refused', () {
     final solaris = readPackFile(File('../packs/solaris-arcanum.json').readAsBytesSync());
     expect(solaris.name, 'Solaris Arcanum');
-    expect(packSummary(solaris), '0 conditions · 5 region tags · 4 range bands');
+    expect(packSummary(solaris), '46 conditions · 15 region tags · 12 trackers · 4 range bands');
 
     final atlas = readPackFile(bytes({
       'id': 'mine',
@@ -109,12 +109,24 @@ void main() {
       ),
     ));
     expect(find.text('Trackers'), findsOneWidget);
+    // Only trackers the token has show; a menu adds the others.
+    expect(find.text('Stress / 6'), findsNothing);
+    Future<void> add(String name) async {
+      await tester.tap(find.text('Add a tracker…'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(name).last);
+      await tester.pumpAndSettle();
+    }
+
+    await add('HP');
+    await add('Stress');
     expect(find.text('Stress / 6'), findsOneWidget);
+    expect(find.text('Add a tracker…'), findsNothing);
 
     await tester.enterText(find.byType(EditableText).first, '12');
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pump();
-    expect(host.store.scene.tokens[id]!.trackers, {'HP': 12});
+    expect(host.store.scene.tokens[id]!.trackers, {'HP': 12, 'Stress': 0});
 
     Finder button(String label) => find.byWidgetPredicate(
         (w) => w is CvToolButton && w.label == label);

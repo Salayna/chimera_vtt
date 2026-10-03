@@ -899,6 +899,7 @@ class TokenCardLayer extends StatelessWidget {
                   top: top,
                   child: _TokenCard(
                     key: ValueKey(token.id),
+                    maxHeight: view.height - pad - top,
                     token: token,
                     scene: scene,
                     snap: controller.snap,
@@ -930,6 +931,7 @@ class TokenCardLayer extends StatelessWidget {
 class _TokenCard extends StatelessWidget {
   const _TokenCard({
     super.key,
+    required this.maxHeight,
     required this.token,
     required this.scene,
     required this.snap,
@@ -946,6 +948,9 @@ class _TokenCard extends StatelessWidget {
   });
 
   final Token token;
+
+  /// The room left below the card's top: its middle scrolls past it.
+  final double maxHeight;
 
   /// For the grid, and the rules in force where the token stands.
   final Scene scene;
@@ -969,6 +974,7 @@ class _TokenCard extends StatelessWidget {
     const border = BorderSide(color: CvColors.borderSubtle);
     final card = Container(
       width: TokenCardLayer.width,
+      constraints: BoxConstraints(maxHeight: maxHeight),
       decoration: BoxDecoration(
         color: CvColors.surfacePanelSolid,
         borderRadius: BorderRadius.circular(CvRadii.lg),
@@ -1017,7 +1023,8 @@ class _TokenCard extends StatelessWidget {
                 ),
               ]),
             ),
-            Padding(
+            Flexible(
+              child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(14, 12, 14, 6),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1124,6 +1131,7 @@ class _TokenCard extends StatelessWidget {
                     onRemove: (name) => send(RemoveCondition(token.id, name)),
                   ),
                 ],
+              ),
               ),
             ),
             if (gm)
@@ -1348,8 +1356,9 @@ class _NameFieldState extends State<_NameField> {
       );
 }
 
-/// The pack's trackers on a token: − and + step one, or type a value.
-/// Values stay within each tracker's bounds; an empty field clears it.
+/// The pack's trackers a token has: − and + step one, or type a value,
+/// kept within each tracker's bounds; an empty field takes it off. A menu
+/// adds the others, so a pack with many trackers keeps the card short.
 class _Trackers extends StatefulWidget {
   const _Trackers(
       {super.key, required this.token, required this.trackers, required this.send});
@@ -1395,14 +1404,21 @@ class _TrackersState extends State<_Trackers> {
   }
 
   @override
-  Widget build(BuildContext context) => Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        spacing: 6,
-        children: [
-          Text('Trackers',
-              style: CvTypography.label.copyWith(color: CvColors.textSecondary)),
-          for (final def in widget.trackers)
-            Row(spacing: 4, children: [
+  Widget build(BuildContext context) {
+    final trackers = widget.token.trackers;
+    final shown = [for (final d in widget.trackers) if (trackers.containsKey(d.name)) d];
+    final offered = [for (final d in widget.trackers) if (!trackers.containsKey(d.name)) d];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      spacing: 6,
+      children: [
+        Text('Trackers',
+            style: CvTypography.label.copyWith(color: CvColors.textSecondary)),
+        for (final def in shown)
+          CvTooltip(
+            message: def.text,
+            side: AxisDirection.up,
+            child: Row(spacing: 4, children: [
               Expanded(
                 child: Text(def.max == null ? def.name : '${def.name} / ${def.max}',
                     maxLines: 1,
@@ -1413,8 +1429,7 @@ class _TrackersState extends State<_Trackers> {
                 icon: Lucide.minus,
                 label: '${def.name} −1',
                 tooltipSide: AxisDirection.up,
-                onPressed: () =>
-                    _set(def, (widget.token.trackers[def.name] ?? def.min) - 1),
+                onPressed: () => _set(def, (trackers[def.name] ?? def.min) - 1),
               ),
               SizedBox(
                 width: 72,
@@ -1431,12 +1446,23 @@ class _TrackersState extends State<_Trackers> {
                 icon: Lucide.plus,
                 label: '${def.name} +1',
                 tooltipSide: AxisDirection.up,
-                onPressed: () =>
-                    _set(def, (widget.token.trackers[def.name] ?? def.min) + 1),
+                onPressed: () => _set(def, (trackers[def.name] ?? def.min) + 1),
               ),
             ]),
-        ],
-      );
+          ),
+        if (offered.isNotEmpty)
+          CvDropdown<String?>(
+            entries: [for (final d in offered) CvMenuItem(d.name, d.name)],
+            value: null,
+            placeholder: 'Add a tracker…',
+            onChanged: (name) {
+              final def = offered.where((d) => d.name == name).firstOrNull;
+              if (def != null) _set(def, def.min);
+            },
+          ),
+      ],
+    );
+  }
 }
 
 /// Tags as chips, each removable and explained by the pack on hover, a

@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 
 import 'package:chimera_core/chimera_core.dart';
@@ -90,5 +92,31 @@ void main() {
     await tester.pump();
     expect(store.scene.initiative!.round, 2);
     expect(find.text('End my turn'), findsNothing);
+  });
+
+  testWidgets('a forms pack starts everyone Steady, and the GM changes forms',
+      (tester) async {
+    final solaris = jsonDecode(File('../packs/solaris-arcanum.json').readAsStringSync())
+        as Json;
+    final scene = table();
+    final store = SceneStore(Scene(
+      settings: scene.settings.copyWith(pack: 'solaris-arcanum'),
+      tokens: scene.tokens,
+      packFile: ScenePack(solaris),
+    ));
+    await show(tester, store, gm: true);
+    expect(find.text('Roll initiative'), findsNothing);
+    await tester.tap(find.text('Start the fight'));
+    await tester.pump();
+    expect(find.text('Steady'), findsOneWidget); // Aria, a player's token.
+    expect(find.text('Steady (NPC)'), findsOneWidget); // The Goblin.
+    expect(find.bySemanticsLabel('Roll again'), findsNothing);
+    expect(store.scene.initiative!.entries.first.token, const TokenId('a'));
+
+    // Poise is after Steady (NPC): the Goblin goes first now.
+    await tester.tap(find.text('Steady'));
+    await tester.pump();
+    expect(find.text('Poise'), findsOneWidget);
+    expect(store.scene.initiative!.entries.map((e) => e.token.value), ['g', 'a']);
   });
 }

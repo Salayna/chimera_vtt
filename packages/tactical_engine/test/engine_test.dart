@@ -255,5 +255,12 @@ void main() {
     final engine = TacticalEngine(
         pack: pack, topology: pack.topologyFor(cellSize: 100));
     expect(engine.measure((x: 50, y: 50), (x: 150, y: 50)).band!.name, 'Adjacent');
+    expect(pack.regionTags.where((t) => t.sector), hasLength(15));
+    // No initiative roll: Combat Forms order the turns.
+    expect(pack.initiative, isNull);
+    expect(pack.startingForm(npc: false)!.name, 'Steady');
+    expect(pack.startingForm(npc: true)!.name, 'Steady (NPC)');
+    expect(pack.forms.map((f) => f.value), [7, 6, 5, 4, 3, 2, 1]);
+    expect(SystemPack.fromJson(pack.toJson()).toJson(), pack.toJson());
   });
 }
