@@ -108,25 +108,23 @@ class _LoopbackDemoState extends State<LoopbackDemo> {
                   onRemove: (id) => _host.execute(RemoveToken(id)),
                 ),
               ),
-              Positioned(
+              Positioned.fill(
                 left: pad,
-                top: 0,
-                bottom: 0,
-                child: Center(child: GmRail(controller: _gm)),
-              ),
-              Positioned(
-                left: pad + CvSizes.rail + CvSpacing.s4,
-                top: 0,
-                bottom: 0,
-                child: Center(
-                  child: FogOptions(
-                      controller: _gm, grid: _host.store.scene.settings.grid),
-                ),
-              ),
-              Positioned(
                 right: pad,
                 bottom: pad,
-                child: ZoomCluster(controller: _gm, snap: true),
+                child: BottomRow(
+                  dock: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    spacing: CvSpacing.s4,
+                    children: [
+                      FogOptions(
+                          controller: _gm,
+                          grid: _host.store.scene.settings.grid),
+                      ToolDock(controller: _gm, gm: true),
+                    ],
+                  ),
+                  side: ZoomCluster(controller: _gm, snap: true),
+                ),
               ),
             ]),
           ),

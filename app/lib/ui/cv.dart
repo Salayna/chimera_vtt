@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' show ImageFilter;
 
+import 'package:flutter/gestures.dart' show PointerScrollEvent, PointerSignalEvent;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -539,6 +540,58 @@ class CvToolButton extends StatelessWidget {
 }
 
 /// A vertical rail or horizontal bar of tool buttons in a floating panel.
+/// A row of [itemCount] items that scrolls sideways, [height] tall. A mouse
+/// wheel only scrolls up and down, so here it scrolls sideways too.
+class CvSideways extends StatefulWidget {
+  const CvSideways({
+    super.key,
+    required this.height,
+    required this.itemCount,
+    required this.itemBuilder,
+  });
+
+  final double height;
+  final int itemCount;
+  final IndexedWidgetBuilder itemBuilder;
+
+  @override
+  State<CvSideways> createState() => _CvSidewaysState();
+}
+
+class _CvSidewaysState extends State<CvSideways> {
+  final _scroll = ScrollController();
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  void _wheel(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent || !_scroll.hasClients) return;
+    final delta = event.scrollDelta;
+    if (delta.dx != 0) return;
+    final p = _scroll.position;
+    _scroll.jumpTo(
+        (p.pixels + delta.dy).clamp(p.minScrollExtent, p.maxScrollExtent));
+  }
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+        height: widget.height,
+        child: Listener(
+          onPointerSignal: _wheel,
+          child: ListView.separated(
+            controller: _scroll,
+            scrollDirection: Axis.horizontal,
+            itemCount: widget.itemCount,
+            separatorBuilder: (_, _) => const SizedBox(width: 8),
+            itemBuilder: widget.itemBuilder,
+          ),
+        ),
+      );
+}
+
 /// [CvToolbarSeparator]s become hairlines across it.
 class CvToolbar extends StatelessWidget {
   const CvToolbar({super.key, required this.children, this.axis = Axis.vertical});

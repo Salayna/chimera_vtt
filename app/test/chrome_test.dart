@@ -105,7 +105,8 @@ void main() {
         controller: controller,
         gm: true,
         child: Stack(children: [
-          Positioned(left: 16, top: 100, child: GmRail(controller: controller)),
+          Positioned(
+              left: 16, bottom: 16, child: ToolDock(controller: controller, gm: true)),
           Positioned(
               left: 100,
               top: 100,
@@ -134,6 +135,62 @@ void main() {
 
     await tester.tap(find.text('Snap'));
     expect(controller.snap, isFalse);
+  });
+
+  testWidgets('the dock moves left of the zoom on a narrow screen',
+      (tester) async {
+    tester.view.physicalSize = const Size(800, 600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final controller = TableController();
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(cvApp(
+      title: 'test',
+      home: Stack(children: [
+        Positioned(
+          left: 16,
+          right: 16,
+          bottom: 16,
+          height: 52,
+          child: BottomRow(
+            dock: ToolDock(controller: controller, gm: true),
+            side: ZoomCluster(controller: controller, snap: true),
+          ),
+        ),
+      ]),
+    ));
+    final dock = tester.getRect(find.byType(ToolDock));
+    final zoom = tester.getRect(find.byType(ZoomCluster));
+    expect(dock.right, lessThanOrEqualTo(zoom.left));
+    expect(dock.left, greaterThanOrEqualTo(16));
+  });
+
+  testWidgets('with no room beside it, the zoom sits on top of the dock',
+      (tester) async {
+    tester.view.physicalSize = const Size(560, 600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final controller = TableController();
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(cvApp(
+      title: 'test',
+      home: Stack(children: [
+        Positioned(
+          left: 16,
+          right: 16,
+          top: 16,
+          bottom: 16,
+          child: BottomRow(
+            dock: ToolDock(controller: controller, gm: true),
+            side: ZoomCluster(controller: controller, snap: true),
+          ),
+        ),
+      ]),
+    ));
+    final dock = tester.getRect(find.byType(ToolDock));
+    final zoom = tester.getRect(find.byType(ZoomCluster));
+    expect(dock.bottom, 600 - 16);
+    expect(zoom.bottom, lessThanOrEqualTo(dock.top));
   });
 
   testWidgets('the grid panel sets the cell size, and typing is not shortcuts',

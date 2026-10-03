@@ -228,6 +228,8 @@ class LibraryPanel extends StatefulWidget {
     required this.onPick,
     this.footer = const [],
     this.revision = 0,
+    this.onClose,
+    this.strip = false,
   });
 
   final Library library;
@@ -240,6 +242,11 @@ class LibraryPanel extends StatefulWidget {
   /// Buttons under the entries: upload, and the like.
   final List<Widget> footer;
   final int revision;
+  final VoidCallback? onClose;
+
+  /// One row that scrolls sideways, as wide as it's let be, with the
+  /// [footer] in the header: the token strip above the dock.
+  final bool strip;
 
   @override
   State<LibraryPanel> createState() => _LibraryPanelState();
@@ -296,9 +303,58 @@ class _LibraryPanelState extends State<LibraryPanel> {
   @override
   Widget build(BuildContext context) {
     final entries = _entries;
+    Widget tile(LibraryEntry e) => CvPressable(
+      onTap: () => _editing ? _rename(e) : widget.onPick(e),
+      label: _editing ? 'Rename ${e.name}' : e.name,
+      builder: (s) => SizedBox(
+        width: 80,
+        child: Column(spacing: 4, children: [
+          SizedBox(
+            width: 80,
+            height: 80,
+            child: DecoratedBox(
+              position: DecorationPosition.foreground,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(CvRadii.md),
+                border: Border.all(
+                    color: s.hover
+                        ? CvColors.amber500
+                        : CvColors.borderSubtle),
+              ),
+              child: Stack(fit: StackFit.expand, children: [
+                LibraryThumb(assets: widget.assets, thumb: e.thumb),
+                if (_editing)
+                  Positioned(
+                    right: 2,
+                    top: 2,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: CvColors.surfacePanelSolid,
+                        borderRadius:
+                            BorderRadius.circular(CvRadii.md),
+                      ),
+                      child: CvToolButton(
+                        icon: Lucide.trash2,
+                        label: 'Delete ${e.name}',
+                        danger: true,
+                        tooltipSide: AxisDirection.up,
+                        onPressed: () => _delete(e),
+                      ),
+                    ),
+                  ),
+              ]),
+            ),
+          ),
+          Text(e.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: CvTypography.caption),
+        ]),
+      ),
+    );
     return CvPopIn(
       child: CvPanel(
-        width: 300,
+        width: widget.strip ? null : 480,
         padding: const EdgeInsets.all(CvSpacing.s5),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -307,6 +363,14 @@ class _LibraryPanelState extends State<LibraryPanel> {
           children: [
             Row(children: [
               Expanded(child: CvOverline(widget.title)),
+              if (widget.strip) ...widget.footer,
+              if (widget.onClose case final close?)
+                CvToolButton(
+                  icon: Lucide.x,
+                  label: 'Close',
+                  tooltipSide: AxisDirection.up,
+                  onPressed: close,
+                ),
               if (entries?.isNotEmpty ?? false)
                 CvToolButton(
                   icon: _editing ? Lucide.check : Lucide.pencil,
@@ -325,65 +389,22 @@ class _LibraryPanelState extends State<LibraryPanel> {
               Text(widget.hint,
                   style: CvTypography.caption
                       .copyWith(color: CvColors.textSecondary))
+            else if (widget.strip)
+              CvSideways(
+                height: 104,
+                itemCount: entries.length,
+                itemBuilder: (_, i) => tile(entries[i]),
+              )
             else
               ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 320),
+                constraints: const BoxConstraints(maxHeight: 420),
                 child: SingleChildScrollView(
                   child: Wrap(spacing: 8, runSpacing: 8, children: [
-                    for (final e in entries)
-                      CvPressable(
-                        onTap: () => _editing ? _rename(e) : widget.onPick(e),
-                        label: _editing ? 'Rename ${e.name}' : e.name,
-                        builder: (s) => SizedBox(
-                          width: 80,
-                          child: Column(spacing: 4, children: [
-                            SizedBox(
-                              width: 80,
-                              height: 80,
-                              child: DecoratedBox(
-                                position: DecorationPosition.foreground,
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(CvRadii.md),
-                                  border: Border.all(
-                                      color: s.hover
-                                          ? CvColors.amber500
-                                          : CvColors.borderSubtle),
-                                ),
-                                child: Stack(fit: StackFit.expand, children: [
-                                  LibraryThumb(assets: widget.assets, thumb: e.thumb),
-                                  if (_editing)
-                                    Positioned(
-                                      right: 2,
-                                      top: 2,
-                                      child: DecoratedBox(
-                                        decoration: BoxDecoration(
-                                          color: CvColors.surfacePanelSolid,
-                                          borderRadius:
-                                              BorderRadius.circular(CvRadii.md),
-                                        ),
-                                        child: CvToolButton(
-                                          icon: Lucide.trash2,
-                                          label: 'Delete ${e.name}',
-                                          danger: true,
-                                          tooltipSide: AxisDirection.up,
-                                          onPressed: () => _delete(e),
-                                        ),
-                                      ),
-                                    ),
-                                ]),
-                              ),
-                            ),
-                            Text(e.name,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: CvTypography.caption),
-                          ]),
-                        ),
-                      ),
+                    for (final e in entries) tile(e),
                   ]),
                 ),
               ),
-            ...widget.footer,
+            if (!widget.strip) ...widget.footer,
           ],
         ),
       ),

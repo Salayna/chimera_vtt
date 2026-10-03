@@ -493,7 +493,33 @@ class _GmRoomState extends State<GmRoom> {
   @override
   void initState() {
     super.initState();
+    _controller.addListener(_onGridOptions);
     _start();
+  }
+
+  /// Opening a panel by the rail closes the others: one at a time.
+  void _closePanels() {
+    _scenesOpen = false;
+    _membersOpen = false;
+    _libraryOpen = null;
+    _tokenImageFor = null;
+    if (_controller.gridOptions) _controller.toggleGridOptions();
+  }
+
+  /// The grid panel opens from the controller (its key, G), so it closes the
+  /// others as it opens.
+  bool _gridWasOpen = false;
+  void _onGridOptions() {
+    final open = _controller.gridOptions;
+    if (open && !_gridWasOpen) {
+      setState(() {
+        _scenesOpen = false;
+        _membersOpen = false;
+        _libraryOpen = null;
+        _tokenImageFor = null;
+      });
+    }
+    _gridWasOpen = open;
   }
 
   /// The system the campaign is played with, by pack id. Every scene is
@@ -840,9 +866,134 @@ class _GmRoomState extends State<GmRoom> {
   TokenId? _tokenImageFor;
 
   void _toggleLibrary(LibraryKind kind) => setState(() {
-        _libraryOpen = _libraryOpen == kind ? null : kind;
+        final open = _libraryOpen != kind;
+        // The scene library opens from the scenes panel, beside it.
+        final scenes = _scenesOpen && kind == LibraryKind.scene;
+        _closePanels();
+        _scenesOpen = scenes;
+        if (open) _libraryOpen = kind;
+      });
+
+  void _closeLibrary() => setState(() {
+        _libraryOpen = null;
         _tokenImageFor = null;
       });
+
+  /// The token strip shows the pack's tokens rather than the images.
+  bool _stripPack = false;
+
+  /// The token library, a strip above the dock. It stays open while the GM
+  /// places tokens, so they see each land; giving one token an image closes
+  /// it. Placing new tokens, it can show the pack's tokens instead.
+  Widget _tokenStrip(HostSession host) {
+    final pack = _tokenImageFor == null ? _fullPack(host.store.scene) : null;
+    final toggle = pack == null || pack.tokens.isEmpty
+        ? null
+        : SizedBox(
+            width: 240,
+            child: CvSegmentedControl<bool>(
+              value: _stripPack,
+              onChanged: (v) => setState(() => _stripPack = v),
+              segments: [
+                (value: false, label: 'Images', icon: Lucide.imageUp, checked: null),
+                (value: true, label: pack.name, icon: Lucide.bookOpen, checked: null),
+              ],
+            ),
+          );
+    // Beside the log if it fits there, else across the table.
+    final across = MediaQuery.sizeOf(context).width - 2 * CvSizes.insetScreen;
+    final beside = across - LogPanel.width - CvSpacing.s4;
+    return SizedBox(
+      width: min(720, beside >= 560 ? beside : across),
+      child: toggle != null && _stripPack
+          ? PackTokensPanel(
+              pack: pack!,
+              strip: true,
+              leading: toggle,
+              onClose: _closeLibrary,
+              onPick: _placeTemplate,
+            )
+          : LibraryPanel(
+          library: _library,
+          assets: widget.assets,
+          kind: LibraryKind.token,
+          strip: true,
+          title: switch (host.store.scene.tokens[_tokenImageFor]) {
+            null => 'Tokens',
+            final t =>
+              t.name.isEmpty ? 'Image for the token' : 'Image for ${t.name}',
+          },
+          hint: 'Token images you upload are kept here, for every campaign.',
+          revision: _libraryRevision,
+          onClose: _closeLibrary,
+          onPick: (e) => _useTokenImage(e.asset!),
+          footer: [
+            ?toggle,
+            if (_tokenImageFor == null)
+              CvButton(
+                label: 'Blank token',
+                icon: Lucide.circlePlus,
+                variant: CvButtonVariant.ghost,
+                small: true,
+                onPressed: _addToken,
+              ),
+            CvButton(
+              label: 'Upload',
+              icon: Lucide.imageUp,
+              small: true,
+              onPressed: _uploading == null ? _uploadTokenImage : null,
+            ),
+          ],
+        ),
+    );
+  }
+
+  /// The [kind] library's panels, for the pop-up.
+  List<Widget> _libraryPopup(LibraryKind kind, HostSession host) => switch (kind) {
+        LibraryKind.map => [
+            LibraryPanel(
+              library: _library,
+              assets: widget.assets,
+              kind: LibraryKind.map,
+              title: 'Maps',
+              hint: 'Maps you upload are kept here, for every campaign.',
+              revision: _libraryRevision,
+              onClose: _closeLibrary,
+              onPick: (e) {
+                _closeLibrary();
+                _useMap(e);
+              },
+              footer: [
+                CvButton(
+                  label: 'Upload new map',
+                  icon: Lucide.imageUp,
+                  small: true,
+                  block: true,
+                  onPressed: _uploading == null
+                      ? () => _setMap().then((_) => _closeLibrary())
+                      : null,
+                ),
+              ],
+            ),
+          ],
+        LibraryKind.token => const [],
+        LibraryKind.scene => [
+            LibraryPanel(
+              library: _library,
+              assets: widget.assets,
+              kind: LibraryKind.scene,
+              title: 'Library scenes',
+              hint: 'Save a scene to your library to start new scenes from '
+                  'it, in any campaign.',
+              revision: _libraryRevision,
+              onClose: _closeLibrary,
+              onPick: (e) {
+                _closeLibrary();
+                _newScene(from: e);
+              },
+            ),
+          ],
+      };
 
   late final _library = Library(widget.client, widget.assets);
 
@@ -906,10 +1057,12 @@ class _GmRoomState extends State<GmRoom> {
   /// Opens the token library: to place tokens, or, [forToken], to give
   /// that one token an image.
   void _openTokens({TokenId? forToken}) => setState(() {
-        _libraryOpen = forToken == null && _libraryOpen == LibraryKind.token
-            ? null
-            : LibraryKind.token;
-        _tokenImageFor = forToken;
+        final close = forToken == null && _libraryOpen == LibraryKind.token;
+        _closePanels();
+        if (!close) {
+          _libraryOpen = LibraryKind.token;
+          _tokenImageFor = forToken;
+        }
       });
 
   /// A token image from the library or an upload: the token the library was
@@ -1138,6 +1291,7 @@ class _GmRoomState extends State<GmRoom> {
       onDuplicate: _duplicateToken,
       onUndo: host.undo,
       onRedo: host.redo,
+      onEscape: _libraryOpen == null ? null : _closeLibrary,
       grid: () => host.store.scene.settings.grid,
       child: Stack(children: [
         Positioned.fill(
@@ -1225,16 +1379,20 @@ class _GmRoomState extends State<GmRoom> {
           child: Center(
             child: GmRail(
               controller: _controller,
-              onAddToken: _openTokens,
               onSetMap: () => _toggleLibrary(LibraryKind.map),
               mapsOpen: _libraryOpen == LibraryKind.map,
-              tokensOpen: _libraryOpen == LibraryKind.token,
-              onUndo: host.undo,
-              onRedo: host.redo,
               scenesOpen: _scenesOpen,
-              onScenes: () => setState(() => _scenesOpen = !_scenesOpen),
+              onScenes: () => setState(() {
+                final open = !_scenesOpen;
+                _closePanels();
+                _scenesOpen = open;
+              }),
               membersOpen: _membersOpen,
-              onMembers: () => setState(() => _membersOpen = !_membersOpen),
+              onMembers: () => setState(() {
+                final open = !_membersOpen;
+                _closePanels();
+                _membersOpen = open;
+              }),
             ),
           ),
         ),
@@ -1254,65 +1412,6 @@ class _GmRoomState extends State<GmRoom> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   spacing: CvSpacing.s4,
                   children: [
-                    if (_libraryOpen == LibraryKind.map)
-                      LibraryPanel(
-                        library: _library,
-                        assets: widget.assets,
-                        kind: LibraryKind.map,
-                        title: 'Maps',
-                        hint: 'Maps you upload are kept here, for every '
-                            'campaign.',
-                        revision: _libraryRevision,
-                        onPick: _useMap,
-                        footer: [
-                          CvButton(
-                            label: 'Upload new map',
-                            icon: Lucide.imageUp,
-                            small: true,
-                            block: true,
-                            onPressed: _uploading == null ? _setMap : null,
-                          ),
-                        ],
-                      ),
-                    if (_libraryOpen == LibraryKind.token)
-                      LibraryPanel(
-                        library: _library,
-                        assets: widget.assets,
-                        kind: LibraryKind.token,
-                        title: switch (host.store.scene.tokens[_tokenImageFor]) {
-                          null => 'Tokens',
-                          final t => t.name.isEmpty
-                              ? 'Image for the token'
-                              : 'Image for ${t.name}',
-                        },
-                        hint: 'Token images you upload are kept here, for '
-                            'every campaign.',
-                        revision: _libraryRevision,
-                        onPick: (e) => _useTokenImage(e.asset!),
-                        footer: [
-                          CvButton(
-                            label: 'Upload new token image',
-                            icon: Lucide.imageUp,
-                            small: true,
-                            block: true,
-                            onPressed:
-                                _uploading == null ? _uploadTokenImage : null,
-                          ),
-                          if (_tokenImageFor == null)
-                            CvButton(
-                              label: 'Blank token',
-                              icon: Lucide.circlePlus,
-                              variant: CvButtonVariant.ghost,
-                              small: true,
-                              block: true,
-                              onPressed: _addToken,
-                            ),
-                        ],
-                      ),
-                    if (_libraryOpen == LibraryKind.token && _tokenImageFor == null)
-                      if (_fullPack(snap.requireData) case final pack
-                          when pack.tokens.isNotEmpty)
-                        PackTokensPanel(pack: pack, onPick: _placeTemplate),
                     if (_membersOpen) MembersPanel(onRemove: _removeMember),
                     if (_scenesOpen)
                       ScenesPanel(
@@ -1328,20 +1427,6 @@ class _GmRoomState extends State<GmRoom> {
                         onFromLibrary: () => _toggleLibrary(LibraryKind.scene),
                         fromLibraryOpen: _libraryOpen == LibraryKind.scene,
                       ),
-                    if (_libraryOpen == LibraryKind.scene)
-                      LibraryPanel(
-                        library: _library,
-                        assets: widget.assets,
-                        kind: LibraryKind.scene,
-                        title: 'Library scenes',
-                        hint: 'Save a scene to your library to start new '
-                            'scenes from it, in any campaign.',
-                        revision: _libraryRevision,
-                        onPick: (e) {
-                          setState(() => _libraryOpen = null);
-                          _newScene(from: e);
-                        },
-                      ),
                     GridOptions(
                         controller: _controller,
                         grid: grid,
@@ -1352,12 +1437,6 @@ class _GmRoomState extends State<GmRoom> {
                         packs: _packChoices(snap.requireData),
                         onPack: _setPack,
                         onInstallPack: _installPack),
-                    FogOptions(
-                        controller: _controller, grid: grid, onFill: _fillFog),
-                    RegionOptions(
-                        controller: _controller,
-                        store: host.store,
-                        send: host.execute),
                   ],
                 );
               },
@@ -1365,15 +1444,71 @@ class _GmRoomState extends State<GmRoom> {
           ),
         ),
         Positioned(
+          left: pad,
           right: pad,
+          top: pad + CvSizes.hit + CvSpacing.s4,
           bottom: pad,
-          child: ZoomCluster(controller: _controller, snap: true),
+          child: BottomRow(
+            // The options of the tool in hand, just above it.
+            dock: Column(
+              mainAxisSize: MainAxisSize.min,
+              spacing: CvSpacing.s4,
+              children: [
+                StreamBuilder(
+                  stream: host.store.changes,
+                  initialData: host.store.scene,
+                  builder: (context, snap) => FogOptions(
+                      controller: _controller,
+                      grid: snap.requireData.settings.grid,
+                      onFill: _fillFog),
+                ),
+                RegionOptions(
+                    controller: _controller,
+                    store: host.store,
+                    send: host.execute),
+                if (_libraryOpen == LibraryKind.token) _tokenStrip(host),
+                ToolDock(
+                    controller: _controller,
+                    gm: true,
+                    onUndo: host.undo,
+                    onRedo: host.redo,
+                    onAddToken: _openTokens,
+                    tokensOpen: _libraryOpen == LibraryKind.token),
+              ],
+            ),
+            side: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              spacing: CvSpacing.s4,
+              children: [
+                LogPanel(session: host, send: host.execute, gm: true),
+                ZoomCluster(controller: _controller, snap: true),
+              ],
+            ),
+          ),
         ),
-        Positioned(
-          right: pad,
-          bottom: pad + CvSizes.hit + 8 + CvSpacing.s4,
-          child: LogPanel(session: host, send: host.execute, gm: true),
-        ),
+        // Maps and scenes pop up over the table: picking closes them.
+        if (_libraryOpen case final kind? when kind != LibraryKind.token)
+          Positioned.fill(
+            child: GestureDetector(
+              onTap: _closeLibrary,
+              child: ColoredBox(
+                color: CvColors.surfaceScrim,
+                child: Center(
+                  // Taps inside don't close it.
+                  child: GestureDetector(
+                    onTap: () {},
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      spacing: CvSpacing.s4,
+                      children: _libraryPopup(kind, host),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
         if (_uploading case final name?)
           Positioned.fill(
             child: ColoredBox(
@@ -1600,14 +1735,9 @@ class _PlayerRoomState extends State<PlayerRoom> {
           top: pad,
           child: CvRoomCodeChip(code: widget.code),
         ),
+
         Positioned(
           left: pad,
-          top: 0,
-          bottom: 0,
-          child: Center(child: PlayerRail(controller: _controller)),
-        ),
-        Positioned(
-          left: pad + CvSizes.rail + CvSpacing.s4,
           top: pad + CvSizes.hit + CvSpacing.s4,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1645,14 +1775,22 @@ class _PlayerRoomState extends State<PlayerRoom> {
           child: PresenceBar(session: session, onLeave: widget.onLeave),
         ),
         Positioned(
+          left: pad,
           right: pad,
+          top: pad + CvSizes.hit + CvSpacing.s4,
           bottom: pad,
-          child: ZoomCluster(controller: _controller),
-        ),
-        Positioned(
-          right: pad,
-          bottom: pad + CvSizes.hit + 8 + CvSpacing.s4,
-          child: LogPanel(session: session, send: session.request),
+          child: BottomRow(
+            dock: ToolDock(controller: _controller),
+            side: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              spacing: CvSpacing.s4,
+              children: [
+                LogPanel(session: session, send: session.request),
+                ZoomCluster(controller: _controller),
+              ],
+            ),
+          ),
         ),
       ]),
     );

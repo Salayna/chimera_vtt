@@ -8,13 +8,26 @@ import 'package:tactical_engine/tactical_engine.dart'
 import '../theme.dart';
 import '../ui/cv.dart';
 
-/// The scene's pack tokens beside the rail (a Solaris module's threats):
-/// search them, and pick one to place it ready to run.
+/// The scene's pack tokens (a Solaris module's threats): search them, and
+/// pick one to place it ready to run.
 class PackTokensPanel extends StatefulWidget {
-  const PackTokensPanel({super.key, required this.pack, required this.onPick});
+  const PackTokensPanel({
+    super.key,
+    required this.pack,
+    required this.onPick,
+    this.strip = false,
+    this.leading,
+    this.onClose,
+  });
 
   final SystemPack pack;
   final void Function(TokenTemplate template) onPick;
+
+  /// One row of cards that scrolls sideways, the search in the header: the
+  /// token strip above the dock. [leading] starts its header.
+  final bool strip;
+  final Widget? leading;
+  final VoidCallback? onClose;
 
   @override
   State<PackTokensPanel> createState() => _PackTokensPanelState();
@@ -42,6 +55,47 @@ class _PackTokensPanelState extends State<PackTokensPanel> {
       for (final t in widget.pack.tokens.values)
         if (t.name.toLowerCase().contains(query)) t,
     ];
+    final search = CvTextInput(
+      controller: _search,
+      icon: Lucide.search,
+      placeholder: 'Search ${widget.pack.tokens.length}',
+    );
+    final none = Text('Nothing matches "${_search.text.trim()}".',
+        style: CvTypography.caption.copyWith(color: CvColors.textSecondary));
+    if (widget.strip) {
+      return CvPopIn(
+        child: CvPanel(
+          padding: const EdgeInsets.all(CvSpacing.s5),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            spacing: 10,
+            children: [
+              Row(spacing: 8, children: [
+                ?widget.leading,
+                const Spacer(),
+                SizedBox(width: 200, child: search),
+                if (widget.onClose case final close?)
+                  CvToolButton(
+                    icon: Lucide.x,
+                    label: 'Close',
+                    tooltipSide: AxisDirection.up,
+                    onPressed: close,
+                  ),
+              ]),
+              if (shown.isEmpty)
+                SizedBox(height: 104, child: Center(child: none))
+              else
+                CvSideways(
+                  height: 104,
+                  itemCount: shown.length,
+                  itemBuilder: (_, i) => _card(shown[i]),
+                ),
+            ],
+          ),
+        ),
+      );
+    }
     return CvPopIn(
       child: CvPanel(
         width: 300,
@@ -52,11 +106,7 @@ class _PackTokensPanelState extends State<PackTokensPanel> {
           spacing: 10,
           children: [
             CvOverline('${widget.pack.name} tokens'),
-            CvTextInput(
-              controller: _search,
-              icon: Lucide.search,
-              placeholder: 'Search ${widget.pack.tokens.length}',
-            ),
+            search,
             ConstrainedBox(
               constraints: const BoxConstraints(maxHeight: 280),
               child: SingleChildScrollView(
@@ -90,10 +140,7 @@ class _PackTokensPanelState extends State<PackTokensPanel> {
                           ]),
                         ),
                       ),
-                    if (shown.isEmpty)
-                      Text('Nothing matches "${_search.text.trim()}".',
-                          style: CvTypography.caption
-                              .copyWith(color: CvColors.textSecondary)),
+                    if (shown.isEmpty) none,
                   ],
                 ),
               ),
@@ -103,6 +150,39 @@ class _PackTokensPanelState extends State<PackTokensPanel> {
       ),
     );
   }
+
+  /// [t] in the strip: its name and form, to place it.
+  Widget _card(TokenTemplate t) => CvPressable(
+        onTap: () => widget.onPick(t),
+        label: 'Place ${t.name}',
+        builder: (s) => Container(
+          width: 140,
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: s.hover ? CvColors.surfaceHover : CvColors.surfaceInput,
+            borderRadius: BorderRadius.circular(CvRadii.md),
+            border: Border.all(
+                color: s.hover ? CvColors.amber500 : CvColors.borderSubtle),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.end,
+            spacing: 2,
+            children: [
+              Text(t.name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: CvTypography.label),
+              if (t.form case final form?)
+                Text(form,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: CvTypography.caption
+                        .copyWith(color: CvColors.textSecondary)),
+            ],
+          ),
+        ),
+      );
 }
 
 /// [template] as a token at [position], in cells of [cellSize]: its name,

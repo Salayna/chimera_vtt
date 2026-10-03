@@ -108,21 +108,18 @@ VoidCallback shareRulers(
 /// The undo key's modifier, as the GM's platform writes it.
 String get _mod => defaultTargetPlatform == TargetPlatform.macOS ? '⌘' : 'Ctrl ';
 
-/// The GM's tools, a rail on the left edge.
+/// The GM's panels, a rail on the left edge: scenes, players, the map and
+/// its grid. The tools themselves, tokens included, are in the [ToolDock].
 class GmRail extends StatelessWidget {
   const GmRail({
     super.key,
     required this.controller,
-    this.onAddToken,
     this.onSetMap,
-    this.onUndo,
-    this.onRedo,
     this.onScenes,
     this.scenesOpen = false,
     this.onMembers,
     this.membersOpen = false,
     this.mapsOpen = false,
-    this.tokensOpen = false,
   });
 
   final TableController controller;
@@ -131,11 +128,61 @@ class GmRail extends StatelessWidget {
   final VoidCallback? onMembers;
   final bool membersOpen;
   final bool mapsOpen;
-  final bool tokensOpen;
-  final VoidCallback? onAddToken;
   final VoidCallback? onSetMap;
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+        listenable: controller,
+        builder: (context, _) => CvToolbar(children: [
+          if (onScenes != null) ...[
+            CvToolButton(
+                icon: Lucide.layers,
+                label: 'Scenes',
+                active: scenesOpen,
+                onPressed: onScenes),
+            if (onMembers != null)
+              CvToolButton(
+                  icon: Lucide.userRound,
+                  label: 'Players',
+                  active: membersOpen,
+                  onPressed: onMembers),
+            const CvToolbarSeparator(),
+          ],
+          CvToolButton(
+              icon: Lucide.imageUp,
+              label: 'Change map',
+              shortcut: 'M',
+              active: mapsOpen,
+              onPressed: onSetMap),
+          CvToolButton(
+              icon: Lucide.grid3x3,
+              label: 'Grid',
+              shortcut: 'G',
+              active: controller.gridOptions,
+              onPressed: controller.toggleGridOptions),
+        ]),
+      );
+}
+
+/// The tools, docked at the bottom centre: move, ruler, ping, and for the
+/// [gm] undo and redo, fog, regions and the token strip.
+class ToolDock extends StatelessWidget {
+  const ToolDock({
+    super.key,
+    required this.controller,
+    this.gm = false,
+    this.onUndo,
+    this.onRedo,
+    this.onAddToken,
+    this.tokensOpen = false,
+  });
+
+  final TableController controller;
+  final bool gm;
   final VoidCallback? onUndo;
   final VoidCallback? onRedo;
+  final VoidCallback? onAddToken;
+  final bool tokensOpen;
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
@@ -146,98 +193,102 @@ class GmRail extends StatelessWidget {
                 icon: icon,
                 label: label,
                 shortcut: key,
+                tooltipSide: AxisDirection.up,
                 active: controller.tool == t,
                 onPressed: () => controller.tool = t,
               );
-          return CvToolbar(children: [
-            if (onScenes != null) ...[
+          return CvToolbar(axis: Axis.horizontal, children: [
+            if (gm) ...[
               CvToolButton(
-                  icon: Lucide.layers,
-                  label: 'Scenes',
-                  active: scenesOpen,
-                  onPressed: onScenes),
-              if (onMembers != null)
-                CvToolButton(
-                    icon: Lucide.userRound,
-                    label: 'Players',
-                    active: membersOpen,
-                    onPressed: onMembers),
+                  icon: Lucide.undo2,
+                  label: 'Undo',
+                  shortcut: '${_mod}Z',
+                  tooltipSide: AxisDirection.up,
+                  onPressed: onUndo),
+              CvToolButton(
+                  icon: Lucide.redo2,
+                  label: 'Redo',
+                  shortcut: '$_mod⇧Z',
+                  tooltipSide: AxisDirection.up,
+                  onPressed: onRedo),
               const CvToolbarSeparator(),
             ],
-            CvToolButton(
-                icon: Lucide.undo2,
-                label: 'Undo',
-                shortcut: '${_mod}Z',
-                onPressed: onUndo),
-            CvToolButton(
-                icon: Lucide.redo2,
-                label: 'Redo',
-                shortcut: '$_mod⇧Z',
-                onPressed: onRedo),
-            const CvToolbarSeparator(),
             tool(Tool.move, Lucide.mousePointer2, 'Move', 'V'),
             tool(Tool.ruler, Lucide.ruler, 'Ruler', 'L'),
             tool(Tool.ping, Lucide.radio, 'Ping', 'P'),
-            const CvToolbarSeparator(),
-            // One button for both fog tools; the fog panel switches shape.
-            CvToolButton(
-              icon: Lucide.paintbrush,
-              label: 'Fog',
-              shortcut: 'B',
-              active: controller.tool == Tool.fogBrush ||
-                  controller.tool == Tool.fogRect ||
-                  controller.tool == Tool.fogErase,
-              onPressed: () => controller.tool = Tool.fogBrush,
-            ),
-            tool(Tool.region, Lucide.scan, 'Regions', 'A'),
-            const CvToolbarSeparator(),
-            CvToolButton(
-                icon: Lucide.circlePlus,
-                label: 'Add token',
-                shortcut: 'T',
-                active: tokensOpen,
-                onPressed: onAddToken),
-            CvToolButton(
-                icon: Lucide.imageUp,
-                label: 'Change map',
-                shortcut: 'M',
-                active: mapsOpen,
-                onPressed: onSetMap),
-            CvToolButton(
-                icon: Lucide.grid3x3,
-                label: 'Grid',
-                shortcut: 'G',
-                active: controller.gridOptions,
-                onPressed: controller.toggleGridOptions),
+            if (gm) ...[
+              const CvToolbarSeparator(),
+              // One button for both fog tools; the fog panel switches shape.
+              CvToolButton(
+                icon: Lucide.paintbrush,
+                label: 'Fog',
+                shortcut: 'B',
+                tooltipSide: AxisDirection.up,
+                active: controller.tool == Tool.fogBrush ||
+                    controller.tool == Tool.fogRect ||
+                    controller.tool == Tool.fogErase,
+                onPressed: () => controller.tool = Tool.fogBrush,
+              ),
+              tool(Tool.region, Lucide.scan, 'Regions', 'A'),
+              if (onAddToken != null) ...[
+                const CvToolbarSeparator(),
+                CvToolButton(
+                    icon: Lucide.circlePlus,
+                    label: 'Add token',
+                    shortcut: 'T',
+                    tooltipSide: AxisDirection.up,
+                    active: tokensOpen,
+                    onPressed: onAddToken),
+              ],
+            ],
           ]);
         },
       );
 }
 
-/// A player's tools, a rail on the left edge: move, ruler, ping.
-class PlayerRail extends StatelessWidget {
-  const PlayerRail({super.key, required this.controller});
+/// The bottom of the table: [dock] centred, but shifted left of [side] (at
+/// the right) when the screen is too narrow for both. Both sit on the
+/// bottom edge and grow upwards; with no room even for that, the dock keeps
+/// the bottom edge and [side] sits on top of it.
+class BottomRow extends StatelessWidget {
+  const BottomRow({super.key, required this.dock, required this.side});
 
-  final TableController controller;
+  final Widget dock;
+  final Widget side;
 
   @override
-  Widget build(BuildContext context) => ListenableBuilder(
-        listenable: controller,
-        builder: (context, _) => CvToolbar(children: [
-          for (final (t, icon, label, key) in const [
-            (Tool.move, Lucide.mousePointer2, 'Move', 'V'),
-            (Tool.ruler, Lucide.ruler, 'Ruler', 'L'),
-            (Tool.ping, Lucide.radio, 'Ping', 'P'),
-          ])
-            CvToolButton(
-              icon: icon,
-              label: label,
-              shortcut: key,
-              active: controller.tool == t,
-              onPressed: () => controller.tool = t,
-            ),
-        ]),
+  Widget build(BuildContext context) => CustomMultiChildLayout(
+        delegate: _BottomRowLayout(),
+        children: [
+          LayoutId(id: #dock, child: dock),
+          LayoutId(id: #side, child: side),
+        ],
       );
+}
+
+class _BottomRowLayout extends MultiChildLayoutDelegate {
+  @override
+  void performLayout(Size size) {
+    final loose = BoxConstraints.loose(size);
+    final side = layoutChild(#side, loose);
+    final dock = layoutChild(#dock, loose);
+    final sideLeft = size.width - side.width;
+    final x = math.min((size.width - dock.width) / 2,
+        sideLeft - CvSpacing.s4 - dock.width);
+    final dockY = size.height - dock.height;
+    if (x >= 0) {
+      positionChild(#side, Offset(sideLeft, size.height - side.height));
+      positionChild(#dock, Offset(x, dockY));
+    } else {
+      positionChild(#side,
+          Offset(sideLeft, math.max(0, dockY - CvSpacing.s4 - side.height)));
+      positionChild(
+          #dock, Offset(math.max(0, (size.width - dock.width) / 2), dockY));
+    }
+  }
+
+  @override
+  bool shouldRelayout(_BottomRowLayout oldDelegate) => false;
 }
 
 /// While the region tool is out: how to draw one, or the selected region's
@@ -1294,6 +1345,7 @@ class TableShortcuts extends StatelessWidget {
     this.onDuplicate,
     this.onUndo,
     this.onRedo,
+    this.onEscape,
     this.grid,
   });
 
@@ -1312,6 +1364,9 @@ class TableShortcuts extends StatelessWidget {
   final VoidCallback? onUndo;
   final VoidCallback? onRedo;
 
+  /// Escape also closes what this is given to close: a pop-up.
+  final VoidCallback? onEscape;
+
   @override
   Widget build(BuildContext context) {
     final c = controller;
@@ -1329,6 +1384,7 @@ class TableShortcuts extends StatelessWidget {
         const CharacterActivator('-'): () => c.zoomBy(1 / 1.25),
         const CharacterActivator('0'): c.fit,
         const SingleActivator(LogicalKeyboardKey.escape): () {
+          onEscape?.call();
           c.selected.value = null;
           c.tool = Tool.move;
           c.align.value = null;
