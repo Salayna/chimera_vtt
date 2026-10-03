@@ -24,6 +24,7 @@ import 'library.dart';
 import 'members.dart';
 import 'packs.dart';
 import 'table/chrome.dart';
+import 'table/getting_started.dart';
 import 'table/grid_align.dart';
 import 'table/initiative.dart';
 import 'table/log_panel.dart';
@@ -1407,6 +1408,24 @@ class _GmRoomState extends State<GmRoom> {
             CvRoomCodeChip(code: widget.code),
             SaveStatus(saved: _saved),
           ]),
+        ),
+        Positioned(
+          left: pad,
+          bottom: pad,
+          child: GettingStarted(
+            store: host.store,
+            code: widget.code,
+            load: () async =>
+                await _prefs.getStringList('started:${widget.campaign}') ??
+                const [],
+            save: (done) =>
+                _prefs.setStringList('started:${widget.campaign}', done),
+            onMap: () => _toggleLibrary(LibraryKind.map),
+            onToken: _openTokens,
+            onInvite: () {
+              if (!_membersOpen) _toggleMembers();
+            },
+          ),
         ),
         Positioned(
           left: 0,
