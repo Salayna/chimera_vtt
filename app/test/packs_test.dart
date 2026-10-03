@@ -1,10 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:chimera_core/chimera_core.dart';
 import 'package:chimera_sync/chimera_sync.dart';
 import 'package:chimera_vtt/table/chrome.dart';
+import 'package:chimera_vtt/table/pack_tokens.dart';
 import 'package:chimera_vtt/table/table_view.dart';
 import 'package:flutter/services.dart';
 import 'package:chimera_vtt/packs.dart';
@@ -12,6 +12,7 @@ import 'package:chimera_vtt/table/rules.dart';
 import 'package:chimera_vtt/ui/cv.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tactical_engine/tactical_engine.dart' show SystemPack;
 import 'package:supabase_flutter/supabase_flutter.dart'
     show AuthClientOptions, SupabaseClient;
 
@@ -139,5 +140,62 @@ void main() {
     await tester.tap(button('HP −1'));
     await tester.pump();
     expect(host.store.scene.tokens[id]!.trackers['HP'], 11);
+  });
+
+  testWidgets("a placed pack token shows the GM its card and its own maximums",
+      (tester) async {
+    tester.view.physicalSize = const Size(1440, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final pack = SystemPack.fromJson({
+      'id': 'mine',
+      'name': 'Mine',
+      'unit': 'ft',
+      'trackers': [{'name': 'CvW', 'text': 'Cardiovascular Wounds.'}, {'name': 'AP'}],
+      'tokens': [
+        {
+          'name': 'Raider',
+          'size': 2,
+          'trackers': [{'name': 'CvW', 'max': 6}],
+          'conditions': {'Synthetic': null},
+          'card': [{'title': 'Attack Profiles', 'text': 'Cleave: 2d20, Point Blank'}],
+        },
+      ],
+    });
+    const id = TokenId('r');
+    final raider = tokenFrom(pack.tokens['Raider']!,
+        id: id, position: (x: 100, y: 100), cellSize: 100);
+    expect((raider.size, raider.template), (200.0, 'Raider'));
+    expect(raider.trackers, {'CvW': 0});
+    expect(raider.conditions, {'Synthetic': null});
+    expect(trackersFor(raider, pack).map((t) => (t.name, t.max)),
+        [('CvW', 6), ('AP', null)]);
+
+    final host = HostSession(
+      LoopbackHub().connect(),
+      const PlayerId('gm'),
+      SceneStore(Scene(
+        settings: const SceneSettings(
+            width: 1000, height: 1000, grid: Grid(cellSize: 100), pack: 'mine'),
+        packFile: ScenePack(pack.toJson(tokens: false)),
+        tokens: {id: raider},
+      )),
+    );
+    final controller = TableController();
+    addTearDown(controller.dispose);
+    controller.selected.value = id;
+    await tester.pumpWidget(cvApp(
+      title: 'test',
+      home: TokenCardLayer(
+        store: host.store,
+        session: host,
+        controller: controller,
+        send: host.execute,
+        fullPack: (_) => pack,
+      ),
+    ));
+    expect(find.text('CvW / 6'), findsOneWidget);
+    expect(find.text('ATTACK PROFILES'), findsOneWidget);
+    expect(find.text('Cleave: 2d20, Point Blank'), findsOneWidget);
   });
 }

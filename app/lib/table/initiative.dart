@@ -2,7 +2,7 @@ import 'dart:math' as math;
 
 import 'package:chimera_core/chimera_core.dart';
 import 'package:flutter/widgets.dart';
-import 'package:tactical_engine/tactical_engine.dart' show TurnForm;
+import 'package:tactical_engine/tactical_engine.dart' show SystemPack, TurnForm;
 
 import '../theme.dart';
 import '../ui/cv.dart';
@@ -20,6 +20,7 @@ class InitiativeBar extends StatelessWidget {
     required this.send,
     required this.gm,
     required this.self,
+    this.fullPack,
   });
 
   final SceneStore store;
@@ -28,16 +29,25 @@ class InitiativeBar extends StatelessWidget {
   final bool gm;
   final PlayerId self;
 
+  /// The scene's pack with its tokens, for the forms they fight in.
+  final SystemPack Function(Scene scene)? fullPack;
+
   /// Everyone on the map takes a place, highest first: in their side's
   /// starting form when the pack orders turns by forms, or by rolling its
   /// initiative formula. The GM's client rolls, as the GM's session rolls
   /// all dice.
-  static Initiative roll(Scene scene, math.Random random) {
-    final pack = packOf(scene);
+  /// A pack token fights in its own form, from [pack] (the GM's, with its
+  /// tokens).
+  static Initiative roll(Scene scene, math.Random random, [SystemPack? pack]) {
+    pack ??= packOf(scene);
     final formula = DiceFormula.tryParse(pack.initiative ?? 'd20')!;
-    int place(Token t) => pack.forms.isEmpty
+    int? own(Token t) => switch (pack!.tokens[t.template]?.form) {
+          final name? => pack.forms.where((f) => f.name == name).firstOrNull?.value,
+          null => null,
+        };
+    int place(Token t) => pack!.forms.isEmpty
         ? formula.total(formula.roll(random))
-        : pack.startingForm(npc: t.owner == null)?.value ?? 0;
+        : own(t) ?? pack.startingForm(npc: t.owner == null)?.value ?? 0;
     final entries = Initiative.ordered([
       for (final t in scene.tokens.values) (token: t.id, value: place(t)),
     ]);
@@ -63,7 +73,7 @@ class InitiativeBar extends StatelessWidget {
               : 'Start the fight',
           icon: Lucide.circleDashed,
           onPressed: () =>
-              send(SetInitiative(roll(scene, math.Random.secure()))),
+              send(SetInitiative(roll(scene, math.Random.secure(), fullPack?.call(scene)))),
         );
       }
       final current = scene.tokens[initiative.current];
@@ -159,7 +169,7 @@ class InitiativeBar extends StatelessWidget {
                   label: 'Roll again',
                   tooltipSide: AxisDirection.down,
                   onPressed: () =>
-                      send(SetInitiative(roll(scene, math.Random.secure()))),
+                      send(SetInitiative(roll(scene, math.Random.secure(), fullPack?.call(scene)))),
                 ),
               CvToolButton(
                 icon: Lucide.x,

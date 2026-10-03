@@ -12,7 +12,8 @@ import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart'
     show PostgrestException, SupabaseClient;
-import 'package:tactical_engine/tactical_engine.dart' show SystemPack, builtInPacks;
+import 'package:tactical_engine/tactical_engine.dart'
+    show SystemPack, TokenTemplate, builtInPacks;
 
 import 'account.dart';
 import 'assets.dart';
@@ -24,6 +25,7 @@ import 'packs.dart';
 import 'table/chrome.dart';
 import 'table/initiative.dart';
 import 'table/log_panel.dart';
+import 'table/pack_tokens.dart';
 import 'table/rules.dart';
 import 'table/table_view.dart';
 import 'theme.dart';
@@ -719,6 +721,34 @@ class _GmRoomState extends State<GmRoom> {
     }
   }
 
+  /// The scene's pack with its tokens: the GM's installed copy, since a
+  /// scene carries its pack without them.
+  SystemPack _fullPack(Scene scene) {
+    final pack = packOf(scene);
+    return _packs.where((p) => p.id == pack.id).firstOrNull ?? pack;
+  }
+
+  /// Places one of the pack's tokens, ready to run, like [_addToken].
+  void _placeTemplate(TokenTemplate template) {
+    final host = _host!;
+    final scene = host.store.scene;
+    final grid = scene.settings.grid;
+    final size = template.size * grid.cellSize;
+    final center = _controller.viewCenter;
+    final id = TokenId(newId());
+    host.execute(PlaceToken(tokenFrom(
+      template,
+      id: id,
+      position: grid.freeSpot(
+          _controller.snap ? grid.snap(center, size) : center, size, scene.tokens.values),
+      cellSize: grid.cellSize,
+      image: AssetId('token${scene.tokens.length % widget.art.tokens.length}'),
+    )));
+    _controller
+      ..tool = Tool.move
+      ..selected.value = id;
+  }
+
   /// Places a token in the nearest free cell to the middle of the view:
   /// with [image] from the library, or one of the stand-in portraits.
   void _addToken({AssetId? image}) {
@@ -922,7 +952,7 @@ class _GmRoomState extends State<GmRoom> {
     final pack = builtInPacks.containsKey(id)
         ? null
         : _packChoices(host.store.scene).where((p) => p.id == id).firstOrNull;
-    host.execute(UsePack(id, data: pack?.toJson()));
+    host.execute(UsePack(id, data: pack?.toJson(tokens: false)));
   }
 
   Future<void> _installPack() async {
@@ -1092,6 +1122,7 @@ class _GmRoomState extends State<GmRoom> {
             onRemove: _removeToken,
             onDuplicate: _duplicateToken,
             onSetImage: (id) => _openTokens(forToken: id),
+            fullPack: _fullPack,
           ),
         ),
         Positioned(
@@ -1112,7 +1143,8 @@ class _GmRoomState extends State<GmRoom> {
                 controller: _controller,
                 send: host.execute,
                 gm: true,
-                self: widget.me),
+                self: widget.me,
+                fullPack: _fullPack),
           ),
         ),
         Positioned(
@@ -1211,6 +1243,10 @@ class _GmRoomState extends State<GmRoom> {
                             ),
                         ],
                       ),
+                    if (_libraryOpen == LibraryKind.token && _tokenImageFor == null)
+                      if (_fullPack(snap.requireData) case final pack
+                          when pack.tokens.isNotEmpty)
+                        PackTokensPanel(pack: pack, onPick: _placeTemplate),
                     if (_membersOpen) MembersPanel(onRemove: _removeMember),
                     if (_scenesOpen)
                       ScenesPanel(

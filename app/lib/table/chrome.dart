@@ -14,6 +14,7 @@ import 'package:tactical_engine/tactical_engine.dart'
 import '../members.dart';
 import '../theme.dart';
 import '../ui/cv.dart';
+import 'pack_tokens.dart';
 import 'rules.dart';
 import 'table_view.dart';
 
@@ -846,12 +847,17 @@ class TokenCardLayer extends StatelessWidget {
     this.onRemove,
     this.onDuplicate,
     this.onSetImage,
+    this.fullPack,
   });
 
   final SceneStore store;
   final Session session;
   final TableController controller;
   final Outcome Function(Command) send;
+
+  /// The scene's pack with its tokens' cards, which only the GM has
+  /// installed; the scene's own copy otherwise.
+  final SystemPack Function(Scene scene)? fullPack;
 
   /// A player's card shows only what they may change: conditions.
   final bool gm;
@@ -902,6 +908,7 @@ class TokenCardLayer extends StatelessWidget {
                     maxHeight: view.height - pad - top,
                     token: token,
                     scene: scene,
+                    pack: fullPack?.call(scene) ?? packOf(scene),
                     snap: controller.snap,
                     session: session,
                     send: send,
@@ -932,6 +939,7 @@ class _TokenCard extends StatelessWidget {
   const _TokenCard({
     super.key,
     required this.maxHeight,
+    required this.pack,
     required this.token,
     required this.scene,
     required this.snap,
@@ -951,6 +959,10 @@ class _TokenCard extends StatelessWidget {
 
   /// The room left below the card's top: its middle scrolls past it.
   final double maxHeight;
+
+  /// The rules: trackers, conditions, and the token's card if it came from
+  /// one of the pack's tokens.
+  final SystemPack pack;
 
   /// For the grid, and the rules in force where the token stands.
   final Scene scene;
@@ -1113,7 +1125,7 @@ class _TokenCard extends StatelessWidget {
                       ]),
                     ),
                   ],
-                  if (packOf(scene).trackers case final trackers
+                  if (trackersFor(token, pack) case final trackers
                       when trackers.isNotEmpty)
                     _Trackers(
                       key: ValueKey(token.id),
@@ -1124,12 +1136,16 @@ class _TokenCard extends StatelessWidget {
                   _TagEditor(
                     title: 'Conditions',
                     tags: token.conditions,
-                    pack: packOf(scene),
-                    offered: packOf(scene).conditions,
+                    pack: pack,
+                    offered: pack.conditions,
                     onSet: (name, value) =>
                         send(SetCondition(token.id, name, value)),
                     onRemove: (name) => send(RemoveCondition(token.id, name)),
                   ),
+                  if (gm)
+                    if (pack.tokens[token.template]?.card case final card?
+                        when card.isNotEmpty)
+                      TokenCardSections(sections: card),
                 ],
               ),
               ),
