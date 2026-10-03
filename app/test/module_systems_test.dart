@@ -42,6 +42,37 @@ void main() {
     expect(() => d.build(), throwsA(isA<FormatException>().having((e) => e.message, 'message', contains('spends "XP"'))));
   });
 
+  test("bands, forms, effects and a token's own trackers and conditions are edited", () {
+    final d = ModuleDraft()..name = 'Mine';
+    d.bands.addAll([
+      {'name': 'Adjacent', 'max': 1.5},
+      {'name': 'Far'},
+    ]);
+    d.forms.addAll([
+      {'name': 'Rush', 'value': 3},
+      {'name': 'Steady', 'value': 2, 'default': true},
+    ]);
+    d.tags.add(DraftTag('Darkness', TagKind.sector, valued: true, effects: [
+      {'type': 'roll', 'edge': -1, 'scaled': true},
+      {'type': 'entryCheck', 'check': 'Traversal'},
+    ]));
+    d.tokens.add(DraftToken('Raider', form: 'Rush', trackers: [
+      {'name': 'CvW', 'max': 6, 'value': 0},
+    ], conditions: [
+      {'name': 'Synthetic'},
+      {'name': 'Armored', 'value': 2},
+    ]));
+    final pack = d.build();
+    expect([for (final b in pack.bands) (b.name, b.max)], [('Adjacent', 1.5), ('Far', null)]);
+    expect(pack.startingForm(npc: false)!.name, 'Steady');
+    expect(pack.tags['Darkness']!.effects.first, isA<RollModifier>().having((r) => r.scaled, 'scaled', true));
+    final raider = pack.tokens['Raider']!;
+    expect((raider.form, raider.trackers.single.max), ('Rush', 6));
+    expect(raider.conditions, {'Synthetic': null, 'Armored': 2});
+    // And they survive being edited again.
+    expect(ModuleDraft(pack).build().toJson()..remove('version'), pack.toJson()..remove('version'));
+  });
+
   testWidgets('the Sheet and Compendium tabs write the module', (tester) async {
     tester.view.physicalSize = const Size(1600, 1400);
     tester.view.devicePixelRatio = 1;

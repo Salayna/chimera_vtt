@@ -13,11 +13,9 @@ import 'ui/hub.dart';
 part 'module_systems.dart';
 
 /// A module being written: plain rows the editor changes in place, turned
-/// into a [SystemPack] on save. What the editor doesn't show (effects,
-/// range bands, turn forms, token trackers and starting tags) is carried
-/// over from [base] unchanged.
-// ponytail: those are edited in the module's file for now; add them here
-// when GMs ask, they're already in the format.
+/// into a [SystemPack] on save. Lists the format already spells out (bands,
+/// forms, effects, a token's trackers and conditions, the sheet, compendium
+/// and advancement) are held as its JSON, so saving checks them as a file's.
 class ModuleDraft {
   ModuleDraft([this.base])
       : name = base?.name ?? '',
@@ -35,6 +33,8 @@ class ModuleDraft {
         tokens = [
           for (final t in base?.tokens.values ?? const <TokenTemplate>[]) DraftToken.of(t),
         ],
+        bands = _jsonList(base?.toJson()['bands']),
+        forms = _jsonList(base?.toJson()['forms']),
         sheet = _copy(base?.sheet?.toJson()),
         compendium = _copy(base?.compendium?.toJson()),
         advancement = _copy(base?.advancement?.toJson());
@@ -42,6 +42,9 @@ class ModuleDraft {
   /// A mutable copy of [json], which the editor changes in place.
   static Json? _copy(Json? json) =>
       json == null ? null : jsonDecode(jsonEncode(json)) as Json;
+
+  static List<Json> _jsonList(Object? json) =>
+      [for (final e in json as List? ?? const []) _copy(e as Json)!];
 
   /// The installed module being edited; null for a new one.
   final SystemPack? base;
@@ -55,6 +58,10 @@ class ModuleDraft {
   final List<DraftTag> tags;
   final List<DraftTracker> trackers;
   final List<DraftToken> tokens;
+
+  /// Range bands and turn forms, as the format's JSON.
+  final List<Json> bands;
+  final List<Json> forms;
 
   /// The character sheet, compendium and advancement as the format's JSON,
   /// which forms change in place; null for none.
@@ -96,7 +103,7 @@ class ModuleDraft {
         }
       }
     }
-    final pack = SystemPack(
+    final rules = SystemPack(
       id: id,
       name: name.trim(),
       version: (base?.version ?? 0) + 1,
@@ -106,23 +113,23 @@ class ModuleDraft {
       diagonal: diagonal,
       unit: unit.trim(),
       unitsPerStep: unitsPerStep,
-      bands: base?.bands ?? const [],
       initiative: initiative.trim().isEmpty ? null : initiative.trim(),
-      forms: base?.forms ?? const [],
-      tokens: [for (final t in tokens) t.build()],
       trackers: [
         for (final t in trackers)
           TrackerDef(t.name.trim(), min: t.min, max: t.max, text: t.text.trim()),
       ],
-      tags: [for (final t in tags) t.build()],
     );
-    if (pack.initiative case final f? when DiceFormula.tryParse(f) == null) {
+    if (rules.initiative case final f? when DiceFormula.tryParse(f) == null) {
       throw FormatException('"$f" isn\'t a dice formula: try d20 or 2d6+1.');
     }
     // The same checks as a file from anyone: names, lengths, duplicates,
     // formulas.
     return SystemPack.fromJson({
-      ...pack.toJson(),
+      ...rules.toJson(),
+      'bands': bands,
+      'forms': forms,
+      'tokens': [for (final t in tokens) t.toJson()],
+      'tags': [for (final t in tags) t.toJson()],
       'sheet': ?sheet,
       'compendium': ?compendium,
       'advancement': ?advancement,
@@ -134,7 +141,8 @@ enum TagKind { condition, region, sector }
 
 class DraftTag {
   DraftTag(this.name, this.kind,
-      {this.valued = false, this.text = '', this.color, this.effects = const []});
+      {this.valued = false, this.text = '', this.color, List<Json>? effects})
+      : effects = effects ?? [];
 
   factory DraftTag.of(TagDef t) => DraftTag(
         t.name,
@@ -142,7 +150,7 @@ class DraftTag {
         valued: t.valued,
         text: t.text,
         color: t.color,
-        effects: t.effects,
+        effects: [for (final e in t.effects) e.toJson()],
       );
 
   String name;
@@ -150,15 +158,20 @@ class DraftTag {
   bool valued;
   String text;
   final String? color;
-  final List<Effect> effects;
 
-  TagDef build() => TagDef(name.trim(),
-      condition: kind == TagKind.condition,
-      sector: kind == TagKind.sector,
-      valued: valued,
-      color: color,
-      effects: effects,
-      text: text.trim());
+  /// Its effects as the format's JSON: `{"type": "roll", "edge": -1}`.
+  final List<Json> effects;
+
+  Json toJson() => {
+        ...TagDef(name.trim(),
+                condition: kind == TagKind.condition,
+                sector: kind == TagKind.sector,
+                valued: valued,
+                color: color,
+                text: text.trim())
+            .toJson(),
+        if (effects.isNotEmpty) 'effects': effects,
+      };
 }
 
 class DraftTracker {
@@ -184,36 +197,52 @@ class DraftToken {
       this.size = 1,
       List<DraftSection>? card,
       this.form,
-      this.trackers = const [],
-      this.conditions = const {}})
-      : card = card ?? [];
+      List<Json>? trackers,
+      List<Json>? conditions})
+      : card = card ?? [],
+        trackers = trackers ?? [],
+        conditions = conditions ?? [];
 
   factory DraftToken.of(TokenTemplate t) => DraftToken(t.name,
       image: t.image,
       size: t.size,
       card: [for (final c in t.card) DraftSection(c.title, c.text, c.image)],
       form: t.form,
-      trackers: t.trackers,
-      conditions: t.conditions);
+      trackers: [
+        for (final r in t.trackers)
+          {'name': r.name, 'max': ?r.max, 'value': r.value},
+      ],
+      conditions: [
+        for (final MapEntry(:key, :value) in t.conditions.entries)
+          {'name': key, 'value': ?value},
+      ]);
 
   String name;
   String? image;
   int size;
   final List<DraftSection> card;
-  final String? form;
-  final List<TokenTracker> trackers;
-  final Map<String, int?> conditions;
 
-  TokenTemplate build() => TokenTemplate(name.trim(),
-      image: image,
-      size: size,
-      form: form,
-      trackers: trackers,
-      conditions: conditions,
-      card: [
-        for (final c in card)
-          (title: c.title.trim(), text: c.text.trim(), image: c.image),
-      ]);
+  /// The turn form it fights in, by name.
+  String? form;
+
+  /// Its own trackers, `{"name": "CvW", "max": 6, "value": 0}`, and the
+  /// conditions it starts with, `{"name": "Synthetic"}`.
+  final List<Json> trackers;
+  final List<Json> conditions;
+
+  Json toJson() => {
+        ...TokenTemplate(name.trim(),
+            image: image,
+            size: size,
+            form: form,
+            card: [
+              for (final c in card)
+                (title: c.title.trim(), text: c.text.trim(), image: c.image),
+            ]).toJson(),
+        if (trackers.isNotEmpty) 'trackers': trackers,
+        if (conditions.isNotEmpty)
+          'conditions': {for (final c in conditions) '${c['name'] ?? ''}': c['value']},
+      };
 }
 
 enum _Section { about, rules, tags, trackers, tokens, sheet, compendium, advancement }
@@ -439,13 +468,65 @@ class _ModuleEditorState extends State<ModuleEditor> {
           onChanged: (r) => _change(() => d.diagonal = r),
         ),
       ),
-      if (d.base case final base? when base.bands.isNotEmpty || base.forms.isNotEmpty)
-        Text(
-            'Its ${[
-              if (base.bands.isNotEmpty) '${base.bands.length} range bands',
-              if (base.forms.isNotEmpty) '${base.forms.length} turn forms',
-            ].join(' and ')} are kept as they are; edit them in the module\'s file.',
-            style: CvTypography.bodySm.copyWith(color: CvColors.textSecondary)),
+      const CvOverline('Range bands'),
+      _hint('What the ruler calls a distance, nearest first: Adjacent up to 1 '
+          'unit, then Far. The last one without a max catches the rest.'),
+      for (final b in d.bands)
+        Row(key: ObjectKey(b), spacing: 8, children: [
+          SizedBox(
+              width: 220,
+              child: _JsonField(b, 'name',
+                  change: _change, placeholder: 'Adjacent', text: true, maxLength: 30)),
+          SizedBox(
+              width: 140,
+              child: _JsonField(b, 'max', change: _change, placeholder: 'Max: 1', number: true)),
+          CvToolButton(
+            icon: Lucide.trash2,
+            label: 'Remove this band',
+            danger: true,
+            tooltipSide: AxisDirection.left,
+            onPressed: () => _change(() => d.bands.remove(b)),
+          ),
+        ]),
+      _add('Add a band', () => _change(() => d.bands.add(<String, Object?>{'name': ''}))),
+      const CvOverline('Turn forms'),
+      _hint("Turn order without a roll, as Solaris' Combat Forms: higher values "
+          'go first, and a side starts a fight in its default.'),
+      for (final f in d.forms)
+        _Card(
+          key: ObjectKey(f),
+          removeLabel: 'Remove ${f['name'] ?? 'form'}',
+          onRemove: () => _change(() => d.forms.remove(f)),
+          children: [
+            Row(spacing: 8, children: [
+              SizedBox(
+                  width: 180,
+                  child: _JsonField(f, 'name',
+                      change: _change, placeholder: 'Rush', text: true, maxLength: 30)),
+              SizedBox(
+                  width: 110, child: _JsonField(f, 'value', change: _change, placeholder: 'Value: 3')),
+              SizedBox(
+                width: 200,
+                child: CvSwitch(
+                  value: f['npc'] == true,
+                  onChanged: (v) => _change(() => v ? f['npc'] = true : f.remove('npc')),
+                  label: const Text("For the GM's tokens"),
+                ),
+              ),
+              SizedBox(
+                width: 180,
+                child: CvSwitch(
+                  value: f['default'] == true,
+                  onChanged: (v) => _change(() => v ? f['default'] = true : f.remove('default')),
+                  label: const Text('Where a side starts'),
+                ),
+              ),
+            ]),
+            _JsonField(f, 'text', change: _change, placeholder: 'What it means', text: true),
+          ],
+        ),
+      _add('Add a form',
+          () => _change(() => d.forms.add(<String, Object?>{'name': '', 'value': 0}))),
     ]);
   }
 
@@ -455,7 +536,8 @@ class _ModuleEditorState extends State<ModuleEditor> {
       Text('Conditions go on tokens; region tags on sectors and zones.',
           style: CvTypography.bodySm.copyWith(color: CvColors.textSecondary)),
       for (final t in d.tags)
-        Row(key: ObjectKey(t), crossAxisAlignment: CrossAxisAlignment.start, spacing: 12, children: [
+        Column(key: ObjectKey(t), crossAxisAlignment: CrossAxisAlignment.stretch, spacing: 6, children: [
+        Row(crossAxisAlignment: CrossAxisAlignment.start, spacing: 12, children: [
           SizedBox(
             width: 200,
             child: _Field(
@@ -500,6 +582,11 @@ class _ModuleEditorState extends State<ModuleEditor> {
             tooltipSide: AxisDirection.left,
             onPressed: () => _change(() => d.tags.remove(t)),
           ),
+        ]),
+        Padding(
+          padding: const EdgeInsets.only(left: 24),
+          child: _EffectsEditor(effects: t.effects, change: _change),
+        ),
         ]),
       Align(
         alignment: Alignment.centerLeft,
@@ -645,6 +732,10 @@ class _ModuleEditorState extends State<ModuleEditor> {
                 change: _change,
                 pickImage: _pickImage,
                 onRemove: () => _change(() => d.tokens.remove(token)),
+                forms: [
+                  for (final f in d.forms)
+                    if ('${f['name'] ?? ''}'.trim().isNotEmpty) '${f['name']}'.trim(),
+                ],
               ),
       ),
     ]);
@@ -660,9 +751,13 @@ class _TokenForm extends StatelessWidget {
     required this.change,
     required this.pickImage,
     required this.onRemove,
+    this.forms = const [],
   });
 
   final DraftToken token;
+
+  /// The module's turn forms, by name.
+  final List<String> forms;
   final AssetStore assets;
   final void Function(VoidCallback edit) change;
   final Future<String?> Function() pickImage;
@@ -707,10 +802,49 @@ class _TokenForm extends StatelessWidget {
                   (value: n, label: '$n×$n', icon: null, checked: null),
               ],
             ),
-            if (t.trackers.isNotEmpty || t.conditions.isNotEmpty)
-              Text(
-                  'Its own trackers and starting tags are kept as they are.',
-                  style: CvTypography.bodySm.copyWith(color: CvColors.textSecondary)),
+            if (forms.isNotEmpty)
+              CvDropdown<String?>(
+                label: 'Turn form',
+                value: t.form,
+                onChanged: (f) => change(() => t.form = f),
+                entries: [
+                  const CvMenuItem(null, 'Its side\'s default'),
+                  for (final f in forms) CvMenuItem(f, f),
+                ],
+              ),
+            const CvOverline('Its trackers'),
+            for (final r in t.trackers)
+              Row(key: ObjectKey(r), spacing: 8, children: [
+                Expanded(
+                    child: _JsonField(r, 'name',
+                        change: change, placeholder: 'Tracker: CvW', text: true, maxLength: 30)),
+                SizedBox(width: 100, child: _JsonField(r, 'max', change: change, placeholder: 'Max')),
+                SizedBox(width: 100, child: _JsonField(r, 'value', change: change, placeholder: 'Start')),
+                CvToolButton(
+                  icon: Lucide.x,
+                  label: 'Remove this tracker',
+                  tooltipSide: AxisDirection.left,
+                  onPressed: () => change(() => t.trackers.remove(r)),
+                ),
+              ]),
+            _add('Add a tracker',
+                () => change(() => t.trackers.add(<String, Object?>{'name': '', 'value': 0}))),
+            const CvOverline('Starting conditions'),
+            for (final c in t.conditions)
+              Row(key: ObjectKey(c), spacing: 8, children: [
+                Expanded(
+                    child: _JsonField(c, 'name',
+                        change: change, placeholder: 'Synthetic', text: true, maxLength: 30)),
+                SizedBox(width: 100, child: _JsonField(c, 'value', change: change, placeholder: 'Value')),
+                CvToolButton(
+                  icon: Lucide.x,
+                  label: 'Remove this condition',
+                  tooltipSide: AxisDirection.left,
+                  onPressed: () => change(() => t.conditions.remove(c)),
+                ),
+              ]),
+            _add('Add a condition',
+                () => change(() => t.conditions.add(<String, Object?>{'name': ''}))),
           ]),
         ),
       ]),

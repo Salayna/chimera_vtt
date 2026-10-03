@@ -8,12 +8,12 @@ typedef _Change = void Function(VoidCallback edit);
 
 /// Writes [v] at [key] as the format wants it: a whole number as a number,
 /// other text as text (a formula), nothing when empty; [text] keeps it text.
-void _put(Json map, String key, String v, {bool text = false}) {
+void _put(Json map, String key, String v, {bool text = false, bool number = false}) {
   final t = v.trim();
   if (t.isEmpty) {
     map.remove(key);
   } else {
-    map[key] = text ? t : int.tryParse(t) ?? t;
+    map[key] = text ? t : int.tryParse(t) ?? (number ? num.tryParse(t) : null) ?? t;
   }
 }
 
@@ -31,7 +31,12 @@ List<Object?> _listAt(Json map, String key) => (map[key] ??= <Object?>[]) as Lis
 /// A text field writing one key of [map].
 class _JsonField extends StatelessWidget {
   const _JsonField(this.map, this.key_,
-      {required this.change, this.label, this.placeholder, this.text = false, this.maxLength = 500});
+      {required this.change,
+      this.label,
+      this.placeholder,
+      this.text = false,
+      this.number = false,
+      this.maxLength = 500});
 
   final Json map;
   final String key_;
@@ -39,6 +44,9 @@ class _JsonField extends StatelessWidget {
   final String? label;
   final String? placeholder;
   final bool text;
+
+  /// Takes decimals: 1.5.
+  final bool number;
   final int maxLength;
 
   @override
@@ -47,7 +55,7 @@ class _JsonField extends StatelessWidget {
         value: _show(map[key_]),
         placeholder: placeholder,
         maxLength: maxLength,
-        onChanged: (v) => change(() => _put(map, key_, v, text: text)),
+        onChanged: (v) => change(() => _put(map, key_, v, text: text, number: number)),
       );
 }
 
@@ -656,4 +664,92 @@ class _AdvancementTab extends StatelessWidget {
       _add('Add a node', () => change(() => nodes.add(<String, Object?>{'name': ''}))),
     ]);
   }
+}
+
+/// A tag's effects: the engine's building blocks, each with what it needs.
+class _EffectsEditor extends StatelessWidget {
+  const _EffectsEditor({required this.effects, required this.change});
+
+  final List<Json> effects;
+  final _Change change;
+
+  static const _types = {
+    'roll': 'Advantage or disadvantage',
+    'moveCost': 'Moving costs more',
+    'blocksSight': 'Blocks sight',
+    'occupantLimit': 'Holds at most',
+    'entryCheck': 'Entering needs a check',
+  };
+
+  static Json _start(String type) => switch (type) {
+        'roll' => {'type': type, 'edge': -1},
+        'moveCost' => {'type': type, 'multiplier': 2},
+        'occupantLimit' => {'type': type, 'max': 1},
+        'entryCheck' => {'type': type, 'check': 'Traversal'},
+        _ => {'type': type},
+      };
+
+  @override
+  Widget build(BuildContext context) =>
+      Column(crossAxisAlignment: CrossAxisAlignment.stretch, spacing: 6, children: [
+        for (final (i, e) in effects.indexed)
+          Row(key: ObjectKey(e), spacing: 8, children: [
+            SizedBox(
+              width: 230,
+              child: CvDropdown<String>(
+                value: e['type'] as String,
+                onChanged: (t) => change(() => effects[i] = _start(t)),
+                entries: [for (final MapEntry(:key, :value) in _types.entries) CvMenuItem(key, value)],
+              ),
+            ),
+            ...switch (e['type']) {
+              'roll' => [
+                  SizedBox(
+                      width: 140,
+                      child: _JsonField(e, 'edge', change: change, placeholder: 'Edge: -1')),
+                  SizedBox(
+                    width: 220,
+                    child: CvSwitch(
+                      value: e['scaled'] == true,
+                      onChanged: (v) => change(() => v ? e['scaled'] = true : e.remove('scaled')),
+                      label: const Text("Times the tag's value"),
+                    ),
+                  ),
+                ],
+              'moveCost' => [
+                  SizedBox(
+                      width: 160,
+                      child: _JsonField(e, 'multiplier',
+                          change: change, placeholder: 'Times: 2', number: true)),
+                ],
+              'occupantLimit' => [
+                  SizedBox(width: 140, child: _JsonField(e, 'max', change: change, placeholder: 'Max: 1')),
+                ],
+              'entryCheck' => [
+                  SizedBox(
+                      width: 200,
+                      child: _JsonField(e, 'check',
+                          change: change, placeholder: 'Traversal', text: true, maxLength: 60)),
+                ],
+              _ => const <Widget>[],
+            },
+            const Spacer(),
+            CvToolButton(
+              icon: Lucide.x,
+              label: 'Remove this effect',
+              tooltipSide: AxisDirection.left,
+              onPressed: () => change(() => effects.removeAt(i)),
+            ),
+          ]),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: CvButton(
+            label: 'Add an effect',
+            icon: Lucide.plus,
+            small: true,
+            variant: CvButtonVariant.ghost,
+            onPressed: () => change(() => effects.add(_start('roll'))),
+          ),
+        ),
+      ]);
 }
