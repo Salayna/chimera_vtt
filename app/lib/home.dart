@@ -3,14 +3,15 @@ import 'package:supabase_flutter/supabase_flutter.dart' show SupabaseClient;
 
 import 'assets.dart';
 import 'campaigns.dart';
+import 'characters.dart';
 import 'library.dart';
 import 'packs.dart';
 import 'room.dart';
 import 'theme.dart';
 import 'ui/hub.dart';
 
-/// A signed-in GM's home, outside any room: their campaigns and their
-/// library under the hub's top bar, and joining someone else's room as a
+/// A signed-in user's home, outside any room: their campaigns, characters,
+/// library and systems under the hub's top bar, and joining someone else's room as a
 /// player from the bar.
 class GmHome extends StatefulWidget {
   const GmHome({
@@ -69,6 +70,7 @@ class _GmHomeState extends State<GmHome> {
                       widget.onEnter((code: c.code, gm: true, campaign: c.id)),
                   onJoin: () => _joinOpen.value = true,
                 ),
+              HubTab.characters => CharactersPage(client: widget.client),
               HubTab.library =>
                 LibraryPage(library: _library, assets: widget.assets),
               HubTab.systems =>

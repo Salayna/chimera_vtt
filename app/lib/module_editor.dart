@@ -10,7 +10,7 @@ import 'ui/hub.dart';
 
 /// A module being written: plain rows the editor changes in place, turned
 /// into a [SystemPack] on save. What the editor doesn't show (effects,
-/// range bands, turn forms, token trackers and starting tags) is carried
+/// range bands, turn forms, token trackers and starting tags, the sheet) is carried
 /// over from [base] unchanged.
 // ponytail: those are edited in the module's file for now; add them here
 // when GMs ask, they're already in the format.
@@ -98,6 +98,7 @@ class ModuleDraft {
           TrackerDef(t.name.trim(), min: t.min, max: t.max, text: t.text.trim()),
       ],
       tags: [for (final t in tags) t.build()],
+      sheet: base?.sheet,
     );
     if (pack.initiative case final f? when DiceFormula.tryParse(f) == null) {
       throw FormatException('"$f" isn\'t a dice formula: try d20 or 2d6+1.');

@@ -28,6 +28,7 @@ final _dnd5e = SystemPack(
   unit: 'ft',
   unitsPerStep: 5,
   initiative: 'd20',
+  sheet: _dnd5eSheet,
   tags: const [
     TagDef('Blinded',
         condition: true,
@@ -102,3 +103,73 @@ final _dnd5e = SystemPack(
     TagDef('Three-Quarters Cover', text: '+5 to AC and Dexterity saves.'),
   ],
 );
+
+/// A simple D&D 5e character: abilities and their modifiers, level and
+/// proficiency, hit points and armor class.
+final _dnd5eSheet = SheetDef.fromJson({
+  'sections': [
+    {
+      'title': 'Abilities',
+      'fields': [
+        for (final (a, label) in [
+          ('STR', 'Strength'),
+          ('DEX', 'Dexterity'),
+          ('CON', 'Constitution'),
+          ('INT', 'Intelligence'),
+          ('WIS', 'Wisdom'),
+          ('CHA', 'Charisma'),
+        ]) ...[
+          {'name': a, 'label': label, 'min': 1, 'max': 30, 'value': 10},
+          {
+            'name': '$a.mod',
+            'label': '$label modifier',
+            'type': 'computed',
+            'formula': 'floor(($a - 10) / 2)',
+          },
+        ],
+      ],
+    },
+    {
+      'title': 'Character',
+      'fields': [
+        {
+          'name': 'class',
+          'label': 'Class',
+          'type': 'choice',
+          'options': [
+            'Barbarian', 'Bard', 'Cleric', 'Druid', 'Fighter', 'Monk', //
+            'Paladin', 'Ranger', 'Rogue', 'Sorcerer', 'Warlock', 'Wizard',
+          ],
+        },
+        {'name': 'level', 'label': 'Level', 'min': 1, 'max': 20},
+        {
+          'name': 'proficiency',
+          'label': 'Proficiency bonus',
+          'type': 'computed',
+          'formula': 'ceil(level / 4) + 1',
+        },
+      ],
+    },
+    {
+      'title': 'Combat',
+      'fields': [
+        {'name': 'AC', 'label': 'Armor class', 'min': 0, 'max': 30, 'value': 10},
+        {'name': 'speed', 'label': 'Speed', 'min': 0, 'max': 120, 'value': 30},
+        {'name': 'maxHP', 'label': 'Hit point maximum', 'min': 1, 'max': 999, 'value': 8},
+        {
+          'name': 'HP',
+          'label': 'Hit points',
+          'type': 'tracker',
+          'max': 'maxHP',
+          'value': 'HP.max',
+        },
+      ],
+    },
+    {
+      'title': 'Notes',
+      'fields': [
+        {'name': 'notes', 'label': 'Notes', 'type': 'text'},
+      ],
+    },
+  ],
+});

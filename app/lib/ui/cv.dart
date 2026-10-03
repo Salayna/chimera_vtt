@@ -19,6 +19,7 @@ enum Lucide {
   check('<path d="M20 6 9 17l-5-5"/>'),
   chevronDown('<path d="m6 9 6 6 6-6"/>'),
   chevronUp('<path d="m18 15-6-6-6 6"/>'),
+  chevronRight('<path d="m9 18 6-6-6-6"/>'),
   circle('<circle cx="12" cy="12" r="10"/>'),
   circleAlert(
       '<circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/>'),

@@ -1,5 +1,8 @@
+import 'formula.dart';
 import 'geometry.dart';
 import 'topology.dart';
+
+part 'sheet.dart';
 
 typedef Json = Map<String, Object?>;
 
@@ -332,6 +335,7 @@ final class SystemPack {
     List<TagDef> tags = const [],
     this.description = '',
     this.cover,
+    this.sheet,
   })  : tags = {for (final t in tags) t.name: t},
         tokens = {for (final t in tokens) t.name: t};
 
@@ -353,6 +357,9 @@ final class SystemPack {
 
   /// Its cover art, as an asset id.
   final String? cover;
+
+  /// What its characters hold, or null when it has no characters.
+  final SheetDef? sheet;
 
   /// Every image the module uses, which its bundle carries.
   Set<String> get assets => {
@@ -436,6 +443,7 @@ final class SystemPack {
         if (tokens && this.tokens.isNotEmpty)
           'tokens': [for (final t in this.tokens.values) t.toJson()],
         if (trackers.isNotEmpty) 'trackers': [for (final t in trackers) t.toJson()],
+        if (sheet != null) 'sheet': sheet!.toJson(),
         'tags': [for (final t in tags.values) t.toJson()],
       };
 
@@ -498,6 +506,10 @@ final class SystemPack {
             TrackerDef.fromJson(t as Json),
         ],
         tags: tags,
+        sheet: switch (json['sheet']) {
+          null => null,
+          final s => SheetDef.fromJson(s as Json),
+        },
       );
     } on FormatException {
       rethrow;

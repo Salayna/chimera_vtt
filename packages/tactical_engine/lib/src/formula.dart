@@ -44,6 +44,17 @@ final class Formula {
     'false',
   };
 
+  static final _name = RegExp(r'^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*$');
+  static final _dice = RegExp(r'^\d*d\d+$');
+
+  /// Whether a formula reads [name] as a name: not a keyword, a function
+  /// or dice (`d6`), so a sheet can refuse fields formulas can't reach.
+  static bool isName(String name) =>
+      _name.hasMatch(name) &&
+      !_dice.hasMatch(name) &&
+      !_keywords.contains(name) &&
+      !functions.containsKey(name);
+
   static final _token = RegExp(
     r'\s*(?:'
     r'(\d*d\d+)(?![\w.])|' // 1: dice

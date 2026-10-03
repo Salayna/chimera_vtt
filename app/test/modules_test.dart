@@ -100,6 +100,11 @@ void main() {
       'tokens': [
         {'name': 'Orc', 'trackers': [{'name': 'HP', 'max': 15, 'value': 15}]},
       ],
+      'sheet': {
+        'sections': [
+          {'title': 'Stats', 'fields': [{'name': 'END'}]},
+        ],
+      },
     });
     final d = ModuleDraft(base)..name = 'Mine, renamed';
     final pack = d.build();
@@ -109,6 +114,7 @@ void main() {
     expect(pack.forms.single.name, 'Rush');
     expect(pack.tags['Cover']!.effects.single, isA<BlocksSight>());
     expect(pack.tokens['Orc']!.trackers.single.max, 15);
+    expect(pack.sheet!.fields.single.name, 'END');
   });
 
   test('a draft the format refuses says why', () {

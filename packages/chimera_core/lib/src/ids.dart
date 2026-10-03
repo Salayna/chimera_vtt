@@ -9,6 +9,9 @@ extension type const FogOpId(String value) {}
 /// Identity of a [Region].
 extension type const RegionId(String value) {}
 
+/// Identity of a [Character], from Postgres.
+extension type const CharacterId(String value) {}
+
 /// Identity of a player, from Supabase Auth.
 extension type const PlayerId(String value) {}
 

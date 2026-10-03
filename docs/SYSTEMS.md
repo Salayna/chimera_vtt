@@ -45,7 +45,7 @@ In the room a character is an entity (kind `character`), sent with the snapshot 
 ## Bricks
 
 1. The formula language: a parser and evaluator in `tactical_engine`, with tests. Built 2026-10-03 (`Formula`): `parse` refuses bad syntax with its position, `check` refuses unknown names and mixed types given the sheet's names, `eval` takes the names' values and a die. Dividing by zero gives 0. `count` and `sum` over items wait for brick 4.
-2. Sheets in the pack format, the `characters` table, and a Characters tab on the home to make and edit them.
+2. Sheets in the pack format, the `characters` table, and a Characters tab on the home to make and edit them. Built 2026-10-03: a pack's `sheet` (`SheetDef`) has sections of fields (number, text, choice, checkbox, computed, tracker; [PACKS.md](PACKS.md#sheets)), checked when the pack is read: names formulas can reach, no dice, no field depending on itself. A character's values are cleaned against it whenever they're read (`SheetDef.clean`); `SheetValues` works out computed fields and tracker bounds. The built-in D&D 5e pack has a sheet. The `characters` table is owner-only until linking. Limits: the home is for signed-in users, so anonymous players make characters only with brick 3; a player plays the systems built in or installed on their own Systems page; a sheet is saved with a button, not as it's typed.
 3. Linking: a character to a campaign, then to a token, and played in the room.
 4. The compendium: kinds and entries in the format, and items on the sheet as cards with their trackers.
 5. Actions: cost, roll and outcome bands, logged.

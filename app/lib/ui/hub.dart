@@ -355,7 +355,7 @@ class _NavTab extends StatelessWidget {
 }
 
 /// The hub's pages, as the top bar names them.
-enum HubTab { campaigns, library, systems }
+enum HubTab { campaigns, characters, library, systems }
 
 /// The hub's top bar: wordmark, page tabs, joining with a code, account.
 class HubTopBar extends StatefulWidget {
@@ -418,6 +418,12 @@ class _HubTopBarState extends State<HubTopBar> {
             label: 'Campaigns',
             current: tab == HubTab.campaigns,
             onTap: () => onTab(HubTab.campaigns),
+          ),
+          _NavTab(
+            icon: Lucide.userRound,
+            label: 'Characters',
+            current: tab == HubTab.characters,
+            onTap: () => onTab(HubTab.characters),
           ),
           _NavTab(
             icon: Lucide.layers,

@@ -23,7 +23,7 @@ One word, one meaning. When code, docs and conversation disagree, this file wins
 | **Player** | `Player` | Anyone at the table who isn't the GM. Sees a filtered copy of the scene. |
 | **Campaign** | `Campaign` | Everything one group plays with: scenes, its system, assets and members. Owned by one signed-in GM. Every scene in it plays with its system. |
 | **Member** | — | A player who has entered a campaign's room at least once, with the name and colour they chose. Signed in or anonymous. The GM can remove one. A token's owner is a member. |
-| **Home** | `GmHome` | A signed-in user's screen outside any room: their campaigns, their library, their characters (planned), and joining someone else's room as a player. Signed out, the lobby shows sign-in and joining instead. |
+| **Home** | `GmHome` | A signed-in user's screen outside any room: their campaigns, their characters, their library and systems, and joining someone else's room as a player. Signed out, the lobby shows sign-in and joining instead. |
 | **Scene** | `Scene` | One map and everything on it. A set of entities keyed by id. |
 | **Map** | — | The background image of a scene. It's an asset, referenced from the scene settings. |
 | **Library** | — | A GM's maps, token pictures and scenes, shared by all their campaigns, each named and picked instead of made again. A library scene is a template: campaigns get a copy. |
@@ -139,8 +139,9 @@ Otherwise it's a field of some entity.
 | **Initiative** | `Initiative` | The turn order while a fight is on: a single-instance entity listing tokens from highest value to lowest, the round, and whose turn it is. The GM rolls the pack's formula for everyone on the map. Players don't see hidden tokens in it, nor their turns. |
 | **Turn** | `Initiative.current`, `EndTurn` | One token's go. Ending it passes to the next in the order, and after the last a new **round** starts. |
 | **Precise movement** | — | Solaris' option to use exact positions inside sectors. |
-| **Character** | `Character` (planned) | A player's character, made on their home for one system and owned by them. Linked to campaigns of that system, and to a token in the room. Holds a sheet. |
-| **Sheet** | `SheetDef` (planned) | What a pack says a character holds: sections of fields, computed fields and trackers. A character's sheet is its values. |
+| **Character** | `Character`, `characters` | A player's character, made on their home for one system (a pack id) and owned by them. Linked to campaigns of that system, and to a token in the room (planned). Holds a sheet. |
+| **Sheet** | `SheetDef`, `SheetValues` | What a pack says a character holds: sections of sheet fields. A character's sheet is its values by field name, cleaned against the pack's sheet whenever read; `SheetValues` works out what formulas see. |
+| **Sheet field** | `FieldDef`, `FieldType` | One entry of a sheet: a number, text, choice, checkbox, computed field (a formula) or tracker (a number whose bounds are formulas, as AP at most `8 - armor`). Its name is what formulas read (`DEX.mod`); its label what people see. A tracker's bounds read as `AP.min` and `AP.max`. Not the same as an entity's **field**. |
 | **Formula** | `Formula` | An expression in a pack, read at install, never compiled into the app: `END + WIL + threatLevel`, `d20 + DEX.mod`. Numbers, booleans and text; names dotted or not; `if … then … else`; `min`, `max`, `floor`, `ceil`, `round`, `abs`, `has`. No loops or side effects; dice from the caller's roller. Level 2 of the tiered scripting. |
 | **Compendium** | — (planned) | A pack's entries, grouped in kinds. |
 | **Entry** | `Entry` (planned) | One thing in a compendium, such as a weapon or a talent, with the fields, trackers and card its kind declares. Pack tokens become entries of a Threat kind. |

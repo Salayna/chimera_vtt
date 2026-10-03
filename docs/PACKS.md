@@ -58,11 +58,44 @@ Installed packs belong to the GM's account and serve all their campaigns. A scen
 | `forms` | Turn order without a roll, as Solaris' Combat Forms: `name`, `value` (higher goes first), `npc` (for the GM's tokens), `default` (where a side starts) and `text`. A fight starts everyone in their side's default form, and the GM clicks a token's form in the turn order to change it. |
 | `trackers` | Numbers on every token: `name`, optional `min` (default 0), `max` and `text`. Players change their own tokens'. |
 | `tokens` | Ready-made tokens, such as a system's threats: `name`, `image` (its picture, an image name), `size` (cells), `form` (a form's name), `trackers` (each with its own `max` and starting `value`), `conditions` it starts with, and `card`: sections of `title`, `text` and an optional `image` the GM reads on its token card. Players never get cards: scenes carry the pack without its tokens, and the trackers of tokens nobody owns stay with the GM. |
+| `sheet` | What the system's characters hold: see [Sheets](#sheets). Players make characters only for systems with one. |
 | `tags` | Conditions (`"condition": true`, set on tokens) and region tags (the rest; `"sector": true` marks sector tags). Each may be `valued`, have a `color` (`#rrggbb`), `text` and `effects`. |
 
 Effects are the engine's building blocks (ADR 012): `{"type": "roll", "edge": -1, "scaled": true}` (advantage or disadvantage, times the tag's value when scaled), `{"type": "moveCost", "multiplier": 2}`, `{"type": "blocksSight"}`, `{"type": "occupantLimit", "max": 1}` and `{"type": "entryCheck", "check": "Traversal"}`. Anything they can't say goes in `text`.
 
 Limits: at most 200 tags, 20 trackers, 20 bands and 500 tokens (each with up to 20 trackers and 30 card sections of up to 4000 characters); names up to 30 characters and texts up to 2000. An installed pack holds up to 4 MB.
+
+### Sheets
+
+A sheet is sections of fields. Each field has a `name` that formulas read (letters, digits, `_` and dots, as `DEX.mod`; not a keyword, a function or dice), an optional `label` people see and `text` shown on hover, and a `type`:
+
+```json
+"sheet": {"sections": [
+  {"title": "Abilities", "fields": [
+    {"name": "DEX", "label": "Dexterity", "min": 1, "max": 20, "value": 10},
+    {"name": "DEX.mod", "type": "computed", "formula": "floor((DEX - 10) / 2)"},
+    {"name": "class", "type": "choice", "options": ["Fighter", "Wizard"]}
+  ]},
+  {"title": "Combat", "fields": [
+    {"name": "armor", "min": 0, "max": 4},
+    {"name": "AP", "type": "tracker", "max": "8 - armor", "value": "AP.max"},
+    {"name": "inspired", "type": "checkbox"},
+    {"name": "notes", "type": "text"}
+  ]}
+]}
+```
+
+| Type | Holds |
+| --- | --- |
+| `number` (default) | A whole number, within optional constant `min` and `max`, starting at `value` (or `min`, or 0). |
+| `text` | Up to 2000 characters, starting at `value` or empty. |
+| `choice` | One of `options` (up to 50, of up to 60 characters), starting at `value` or the first. |
+| `checkbox` | On or off, starting at `value` or off. |
+| `computed` | The value of its `formula`, a number, boolean or text, never set by hand. |
+| `tracker` | A number changed in play, kept within `min` (default 0) and `max`, which may be formulas; formulas read them as `AP.min` and `AP.max`. It starts at `value`, a formula too (`"AP.max"`), or at its min. |
+
+Formulas are those of [SYSTEMS.md](SYSTEMS.md): they read the sheet's names, never roll dice, and a field can't depend on itself. A bad sheet refuses the whole pack with the reason. Limits: 20 sections, 200 fields.
+
 
 ## Atlas VTT presets
 
