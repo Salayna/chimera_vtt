@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart' show SupabaseClient;
 import 'assets.dart';
 import 'campaigns.dart';
 import 'library.dart';
+import 'packs.dart';
 import 'room.dart';
 import 'theme.dart';
 import 'ui/hub.dart';
@@ -70,6 +71,8 @@ class _GmHomeState extends State<GmHome> {
                 ),
               HubTab.library =>
                 LibraryPage(library: _library, assets: widget.assets),
+              HubTab.systems =>
+                SystemsPage(packs: InstalledPacks(widget.client)),
             },
           ),
         ]),

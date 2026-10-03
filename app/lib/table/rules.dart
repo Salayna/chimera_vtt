@@ -1,8 +1,26 @@
 import 'package:chimera_core/chimera_core.dart';
 import 'package:tactical_engine/tactical_engine.dart' as te;
 
-/// The scene's system pack: Generic for one this app doesn't know.
-te.SystemPack packOf(Scene scene) => te.packFor(scene.settings.pack);
+/// The scene's system pack: built in, or the module file the scene carries,
+/// or Generic for one this app can't read.
+te.SystemPack packOf(Scene scene) {
+  final id = scene.settings.pack;
+  final carried = scene.packFile;
+  if (carried == null || carried.id != id) return te.packFor(id);
+  return _parsed[carried] ??= _tryPack(carried.data) ?? te.packFor('generic');
+}
+
+/// Parsed carried packs: each scene change keeps its [ScenePack] unless
+/// the pack changes, so one parse serves many frames.
+final _parsed = Expando<te.SystemPack>('pack');
+
+te.SystemPack? _tryPack(Json data) {
+  try {
+    return te.SystemPack.fromJson(data);
+  } on FormatException {
+    return null;
+  }
+}
 
 /// The rules engine for [scene]: its pack, its grid's scale, its regions.
 te.TacticalEngine engineFor(Scene scene) {

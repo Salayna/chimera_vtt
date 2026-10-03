@@ -12,6 +12,7 @@ import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart'
     show PostgrestException, SupabaseClient;
+import 'package:tactical_engine/tactical_engine.dart' show SystemPack, builtInPacks;
 
 import 'account.dart';
 import 'assets.dart';
@@ -19,9 +20,11 @@ import 'campaigns.dart';
 import 'home.dart';
 import 'library.dart';
 import 'members.dart';
+import 'packs.dart';
 import 'table/chrome.dart';
 import 'table/initiative.dart';
 import 'table/log_panel.dart';
+import 'table/rules.dart';
 import 'table/table_view.dart';
 import 'theme.dart';
 import 'ui/cv.dart';
@@ -481,6 +484,7 @@ class _GmRoomState extends State<GmRoom> {
   void initState() {
     super.initState();
     _start();
+    _loadPacks();
   }
 
   Future<void> _start() async {
@@ -886,9 +890,54 @@ class _GmRoomState extends State<GmRoom> {
         mode == FogMode.cover ? FogMode.reveal : FogMode.cover;
   }
 
-  void _setPack(String pack) {
+  late final _installedPacks = InstalledPacks(widget.client);
+
+  /// The GM's installed systems, for the System menu.
+  List<SystemPack> _packs = const [];
+
+  Future<void> _loadPacks() async {
+    try {
+      final packs = await _installedPacks.list();
+      if (mounted) setState(() => _packs = packs);
+    } on Object catch (e) {
+      if (mounted) _toasts.show('Systems failed to load: $e', tone: CvTone.danger);
+    }
+  }
+
+  /// The systems the menu offers beyond the built-in ones: installed ones,
+  /// and the one the scene carries if this GM hasn't installed it.
+  List<SystemPack> _packChoices(Scene scene) {
+    final carried = packOf(scene);
+    return [
+      ..._packs,
+      if (!builtInPacks.containsKey(carried.id) &&
+          !_packs.any((p) => p.id == carried.id))
+        carried,
+    ];
+  }
+
+  /// Plays the scene with [id]; an installed system's file goes with it.
+  void _setPack(String id) {
     final host = _host!;
-    host.execute(UpdateSettings(host.store.scene.settings.copyWith(pack: pack)));
+    final pack = builtInPacks.containsKey(id)
+        ? null
+        : _packChoices(host.store.scene).where((p) => p.id == id).firstOrNull;
+    host.execute(UsePack(id, data: pack?.toJson()));
+  }
+
+  Future<void> _installPack() async {
+    try {
+      final pack = await pickPackFile();
+      if (pack == null) return;
+      await _installedPacks.install(pack);
+      await _loadPacks();
+      _setPack(pack.id);
+      _toasts.show('${pack.name} installed', tone: CvTone.ok);
+    } on FormatException catch (e) {
+      _toasts.show(e.message, tone: CvTone.danger);
+    } on Object catch (e) {
+      _toasts.show('The system failed to install: $e', tone: CvTone.danger);
+    }
   }
 
   void _setGridVisible(bool visible) {
@@ -1198,7 +1247,9 @@ class _GmRoomState extends State<GmRoom> {
                         onCellSize: _setCellSize,
                         onVisible: _setGridVisible,
                         pack: settings.pack,
-                        onPack: _setPack),
+                        packs: _packChoices(snap.requireData),
+                        onPack: _setPack,
+                        onInstallPack: _installPack),
                     FogOptions(
                         controller: _controller, grid: grid, onFill: _fillFog),
                     RegionOptions(

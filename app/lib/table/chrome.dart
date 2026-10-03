@@ -476,7 +476,9 @@ class GridOptions extends StatefulWidget {
       required this.onCellSize,
       required this.onVisible,
       this.pack = SceneSettings.defaultPack,
-      this.onPack});
+      this.packs = const [],
+      this.onPack,
+      this.onInstallPack});
 
   final TableController controller;
   final Grid grid;
@@ -484,9 +486,17 @@ class GridOptions extends StatefulWidget {
   final ValueChanged<double> onCellSize;
   final ValueChanged<bool> onVisible;
 
-  /// The scene's system pack, picked here when [onPack] is given.
+  /// The scene's system pack, picked here among [packs] (beyond the
+  /// built-in ones) when [onPack] is given.
   final String pack;
+  final List<SystemPack> packs;
   final ValueChanged<String>? onPack;
+
+  /// Installs a system from a file.
+  final VoidCallback? onInstallPack;
+
+  /// The menu value that installs instead of picking: not a valid pack id.
+  static const _install = '+install';
 
   @override
   State<GridOptions> createState() => _GridOptionsState();
@@ -569,14 +579,24 @@ class _GridOptionsState extends State<GridOptions> {
                 onChanged: widget.onVisible,
               ),
               if (widget.onPack case final onPack?)
-                CvDropdown(
+                CvDropdown<String>(
                   label: 'System',
                   entries: [
                     for (final MapEntry(key: id, value: pack) in builtInPacks.entries)
                       CvMenuItem(id, pack.name),
+                    if (widget.packs.isNotEmpty) ...[
+                      const CvMenuDivider<String>(),
+                      for (final pack in widget.packs) CvMenuItem(pack.id, pack.name),
+                    ],
+                    if (widget.onInstallPack != null) ...[
+                      const CvMenuDivider<String>(),
+                      const CvMenuItem(GridOptions._install, 'Install from file…'),
+                    ],
                   ],
                   value: widget.pack,
-                  onChanged: onPack,
+                  onChanged: (id) => id == GridOptions._install
+                      ? widget.onInstallPack?.call()
+                      : onPack(id),
                 ),
               CvButton(
                 label: fitting ? 'Cancel fit' : 'Fit on map',
