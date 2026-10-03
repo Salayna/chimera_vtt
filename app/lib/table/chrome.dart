@@ -581,7 +581,7 @@ class _GridOptionsState extends State<GridOptions> {
               ),
               if (widget.onPack case final onPack?)
                 CvDropdown<String>(
-                  label: 'System',
+                  label: 'Campaign system',
                   entries: [
                     for (final MapEntry(key: id, value: pack) in builtInPacks.entries)
                       CvMenuItem(id, pack.name),

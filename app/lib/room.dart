@@ -487,13 +487,18 @@ class _GmRoomState extends State<GmRoom> {
   void initState() {
     super.initState();
     _start();
-    _loadPacks();
   }
+
+  /// The system the campaign is played with, by pack id. Every scene is
+  /// put on it as it opens.
+  String _system = SceneSettings.defaultPack;
 
   Future<void> _start() async {
     setState(() => _error = null);
     try {
-      final scene = await _loadScene();
+      await _loadPacks();
+      _system = await Campaigns(widget.client).system(widget.campaign);
+      final scene = _onSystem(await _loadScene());
       final log = LogEntries(widget.client, widget.campaign);
       final stored = await log.recent();
       final transport = await SupabaseTransport.join(widget.client, widget.code);
@@ -602,8 +607,6 @@ class _GmRoomState extends State<GmRoom> {
           width: widget.art.map.width.toDouble(),
           height: widget.art.map.height.toDouble(),
           grid: const Grid(cellSize: 128),
-          // A new scene keeps the system the table plays.
-          pack: _host?.store.scene.settings.pack ?? SceneSettings.defaultPack,
         ),
       );
 
@@ -630,7 +633,7 @@ class _GmRoomState extends State<GmRoom> {
     if (id == _sceneId) return;
     try {
       await _flushSave();
-      final next = scene ?? await _scenes.load(id);
+      final next = _onSystem(scene ?? await _scenes.load(id));
       _sceneId = id;
       _host!.load(next);
       _controller.selected.value = null;
@@ -950,13 +953,23 @@ class _GmRoomState extends State<GmRoom> {
     ];
   }
 
-  /// Plays the scene with [id]; an installed system's file goes with it.
-  void _setPack(String id) {
+  /// Applied before the table sees the scene, so it isn't an undo step.
+  Scene _onSystem(Scene scene) => sceneOnSystem(scene, _system, _packs);
+
+  /// Plays the campaign, and so this scene and every other, with [id]; an
+  /// installed system's file goes with the scene.
+  Future<void> _setPack(String id) async {
     final host = _host!;
     final pack = builtInPacks.containsKey(id)
         ? null
         : _packChoices(host.store.scene).where((p) => p.id == id).firstOrNull;
     host.execute(UsePack(id, data: pack?.toJson(tokens: false)));
+    _system = id;
+    try {
+      await Campaigns(widget.client).setSystem(widget.campaign, id);
+    } on Object catch (e) {
+      _toasts.show('The campaign\'s system failed to save: $e', tone: CvTone.danger);
+    }
   }
 
   Future<void> _installPack() async {
@@ -965,7 +978,7 @@ class _GmRoomState extends State<GmRoom> {
       if (pack == null) return;
       await _installedPacks.install(pack);
       await _loadPacks();
-      _setPack(pack.id);
+      await _setPack(pack.id);
       _toasts.show('${pack.name} installed', tone: CvTone.ok);
     } on FormatException catch (e) {
       _toasts.show(e.message, tone: CvTone.danger);
@@ -1562,6 +1575,20 @@ class _PlayerRoomState extends State<PlayerRoom> {
       ]),
     );
   }
+}
+
+/// [scene] played with [system], a pack id: as it was if it already is, or
+/// if the system is neither built in nor among [installed] (it then keeps
+/// its own). An installed system's file goes with the scene.
+Scene sceneOnSystem(Scene scene, String system, List<SystemPack> installed) {
+  if (scene.settings.pack == system) return scene;
+  final pack = installed.where((p) => p.id == system).firstOrNull;
+  if (!builtInPacks.containsKey(system) && pack == null) return scene;
+  return switch (reduce(
+      scene, const Gm(), UsePack(system, data: pack?.toJson(tokens: false)))) {
+    Accepted(:final patches) => scene.applyPatches(patches),
+    Refused() => scene,
+  };
 }
 
 /// Who is connected, without their cursors: a change here, not a cursor

@@ -21,7 +21,7 @@ One word, one meaning. When code, docs and conversation disagree, this file wins
 | --- | --- | --- |
 | **GM** | `Gm` | The game master. Runs the authoritative session and sees everything. |
 | **Player** | `Player` | Anyone at the table who isn't the GM. Sees a filtered copy of the scene. |
-| **Campaign** | `Campaign` | Everything one group plays with: scenes, packs, assets and members. Owned by one signed-in GM. |
+| **Campaign** | `Campaign` | Everything one group plays with: scenes, its system, assets and members. Owned by one signed-in GM. Every scene in it plays with its system. |
 | **Member** | — | A player who has entered a campaign's room at least once, with the name and colour they chose. Signed in or anonymous. The GM can remove one. A token's owner is a member. |
 | **Home** | `GmHome` | A signed-in GM's screen outside any room: their campaigns, their library, and joining someone else's room as a player. Signed out, the lobby shows sign-in and joining instead. |
 | **Scene** | `Scene` | One map and everything on it. A set of entities keyed by id. |
@@ -116,7 +116,7 @@ Otherwise it's a field of some entity.
 | Term | Code | Meaning |
 | --- | --- | --- |
 | **Tactical engine** | `tactical_engine` | The pure-Dart rules package: topology, regions, measurement, sight and tag effects. It knows no game system. |
-| **System pack** | `SystemPack` | A module defining a game system: its units, range bands, conditions and region tags with their effects, initiative and trackers, and the ready-made tokens it brings. JSON in the format of [PACKS.md](PACKS.md). A scene names the one it's played with. |
+| **System pack** | `SystemPack` | A module defining a game system: its units, range bands, conditions and region tags with their effects, initiative and trackers, and the ready-made tokens it brings. JSON in the format of [PACKS.md](PACKS.md). A campaign names the one it's played with, and each scene carries it. |
 | **Module** | `SystemPack`, `ModuleEditor` | What the GM makes, installs and shares: a system pack with its images (token pictures, card art, cover). Made in the app or installed from a file. |
 | **Module bundle** | `.chimera`, `ModuleBundle` | A module as one file: a zip of `module.json` and its images, each named by its SHA-256. |
 | **Installed pack** | `InstalledPacks`, `packs` | A pack a GM added from a file (a pack file or an Atlas preset) to their account, for all their campaigns. Listed on the hub's Systems page and in the Grid panel's System menu. |

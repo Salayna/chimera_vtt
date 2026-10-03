@@ -453,7 +453,7 @@ Phase 3 status 2026-10-03: players act.
 Limits: condition changes on hidden tokens aren't logged. Stored entries are never pruned. The protocol is now version 2, so clients on version 1 are refused.
 
 Phase 4 status 2026-10-03: tactical rules, through the tactical engine.
-- **System packs:** a scene names its pack, picked by the GM in the grid panel. Two ship built in: Generic (cells, free-text conditions) and D&D 5e (5 ft cells, the SRD conditions and terrain, summarised). A new scene keeps the live scene's pack. Solaris Arcanum stays phase 6.
+- **System packs:** a scene names its pack, picked by the GM in the grid panel. Two ship built in: Generic (cells, free-text conditions) and D&D 5e (5 ft cells, the SRD conditions and terrain, summarised). A new scene keeps the live scene's pack. Solaris Arcanum stays phase 6. (Since 2026-10-03 the campaign holds the system, below.)
 - **Measuring:** the ruler speaks the pack: "15 ft", "3 cells", a range band when the pack has bands, and "no sight" through a region that blocks it.
 - **Conditions:** the token card offers the pack's conditions from a menu and shows their rules text on hover. Typed ones still work.
 - **Regions (sectors and zones):** the GM's region tool (A) marks whole cells (Alt for exact), and its panel gives them the pack's tags or typed ones, hides them from players, or deletes them. Regions show their tags on the map; the token card names the terrain under a token.
@@ -477,6 +477,8 @@ Phase 6 rework 2026-10-03: a module is more than a JSON file, and is made in the
 - **Module bundles:** `.chimera` is a zip with the pack as `module.json` and every image it uses as `images/<sha256>`. Installing one checks it (size limits, PNG, JPEG or WebP only, every image present and matching its name), uploads the images and installs the pack. Pack files (`.json`) and Atlas presets still install as before. Export writes an installed module back out as a bundle with its images.
 - **The module editor:** the Systems page's **New module** and each installed module's **Edit** open it: About (name, description, cover), Rules (unit, units a cell, diagonals, initiative roll), Tags (conditions, region and sector tags, valued or not, with their text), Trackers, and Tokens (picture, name, size, and card sections with text and an image). Saving checks the module as any file from anyone is, and installs it; an edit keeps the id and bumps the version.
 - **At the table:** a placed pack token wears its picture, and the GM's token card shows its card sections' images.
+
+Campaigns hold their system (2026-10-03): a campaign is played with one system (`campaigns.system`, a pack id; existing campaigns took their live scene's). **New campaign** asks for it with the name, the card shows it, and its ⋯ menu changes it. In the room every scene is put on it as it opens or is switched to, before the table sees it (so it isn't an undo step), and the grid panel's **Campaign system** menu changes the campaign's. A system that's neither built in nor installed any more leaves scenes on the copy they carry.
 
 Not yet: editing effects, range bands, turn forms, and a token's own trackers and starting tags in the editor (they're kept as they are; edit them in the file); Fantasy Statblocks and `.atlasmap` scene import; pack-defined sheet fields; sharing modules other than by file. Protocol is version 5.
 

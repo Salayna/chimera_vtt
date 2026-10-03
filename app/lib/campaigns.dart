@@ -3,11 +3,13 @@ import 'dart:async';
 import 'package:chimera_core/chimera_core.dart';
 import 'package:chimera_sync/chimera_sync.dart' show Session, TableEvent;
 import 'package:flutter/widgets.dart';
+import 'package:tactical_engine/tactical_engine.dart' show builtInPacks;
 import 'package:supabase_flutter/supabase_flutter.dart'
     show PostgrestException, SupabaseClient;
 
 import 'assets.dart';
 import 'members.dart' show Member, memberColor;
+import 'packs.dart' show InstalledPacks;
 import 'room.dart' show newRoomCode;
 import 'table/chrome.dart' show TextKeysOnly;
 import 'theme.dart';
@@ -15,7 +17,7 @@ import 'ui/cv.dart';
 import 'ui/hub.dart';
 
 /// A GM's campaign, as the lobby lists it.
-typedef Campaign = ({String id, String name, String code});
+typedef Campaign = ({String id, String name, String code, String system});
 
 /// The signed-in GM's campaigns, in Postgres behind row-level security:
 /// a GM only ever sees their own.
@@ -24,23 +26,42 @@ class Campaigns {
 
   final SupabaseClient _client;
 
-  static Campaign _row(Map<String, dynamic> r) =>
-      (id: r['id'] as String, name: r['name'] as String, code: r['room_code'] as String);
+  static const _fields = 'id, name, room_code, system';
+
+  static Campaign _row(Map<String, dynamic> r) => (
+        id: r['id'] as String,
+        name: r['name'] as String,
+        code: r['room_code'] as String,
+        system: r['system'] as String,
+      );
 
   Future<List<Campaign>> list() async => [
         for (final r in await _client
             .from('campaigns')
-            .select('id, name, room_code')
+            .select(_fields)
             .order('created_at', ascending: true))
           _row(r),
       ];
 
-  Future<Campaign> create(String name) => _withNewCode((code) async => _row(
-      await _client
+  /// A new campaign played with [system], a pack id.
+  Future<Campaign> create(String name, {String system = 'generic'}) =>
+      _withNewCode((code) async => _row(await _client
           .from('campaigns')
-          .insert({'name': name, 'room_code': code})
-          .select('id, name, room_code')
+          .insert({'name': name, 'room_code': code, 'system': system})
+          .select(_fields)
           .single()));
+
+  /// The system [id] is played with, by pack id.
+  Future<String> system(String id) async => (await _client
+      .from('campaigns')
+      .select('system')
+      .eq('id', id)
+      .single())['system'] as String;
+
+  /// Every scene of the campaign then plays with [system]; the room puts
+  /// each on it as it opens.
+  Future<void> setSystem(String id, String system) =>
+      _client.from('campaigns').update({'system': system}).eq('id', id);
 
   /// A new room code: anyone holding the old one can't join any more.
   Future<Campaign> changeCode(String id) => _withNewCode((code) async => _row(
@@ -48,7 +69,7 @@ class Campaigns {
           .from('campaigns')
           .update({'room_code': code})
           .eq('id', id)
-          .select('id, name, room_code')
+          .select(_fields)
           .single()));
 
   Future<void> rename(String id, String name) =>
@@ -64,7 +85,7 @@ class Campaigns {
     // A scene's settings are always its first entity (Scene.entities).
     final rows = await _client
         .from('campaigns')
-        .select('id, name, room_code, scenes!scenes_campaign_fkey(count), '
+        .select('$_fields, scenes!scenes_campaign_fkey(count), '
             'members(name, color), '
             'live:scenes!campaigns_live_scene_fkey(map:data->entities->0->>map)')
         .order('created_at', ascending: true);
@@ -250,7 +271,14 @@ class CampaignsPage extends StatefulWidget {
 
 class _CampaignsPageState extends State<CampaignsPage> {
   late final _campaigns = Campaigns(widget.client);
+  late final _installed = InstalledPacks(widget.client);
   List<CampaignSummary>? _list;
+
+  /// The systems a campaign can be played with, by pack id: the built-in
+  /// ones, then the GM's installed ones.
+  Map<String, String> _systems = {
+    for (final p in builtInPacks.values) p.id: p.name,
+  };
   String? _error;
   bool _busy = false;
 
@@ -268,8 +296,17 @@ class _CampaignsPageState extends State<CampaignsPage> {
     });
     try {
       await action();
-      final list = await _campaigns.summaries();
-      if (mounted) setState(() => _list = list);
+      final (list, installed) =
+          await (_campaigns.summaries(), _installed.list()).wait;
+      if (mounted) {
+        setState(() {
+          _list = list;
+          _systems = {
+            for (final p in builtInPacks.values) p.id: p.name,
+            for (final p in installed) p.id: p.name,
+          };
+        });
+      }
     } on Object catch (e) {
       if (mounted) setState(() => _error = '$e');
     } finally {
@@ -307,10 +344,104 @@ class _CampaignsPageState extends State<CampaignsPage> {
     return trimmed.isEmpty || trimmed == current ? null : trimmed;
   }
 
+  /// A system's name, or its id when it's no longer installed.
+  String _systemName(String id) => _systems[id] ?? id;
+
+  /// The systems to choose from, with [current] even if it's gone.
+  List<CvMenuEntry<String>> _systemEntries(String current) => [
+        for (final MapEntry(key: id, value: name) in _systems.entries)
+          CvMenuItem(id, name),
+        if (!_systems.containsKey(current)) CvMenuItem(current, current),
+      ];
+
   Future<void> _create() async {
-    final name = await _askName('New campaign');
-    if (name == null) return;
-    await _run(() async => widget.onOpen(await _campaigns.create(name)));
+    final text = TextEditingController();
+    var system = 'generic';
+    final created = await showCvDialog<bool>(
+      context: context,
+      title: 'New campaign',
+      icon: Lucide.plus,
+      body: StatefulBuilder(
+        builder: (context, setDialog) => Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          spacing: 16,
+          children: [
+            CvTextInput(
+              controller: text,
+              label: 'Name',
+              placeholder: 'Curse of the Crimson Tide',
+              maxLength: 80,
+              onSubmitted: (_) => Navigator.pop(context, true),
+            ),
+            CvDropdown<String>(
+              label: 'System',
+              value: system,
+              entries: _systemEntries(system),
+              onChanged: (v) => setDialog(() => system = v),
+            ),
+            Text('Every scene in the campaign plays with it. Install more '
+                'systems from the Systems page.',
+                style: CvTypography.caption.copyWith(color: CvColors.textSecondary)),
+          ],
+        ),
+      ),
+      actions: (context) => [
+        CvButton(
+            label: 'Cancel',
+            variant: CvButtonVariant.ghost,
+            onPressed: () => Navigator.pop(context, false)),
+        CvButton(
+            label: 'Create campaign',
+            variant: CvButtonVariant.primary,
+            onPressed: () => Navigator.pop(context, true)),
+      ],
+    );
+    // Not disposed: the dialog still shows it while it animates away.
+    final name = text.text.trim();
+    if (!(created ?? false) || name.isEmpty) return;
+    await _run(() async =>
+        widget.onOpen(await _campaigns.create(name, system: system)));
+  }
+
+  Future<void> _changeSystem(Campaign c) async {
+    var system = c.system;
+    final changed = await showCvDialog<bool>(
+      context: context,
+      title: 'System for ${c.name}',
+      icon: Lucide.puzzle,
+      body: StatefulBuilder(
+        builder: (context, setDialog) => Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          spacing: 16,
+          children: [
+            CvDropdown<String>(
+              label: 'System',
+              value: system,
+              entries: _systemEntries(system),
+              onChanged: (v) => setDialog(() => system = v),
+            ),
+            Text('Each scene switches to it as it opens. Conditions and '
+                'trackers the old system set stay on tokens.',
+                style: CvTypography.caption.copyWith(color: CvColors.textSecondary)),
+          ],
+        ),
+      ),
+      actions: (context) => [
+        CvButton(
+            label: 'Cancel',
+            variant: CvButtonVariant.ghost,
+            onPressed: () => Navigator.pop(context, false)),
+        CvButton(
+            label: 'Change system',
+            variant: CvButtonVariant.primary,
+            onPressed: () => Navigator.pop(context, true)),
+      ],
+    );
+    if ((changed ?? false) && system != c.system) {
+      await _run(() => _campaigns.setSystem(c.id, system));
+    }
   }
 
   Future<bool> _confirm({
@@ -341,6 +472,8 @@ class _CampaignsPageState extends State<CampaignsPage> {
 
   Future<void> _act(Campaign c, _CardAction action) async {
     switch (action) {
+      case _CardAction.system:
+        await _changeSystem(c);
       case _CardAction.rename:
         final name = await _askName('Rename ${c.name}', current: c.name);
         if (name != null) await _run(() => _campaigns.rename(c.id, name));
@@ -403,6 +536,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
                         height: _CampaignCard.height,
                         child: _CampaignCard(
                           summary: s,
+                          system: _systemName(s.campaign.system),
                           assets: widget.assets,
                           onOpen: _busy ? null : () => widget.onOpen(s.campaign),
                           onAction: (a) => _act(s.campaign, a),
@@ -497,13 +631,14 @@ String _greeting(DateTime d) => switch (d.hour) {
       _ => 'Good afternoon',
     };
 
-enum _CardAction { rename, changeCode, delete }
+enum _CardAction { rename, system, changeCode, delete }
 
 /// A campaign as a cover card: its live map (or stand-in art), its name,
 /// scenes and room code, its players' faces, and a menu of changes.
 class _CampaignCard extends StatelessWidget {
   const _CampaignCard({
     required this.summary,
+    required this.system,
     required this.assets,
     required this.onOpen,
     required this.onAction,
@@ -512,6 +647,9 @@ class _CampaignCard extends StatelessWidget {
   static const height = 312.0;
 
   final CampaignSummary summary;
+
+  /// The name of the system it's played with.
+  final String system;
   final AssetStore assets;
   final VoidCallback? onOpen;
   final ValueChanged<_CardAction> onAction;
@@ -564,6 +702,17 @@ class _CampaignCard extends StatelessWidget {
                         style: CvTypography.bodySm.copyWith(
                             fontFamily: CvTypography.mono,
                             color: CvColors.textSecondary)),
+                  ]),
+                  Row(spacing: 6, children: [
+                    const CvIcon(Lucide.puzzle,
+                        size: 14, color: CvColors.textSecondary),
+                    Flexible(
+                      child: Text(system,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: CvTypography.bodySm
+                              .copyWith(color: CvColors.textSecondary)),
+                    ),
                   ]),
                   const Spacer(),
                   Row(children: [
@@ -648,6 +797,9 @@ class _CardMenuState extends State<_CardMenu> {
           entries: const [
             CvMenuItem(_CardAction.rename, 'Rename',
                 leading: CvIcon(Lucide.pencil,
+                    size: CvSizes.iconSm, color: CvColors.textSecondary)),
+            CvMenuItem(_CardAction.system, 'Change system',
+                leading: CvIcon(Lucide.puzzle,
                     size: CvSizes.iconSm, color: CvColors.textSecondary)),
             CvMenuItem(_CardAction.changeCode, 'Change room code',
                 leading: CvIcon(Lucide.refreshCw,
