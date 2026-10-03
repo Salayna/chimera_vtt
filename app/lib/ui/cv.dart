@@ -1158,15 +1158,67 @@ class _CvDropdownState<T> extends State<CvDropdown<T>> {
     );
   }
 
-  void _toggle() => setState(_portal.toggle);
+  /// Takes the keys while the menu is open; [_before] had them, and gets
+  /// them back as it closes.
+  final _keys = FocusNode(skipTraversal: true);
+  FocusNode? _before;
+
+  /// The item the arrows are on.
+  T? _active;
+
+  @override
+  void dispose() {
+    _keys.dispose();
+    super.dispose();
+  }
+
+  List<T> get _values =>
+      [for (final e in widget.entries) if (e is CvMenuItem<T>) e.value];
+
+  void _toggle() {
+    if (_portal.isShowing) return _close();
+    setState(() {
+      _active = widget.value;
+      _portal.show();
+    });
+    _before = FocusManager.instance.primaryFocus;
+    _keys.requestFocus();
+  }
 
   void _close() {
-    if (_portal.isShowing) setState(_portal.hide);
+    if (!_portal.isShowing) return;
+    setState(_portal.hide);
+    if (_keys.hasFocus) {
+      final before = _before;
+      before?.context != null ? before!.requestFocus() : _keys.unfocus();
+    }
   }
 
   void _choose(T value) {
     _close();
     widget.onChanged(value);
+  }
+
+  KeyEventResult _key(FocusNode _, KeyEvent event) {
+    if (!_portal.isShowing) return KeyEventResult.ignored;
+    if (event is KeyUpEvent) return KeyEventResult.handled;
+    final values = _values;
+    final at = values.indexOf(_active as T);
+    switch (event.logicalKey) {
+      case LogicalKeyboardKey.arrowDown when values.isNotEmpty:
+        setState(() => _active = values[(at + 1) % values.length]);
+      case LogicalKeyboardKey.arrowUp when values.isNotEmpty:
+        setState(() => _active =
+            values[(at <= 0 ? values.length : at) - 1]);
+      case LogicalKeyboardKey.enter || LogicalKeyboardKey.space when at >= 0:
+        _choose(values[at]);
+      case LogicalKeyboardKey.escape:
+        _close();
+      default:
+        // The menu has the keys: the table's single-key shortcuts wait.
+        return KeyEventResult.skipRemainingHandlers;
+    }
+    return KeyEventResult.handled;
   }
 
   @override
@@ -1187,8 +1239,9 @@ class _CvDropdownState<T> extends State<CvDropdown<T>> {
         TapRegion(
           groupId: this,
           onTapOutside: (_) => _close(),
-          child: CallbackShortcuts(
-            bindings: {const SingleActivator(LogicalKeyboardKey.escape): _close},
+          child: Focus(
+            focusNode: _keys,
+            onKeyEvent: _key,
             child: CompositedTransformTarget(
               key: _target,
               link: _link,
@@ -1220,6 +1273,7 @@ class _CvDropdownState<T> extends State<CvDropdown<T>> {
                                 CvSizes.hit * 3, flip ? other : want),
                             entries: widget.entries,
                             value: widget.value,
+                            active: _active,
                             onSelected: _choose,
                           ),
                         ),
@@ -1283,12 +1337,13 @@ class _CvDropdownState<T> extends State<CvDropdown<T>> {
 
 /// A list of choices on a solid popover surface, scrolling past
 /// [maxHeight].
-class CvMenu<T> extends StatelessWidget {
+class CvMenu<T> extends StatefulWidget {
   const CvMenu({
     super.key,
     required this.entries,
     required this.onSelected,
     this.value,
+    this.active,
     this.width = 220,
     this.maxHeight = double.infinity,
   });
@@ -1296,6 +1351,9 @@ class CvMenu<T> extends StatelessWidget {
   final List<CvMenuEntry<T>> entries;
   final ValueChanged<T> onSelected;
   final T? value;
+
+  /// Highlighted for the keyboard, and kept in view; it opens on [value].
+  final T? active;
   final double width;
   final double maxHeight;
 
@@ -1309,9 +1367,52 @@ class CvMenu<T> extends StatelessWidget {
           });
 
   @override
+  State<CvMenu<T>> createState() => _CvMenuState<T>();
+}
+
+class _CvMenuState<T> extends State<CvMenu<T>> {
+  final _scroll = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance
+        .addPostFrameCallback((_) => _show(widget.active ?? widget.value));
+  }
+
+  @override
+  void didUpdateWidget(CvMenu<T> old) {
+    super.didUpdateWidget(old);
+    if (old.active != widget.active) _show(widget.active);
+  }
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  /// Scrolls just enough to show [value]'s row: entries have fixed heights.
+  void _show(T? value) {
+    if (value == null || !_scroll.hasClients) return;
+    final at = widget.entries
+        .indexWhere((e) => e is CvMenuItem<T> && e.value == value);
+    if (at < 0) return;
+    final top = CvMenu.heightOf(widget.entries.sublist(0, at)) - 4;
+    final bottom = top + CvSizes.hit;
+    final p = _scroll.position;
+    if (top < p.pixels) {
+      _scroll.jumpTo(top.clamp(0, p.maxScrollExtent));
+    } else if (bottom > p.pixels + p.viewportDimension) {
+      _scroll.jumpTo(
+          (bottom - p.viewportDimension).clamp(0, p.maxScrollExtent));
+    }
+  }
+
+  @override
   Widget build(BuildContext context) => Container(
-        width: width,
-        constraints: BoxConstraints(maxHeight: maxHeight),
+        width: widget.width,
+        constraints: BoxConstraints(maxHeight: widget.maxHeight),
         padding: const EdgeInsets.all(4),
         decoration: BoxDecoration(
           color: CvColors.surfacePanelSolid,
@@ -1320,11 +1421,12 @@ class CvMenu<T> extends StatelessWidget {
           boxShadow: CvElevation.shadow2,
         ),
         child: SingleChildScrollView(
+          controller: _scroll,
           child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            for (final entry in entries)
+            for (final entry in widget.entries)
               switch (entry) {
                 CvMenuDivider() => Container(
                     height: 1,
@@ -1335,7 +1437,7 @@ class CvMenu<T> extends StatelessWidget {
                     child: CvOverline(text)),
                 CvMenuItem(:final value, :final label, :final leading) =>
                   CvPressable(
-                    onTap: () => onSelected(value),
+                    onTap: () => widget.onSelected(value),
                     label: label,
                     radius: CvRadii.sm,
                     pressScale: 1,
@@ -1345,7 +1447,7 @@ class CvMenu<T> extends StatelessWidget {
                       decoration: BoxDecoration(
                         color: s.pressed
                             ? CvColors.surfacePressed
-                            : s.hover
+                            : s.hover || value == widget.active
                                 ? CvColors.surfaceHover
                                 : const Color(0x00000000),
                         borderRadius: BorderRadius.circular(CvRadii.sm),
@@ -1356,7 +1458,7 @@ class CvMenu<T> extends StatelessWidget {
                           child: Text(label,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: value == this.value
+                              style: value == widget.value
                                   ? CvTypography.weight(CvTypography.body, 500)
                                   : CvTypography.body),
                         ),
