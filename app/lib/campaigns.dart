@@ -80,14 +80,16 @@ class Campaigns {
       _client.from('campaigns').delete().eq('id', id);
 
   /// Every campaign with its size, and its live scene's map thumbnail when
-  /// the map is in the library.
+  /// the map is in the library: the last played first, a campaign not
+  /// played yet by when it was made.
   Future<List<CampaignSummary>> summaries() async {
     // A scene's settings are always its first entity (Scene.entities).
     final rows = await _client
         .from('campaigns')
-        .select('$_fields, scenes!scenes_campaign_fkey(count), '
+        .select('$_fields, created_at, scenes!scenes_campaign_fkey(count), '
             'members(name, color), '
-            'live:scenes!campaigns_live_scene_fkey(map:data->entities->0->>map)')
+            'live:scenes!campaigns_live_scene_fkey('
+            'map:data->entities->0->>map, updated_at)')
         .order('created_at', ascending: true);
     final maps = {
       for (final r in rows)
@@ -104,7 +106,7 @@ class Campaigns {
               r['asset'] as String: r['thumb'] as String,
           };
     int count(Object? embedded) => (embedded as List).first['count'] as int;
-    return [
+    final summaries = [
       for (final r in rows)
         (
           campaign: _row(r),
@@ -117,8 +119,15 @@ class Campaigns {
             final String t => AssetId(t),
             null => null,
           },
+          played: switch (r['live']) {
+            {'updated_at': final String at} => DateTime.parse(at),
+            _ => null,
+          },
+          created: DateTime.parse(r['created_at'] as String),
         ),
     ];
+    return summaries
+      ..sort((a, b) => (b.played ?? b.created).compareTo(a.played ?? a.created));
   }
 
   /// Codes are random, so one can already be taken: try another.
@@ -133,13 +142,30 @@ class Campaigns {
   }
 }
 
-/// A campaign as the GM's home shows it.
+/// A campaign as the GM's home shows it. [played] is when its live scene
+/// last saved, null before it has one.
 typedef CampaignSummary = ({
   Campaign campaign,
   int scenes,
   List<Member> players,
   AssetId? thumb,
+  DateTime? played,
+  DateTime created,
 });
+
+/// "just now", "5 min ago", "3 h ago", "yesterday", "4 days ago", then
+/// the date: [at] as seen at [now].
+String ago(DateTime at, DateTime now) {
+  final d = now.difference(at);
+  if (d.inMinutes < 1) return 'just now';
+  if (d.inHours < 1) return '${d.inMinutes} min ago';
+  if (d.inDays < 1) return '${d.inHours} h ago';
+  if (d.inDays == 1) return 'yesterday';
+  if (d.inDays < 7) return '${d.inDays} days ago';
+  final local = at.toLocal();
+  return 'on ${local.day} ${_months[local.month - 1]}'
+      '${local.year == now.year ? '' : ' ${local.year}'}';
+}
 
 /// A scene in a campaign's list.
 typedef SceneEntry = ({String id, String name});
@@ -257,11 +283,15 @@ class CampaignsPage extends StatefulWidget {
     required this.assets,
     required this.onOpen,
     required this.onJoin,
+    this.onTab,
   });
 
   final SupabaseClient client;
   final AssetStore assets;
   final void Function(Campaign campaign) onOpen;
+
+  /// Goes to another of the hub's pages, from getting started.
+  final ValueChanged<HubTab>? onTab;
 
   /// Opens the top bar's join popover.
   final VoidCallback onJoin;
@@ -608,6 +638,44 @@ class _CampaignsPageState extends State<CampaignsPage> {
                   onPressed: widget.onJoin,
                 ),
               ]),
+              if (widget.onTab case final go?) ...[
+                const SizedBox(height: 24),
+                const CvOverline('Getting started'),
+                Row(spacing: 12, children: [
+                  for (final (tab, icon, title, text) in const [
+                    (HubTab.characters, Lucide.userRound, 'Make a character',
+                        'For you to play, at any table.'),
+                    (HubTab.systems, Lucide.puzzle, 'Install a system',
+                        'A module: its rules, sheets and threats.'),
+                    (HubTab.library, Lucide.map, 'Upload maps',
+                        'Kept for every campaign.'),
+                  ])
+                    Expanded(
+                      child: SizedBox(
+                        height: 132,
+                        child: HubCard(
+                          label: title,
+                          onTap: () => go(tab),
+                          child: Padding(
+                            padding: const EdgeInsets.all(14),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              spacing: 6,
+                              children: [
+                                CvIcon(icon, color: CvColors.amber500),
+                                const Spacer(),
+                                Text(title, style: CvTypography.label),
+                                Text(text,
+                                    style: CvTypography.caption.copyWith(
+                                        color: CvColors.textSecondary)),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ]),
+              ],
             ]),
           ),
         ),
@@ -708,7 +776,11 @@ class _CampaignCard extends StatelessWidget {
                     const CvIcon(Lucide.puzzle,
                         size: 14, color: CvColors.textSecondary),
                     Flexible(
-                      child: Text(system,
+                      child: Text(
+                          '$system · ${switch (summary.played) {
+                            final at? => 'Played ${ago(at, DateTime.now())}',
+                            null => 'Not played yet',
+                          }}',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: CvTypography.bodySm

@@ -69,6 +69,7 @@ class _GmHomeState extends State<GmHome> {
                   onOpen: (c) =>
                       widget.onEnter((code: c.code, gm: true, campaign: c.id)),
                   onJoin: () => _joinOpen.value = true,
+                  onTab: (t) => setState(() => _tab = t),
                 ),
               HubTab.characters => CharactersPage(client: widget.client),
               HubTab.library =>
