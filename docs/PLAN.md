@@ -436,7 +436,7 @@ Phases 1–4 alone make a usable VTT, and cinematic mode and the Solaris pack fo
 | 3 | Players act | Own tokens, dice, pings, conditions | |
 | 4 | Tactical rules | Conditions, sectors, range bands, initiative, tactical engine | A usable VTT |
 | 5 | Cinematic mode | Scenes, parallax, particles, music, ambience, handouts | |
-| 6 | System modules and the Solaris pack | Installable system packs, trackers, Atlas preset import, the Solaris module, threat cards, Fantasy Statblocks import | |
+| 6 | System modules and the Solaris pack | Modules made in the app and shared as bundles with their images (tokens, cards, cover), trackers, Atlas preset import, the Solaris module, threat cards, Fantasy Statblocks import | A GM makes a module with pictured tokens in the app, exports it, and another GM installs it |
 | 7 | Hardening | Request checks, rate limits, private channels with row-level security, hosting, phone layout | |
 
 Phase 1 status 2026-10-03: map, grid, tokens, fog and save came with the POC. Undo was the last piece: the GM's own changes (not players' moves) can be undone and redone, up to 100 steps, with ⌘Z / ⇧⌘Z (Ctrl on other systems) or the rail's buttons, and players see the result like any other change. Loading a scene clears the history. Undo restores whole entities, so undoing a GM edit to a token also reverts a player's move of it made since.
@@ -472,7 +472,13 @@ Phase 6 status 2026-10-03: game systems are modules, as asked: a system is added
 
 - **Threat cards:** a pack can hold ready-made tokens with their own trackers, starting tags and card; the GM places them from the token panel, reads the card on the token card, and a fight starts them in their own form. Cards stay with the GM: scenes carry packs without tokens, and players don't get the trackers of tokens nobody owns. A tool builds the Solaris module's 157 threats from the GM's own notes of the books, kept out of the repository.
 
-Not yet: Fantasy Statblocks and `.atlasmap` scene import, pack-defined sheet fields, and editing a pack inside the app (a pack is edited as a file and installed again). Protocol is version 5.
+Phase 6 rework 2026-10-03: a module is more than a JSON file, and is made in the app.
+- **Images in the format:** a pack token can have a picture (`image`), each card section an image, and the module a `cover` and `description`. Images are asset ids (the SHA-256 of their bytes, as everywhere), so they live in Storage like maps and tokens.
+- **Module bundles:** `.chimera` is a zip with the pack as `module.json` and every image it uses as `images/<sha256>`. Installing one checks it (size limits, PNG, JPEG or WebP only, every image present and matching its name), uploads the images and installs the pack. Pack files (`.json`) and Atlas presets still install as before. Export writes an installed module back out as a bundle with its images.
+- **The module editor:** the Systems page's **New module** and each installed module's **Edit** open it: About (name, description, cover), Rules (unit, units a cell, diagonals, initiative roll), Tags (conditions, region and sector tags, valued or not, with their text), Trackers, and Tokens (picture, name, size, and card sections with text and an image). Saving checks the module as any file from anyone is, and installs it; an edit keeps the id and bumps the version.
+- **At the table:** a placed pack token wears its picture, and the GM's token card shows its card sections' images.
+
+Not yet: editing effects, range bands, turn forms, and a token's own trackers and starting tags in the editor (they're kept as they are; edit them in the file); Fantasy Statblocks and `.atlasmap` scene import; pack-defined sheet fields; sharing modules other than by file. Protocol is version 5.
 
 ---
 

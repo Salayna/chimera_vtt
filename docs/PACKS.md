@@ -2,7 +2,22 @@
 
 As of 2026-10-03 · Companion to [PLAN.md](PLAN.md) and the [Lexicon](LEXICON.md)
 
-A **system pack** is a module that teaches Chimera VTT a game system: how distance is counted, its range bands, its conditions and region tags with what they do, its initiative roll and the trackers on each token. Generic and D&D 5e are built in. Any other system is a JSON file the GM installs from the Library's **Systems** tab or the Grid panel's **System** menu. An Atlas VTT preset can be installed the same way.
+A **system pack** is a module that teaches Chimera VTT a game system: how distance is counted, its range bands, its conditions and region tags with what they do, its initiative roll and the trackers on each token, and the ready-made tokens it brings with their pictures and cards. Generic and D&D 5e are built in. Any other system is made in the app (the hub's **Systems** page, **New module**) or installed there or from the Grid panel's **System** menu: a module bundle (`.chimera`), a pack file (`.json`) or an Atlas VTT preset.
+
+## Module bundles
+
+A module is more than its JSON: its tokens' pictures, its cards' images and its cover come with it. A bundle is a zip:
+
+```
+module.json                 the pack, in the format below
+images/<sha256>             each image the pack names, PNG, JPEG or WebP
+```
+
+An image is named by the SHA-256 of its bytes, in hex, and the pack refers to it by that name (`"image": "3f9a…"`), as every asset in the app is named (ADR 006). Installing a bundle checks it all, then uploads the images and installs the pack: at most 64 MB, 600 images of 15 MB each; every image the pack names present; each image's bytes matching its name; nothing but PNG, JPEG or WebP. Images the pack doesn't name are left out. **Export** on the Systems page writes an installed module back out as a bundle (`<id>-v<version>.chimera`).
+
+## Making a module in the app
+
+**New module** (or **Edit** on an installed one) opens the editor: About (name, description, cover), Rules (unit, units a cell, diagonals, initiative roll), Tags (conditions and region or sector tags, valued or not, with rules text), Trackers (name, bounds, text) and Tokens (picture, name, size, and card sections, each with text and an image). The id comes from the name for a new module and never changes after. Saving runs the same checks as a file from anyone, then installs it; saving an edit bumps the version. Effects, range bands, turn forms, and a token's own trackers and starting tags aren't in the editor yet: they're kept as they are, and edited in the file.
 
 Installed packs belong to the GM's account and serve all their campaigns. A scene played with one carries a copy, so players and scene files get it without installing anything.
 
@@ -34,6 +49,7 @@ Installed packs belong to the GM's account and serve all their campaigns. A scen
 | `format` | The file format, 1. The app refuses others. |
 | `id` | Lowercase letters, digits and dashes, at most 40. Scenes name their pack by it, so keep it across versions. |
 | `name`, `version` | Shown to the GM. Installing a pack with an id already installed replaces it. |
+| `description`, `cover` | What the module is (up to 2000 characters), and its cover art (an image name). |
 | `topology` | `square` (default) or `gridless`. |
 | `diagonal` | On a square grid: `chebyshev` (every diagonal 1), `manhattan` (2) or `alternating` (1, 2, 1…). |
 | `unit`, `unitsPerStep` | What a step (a cell) is worth: `"ft"` and `5` for D&D 5e. Units longer than two letters get an "s" in the plural. |
@@ -41,7 +57,7 @@ Installed packs belong to the GM's account and serve all their campaigns. A scen
 | `initiative` | The dice formula each token rolls, as typed in the log (`d20`, `2d6+1`). |
 | `forms` | Turn order without a roll, as Solaris' Combat Forms: `name`, `value` (higher goes first), `npc` (for the GM's tokens), `default` (where a side starts) and `text`. A fight starts everyone in their side's default form, and the GM clicks a token's form in the turn order to change it. |
 | `trackers` | Numbers on every token: `name`, optional `min` (default 0), `max` and `text`. Players change their own tokens'. |
-| `tokens` | Ready-made tokens, such as a system's threats: `name`, `size` (cells), `form` (a form's name), `trackers` (each with its own `max` and starting `value`), `conditions` it starts with, and `card`: sections of `title` and `text` the GM reads on its token card. Players never get cards: scenes carry the pack without its tokens, and the trackers of tokens nobody owns stay with the GM. |
+| `tokens` | Ready-made tokens, such as a system's threats: `name`, `image` (its picture, an image name), `size` (cells), `form` (a form's name), `trackers` (each with its own `max` and starting `value`), `conditions` it starts with, and `card`: sections of `title`, `text` and an optional `image` the GM reads on its token card. Players never get cards: scenes carry the pack without its tokens, and the trackers of tokens nobody owns stay with the GM. |
 | `tags` | Conditions (`"condition": true`, set on tokens) and region tags (the rest; `"sector": true` marks sector tags). Each may be `valued`, have a `color` (`#rrggbb`), `text` and `effects`. |
 
 Effects are the engine's building blocks (ADR 012): `{"type": "roll", "edge": -1, "scaled": true}` (advantage or disadvantage, times the tag's value when scaled), `{"type": "moveCost", "multiplier": 2}`, `{"type": "blocksSight"}`, `{"type": "occupantLimit", "max": 1}` and `{"type": "entryCheck", "check": "Traversal"}`. Anything they can't say goes in `text`.

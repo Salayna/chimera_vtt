@@ -850,7 +850,11 @@ class CvTextInput extends StatefulWidget {
     this.onSubmitted,
     this.keepFocus = false,
     this.icon,
+    this.multiline = false,
   });
+
+  /// Several lines, growing with the text: Enter starts a new line.
+  final bool multiline;
 
   final TextEditingController controller;
 
@@ -915,9 +919,13 @@ class _CvTextInputState extends State<CvTextInput> {
             onTap: _focus.requestFocus,
             child: AnimatedContainer(
               duration: CvMotion.fast,
-              height: CvSizes.control,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              alignment: Alignment.centerLeft,
+              height: widget.multiline ? null : CvSizes.control,
+              constraints: widget.multiline
+                  ? const BoxConstraints(minHeight: 88)
+                  : null,
+              padding: EdgeInsets.symmetric(
+                  horizontal: 12, vertical: widget.multiline ? 10 : 0),
+              alignment: widget.multiline ? Alignment.topLeft : Alignment.centerLeft,
               decoration: BoxDecoration(
                 color: CvColors.surfaceInput,
                 borderRadius: BorderRadius.circular(CvRadii.md),
@@ -943,7 +951,7 @@ class _CvTextInputState extends State<CvTextInput> {
                 if (widget.icon case final icon?)
                   CvIcon(icon, size: CvSizes.iconSm, color: CvColors.textSecondary),
                 Expanded(
-                    child: Stack(alignment: Alignment.centerLeft, children: [
+                    child: Stack(alignment: widget.multiline ? Alignment.topLeft : Alignment.centerLeft, children: [
                 if (widget.placeholder case final placeholder?)
                   ListenableBuilder(
                     listenable: widget.controller,
@@ -960,6 +968,10 @@ class _CvTextInputState extends State<CvTextInput> {
                     controller: widget.controller,
                     focusNode: _focus,
                     obscureText: widget.obscure,
+                    maxLines: widget.multiline ? null : 1,
+                    keyboardType: widget.multiline ? TextInputType.multiline : null,
+                    textInputAction:
+                        widget.multiline ? TextInputAction.newline : null,
                     style: style,
                     cursorColor: CvColors.amber500,
                     backgroundCursorColor: CvColors.slate700,

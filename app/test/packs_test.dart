@@ -7,6 +7,7 @@ import 'package:chimera_vtt/table/chrome.dart';
 import 'package:chimera_vtt/table/pack_tokens.dart';
 import 'package:chimera_vtt/table/table_view.dart';
 import 'package:flutter/services.dart';
+import 'package:chimera_vtt/assets.dart';
 import 'package:chimera_vtt/packs.dart';
 import 'package:chimera_vtt/table/rules.dart';
 import 'package:chimera_vtt/ui/cv.dart';
@@ -60,10 +61,21 @@ void main() {
     final client = SupabaseClient('http://127.0.0.1:9', 'key',
         authOptions: const AuthClientOptions(autoRefreshToken: false));
     await tester.pumpWidget(cvApp(
-        title: 'test', home: SystemsPage(packs: InstalledPacks(client))));
+        title: 'test',
+        home: SystemsPage(packs: InstalledPacks(client), assets: AssetStore(client))));
     expect(find.text('Generic'), findsOneWidget);
     expect(find.text('D&D 5e'), findsOneWidget);
-    expect(find.text('Install system'), findsOneWidget);
+    expect(find.text('Install'), findsOneWidget);
+    await tester.tap(find.text('New module'));
+    await tester.pump();
+    expect(find.text('Save module'), findsOneWidget);
+    // Saving needs a name: the editor says so instead of closing.
+    await tester.tap(find.text('Save module'));
+    await tester.pump();
+    expect(find.text('Name the module.'), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await tester.pump();
+    expect(find.text('New module'), findsOneWidget);
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 200)));
     await tester.pump();
   });

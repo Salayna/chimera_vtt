@@ -115,7 +115,9 @@ Otherwise it's a field of some entity.
 | Term | Code | Meaning |
 | --- | --- | --- |
 | **Tactical engine** | `tactical_engine` | The pure-Dart rules package: topology, regions, measurement, sight and tag effects. It knows no game system. |
-| **System pack** | `SystemPack` | A module defining a game system: its units, range bands, conditions and region tags with their effects, initiative and trackers. A JSON file in the format of [PACKS.md](PACKS.md). A scene names the one it's played with. |
+| **System pack** | `SystemPack` | A module defining a game system: its units, range bands, conditions and region tags with their effects, initiative and trackers, and the ready-made tokens it brings. JSON in the format of [PACKS.md](PACKS.md). A scene names the one it's played with. |
+| **Module** | `SystemPack`, `ModuleEditor` | What the GM makes, installs and shares: a system pack with its images (token pictures, card art, cover). Made in the app or installed from a file. |
+| **Module bundle** | `.chimera`, `ModuleBundle` | A module as one file: a zip of `module.json` and its images, each named by its SHA-256. |
 | **Installed pack** | `InstalledPacks`, `packs` | A pack a GM added from a file (a pack file or an Atlas preset) to their account, for all their campaigns. Listed on the hub's Systems page and in the Grid panel's System menu. |
 | **Scene pack** | `ScenePack`, `UsePack` | The single-instance entity carrying the module file of the installed pack a scene is played with, so players and scene files get it without installing anything. Absent for a built-in pack. |
 | **Tracker** | `TrackerDef`, `Token.trackers`, `SetTracker` | A number a pack keeps on every token, such as HP or Stress, with optional bounds. Players change their own tokens'. |

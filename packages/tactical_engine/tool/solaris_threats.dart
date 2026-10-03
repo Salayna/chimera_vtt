@@ -131,7 +131,7 @@ TokenTemplate? _card(List<String> lines, Set<String> conditions) {
       ].join('\n');
       if (text.isEmpty) continue;
       final title = RegExp(r'^([^:\n]{1,60}):').firstMatch(text)?[1] ?? 'Note';
-      sections.add((title: title, text: text));
+      sections.add((title: title, text: text, image: null));
       continue;
     }
     final rows = [
@@ -200,6 +200,7 @@ TokenTemplate? _card(List<String> lines, Set<String> conditions) {
       sections.add((
         title: long ? '${full.substring(0, 77)}…' : full,
         text: body.length > 4000 ? '${body.substring(0, 3999)}…' : body,
+        image: null,
       ));
     }
   }
@@ -222,9 +223,9 @@ TokenTemplate? _card(List<String> lines, Set<String> conditions) {
     trackers: trackers,
     conditions: {for (final t in tags) if (conditions.contains(t)) t: null},
     card: [
-      if (profile.isNotEmpty) (title: 'Profile', text: profile),
+      if (profile.isNotEmpty) (title: 'Profile', text: profile, image: null),
       ...sections.take(28),
-      if (tags.isNotEmpty) (title: 'Tags', text: tags.join(' · ')),
+      if (tags.isNotEmpty) (title: 'Tags', text: tags.join(' · '), image: null),
     ],
   );
 }

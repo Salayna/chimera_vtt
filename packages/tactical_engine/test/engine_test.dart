@@ -291,4 +291,37 @@ void main() {
             }),
         throwsFormatException);
   });
+
+  test('a module names its images: cover, token pictures, card art', () {
+    final a = 'a' * 64, b = 'b' * 64, c = 'c' * 64;
+    final pack = SystemPack.fromJson({
+      'id': 'mod',
+      'name': 'Module',
+      'unit': 'ft',
+      'description': 'A test module.',
+      'cover': a,
+      'tokens': [
+        {
+          'name': 'Goblin',
+          'image': b,
+          'card': [
+            {'title': 'Art', 'text': '', 'image': c},
+            {'title': 'Notes', 'text': 'Sneaky.'},
+          ],
+        },
+      ],
+    });
+    expect(pack.assets, {a, b, c});
+    expect(pack.description, 'A test module.');
+    expect(SystemPack.fromJson(pack.toJson()).toJson(), pack.toJson());
+    // A scene carries the pack without its tokens, so without their images.
+    expect(SystemPack.fromJson(pack.toJson(tokens: false)).assets, {a});
+    for (final bad in ['../etc/passwd', 'A' * 64, 'a' * 63]) {
+      expect(
+          () => SystemPack.fromJson(
+              {'id': 'mod', 'name': 'M', 'unit': 'ft', 'cover': bad}),
+          throwsFormatException,
+          reason: bad);
+    }
+  });
 }

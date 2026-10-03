@@ -1,11 +1,16 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:chimera_core/chimera_core.dart' show AssetId;
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/widgets.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show SupabaseClient;
 import 'package:tactical_engine/tactical_engine.dart';
 
+import 'assets.dart';
+import 'module_editor.dart';
+import 'modules.dart';
 import 'theme.dart';
 import 'ui/cv.dart';
 import 'ui/hub.dart';
@@ -63,12 +68,43 @@ SystemPack readPackFile(Uint8List bytes) {
   return pack;
 }
 
-/// Lets the GM pick a pack file and reads it. Null when they pick none.
-Future<SystemPack?> pickPackFile() async {
+/// Lets the GM pick a module: a bundle (`.chimera`, whose images are
+/// uploaded here), a pack file or an Atlas preset. Null when they pick none.
+/// Installing is the caller's.
+Future<SystemPack?> pickModule(AssetStore assets) async {
   final file = await FilePicker.pickFile(
-      type: FileType.custom, allowedExtensions: const ['json']);
+      type: FileType.custom, allowedExtensions: const ['json', bundleExtension]);
   if (file == null) return null;
-  return readPackFile(await file.readAsBytes());
+  final bytes = await file.readAsBytes();
+  if (file.extension?.toLowerCase() != bundleExtension) return readPackFile(bytes);
+  final bundle = decodeBundle(bytes);
+  if (builtInPacks.containsKey(bundle.pack.id)) {
+    throw FormatException(
+        '"${bundle.pack.id}" is a built-in system; give the module another id.');
+  }
+  for (final data in bundle.images.values) {
+    // decodeBundle checked each is an image named by its hash.
+    await assets.upload(data, imageType(data)!);
+  }
+  return bundle.pack;
+}
+
+/// Saves [pack] as a bundle with its images, `<id>-v<version>.chimera`.
+/// False when the GM cancels.
+Future<bool> exportModule(SystemPack pack, AssetStore assets) async {
+  final images = {
+    for (final id in pack.assets) id: await assets.bytes(AssetId(id)),
+  };
+  final name = '${pack.id}-v${pack.version}.$bundleExtension';
+  final saved = await FilePicker.saveFile(
+    fileName: name,
+    bytes: encodeBundle(pack, images),
+    mimeType: 'application/zip',
+    type: FileType.custom,
+    allowedExtensions: const [bundleExtension],
+  );
+  // The web downloads without a path; elsewhere null is a cancel.
+  return saved != null || kIsWeb;
 }
 
 /// What a pack holds, in a line: "12 conditions · 5 region tags · 2 trackers".
@@ -79,15 +115,17 @@ String packSummary(SystemPack pack) {
     n(pack.regionTags.length, 'region tag'),
     if (pack.trackers.isNotEmpty) n(pack.trackers.length, 'tracker'),
     if (pack.bands.isNotEmpty) n(pack.bands.length, 'range band'),
+    if (pack.tokens.isNotEmpty) n(pack.tokens.length, 'token'),
   ].join(' · ');
 }
 
 /// The GM's systems on their hub: the built-in ones, the installed ones,
 /// and installing more from a pack file or an Atlas preset.
 class SystemsPage extends StatefulWidget {
-  const SystemsPage({super.key, required this.packs});
+  const SystemsPage({super.key, required this.packs, required this.assets});
 
   final InstalledPacks packs;
+  final AssetStore assets;
 
   @override
   State<SystemsPage> createState() => _SystemsPageState();
@@ -97,6 +135,21 @@ class _SystemsPageState extends State<SystemsPage> {
   List<SystemPack>? _installed;
   String? _error;
   String? _notice;
+
+  /// The module open in the editor: a new one is a pack-less draft.
+  ({SystemPack? module})? _editing;
+
+  Future<void> _export(SystemPack pack) async {
+    setState(() => _notice = null);
+    try {
+      if (await exportModule(pack, widget.assets)) {
+        setState(() => _notice = '${pack.name} exported with '
+            '${pack.assets.length} image${pack.assets.length == 1 ? '' : 's'}.');
+      }
+    } on Object catch (e) {
+      setState(() => _error = 'Export failed: $e');
+    }
+  }
 
   @override
   void initState() {
@@ -118,7 +171,7 @@ class _SystemsPageState extends State<SystemsPage> {
   }
 
   Future<void> _install() => _run(() async {
-        final pack = await pickPackFile();
+        final pack = await pickModule(widget.assets);
         if (pack == null) return;
         final replaced = _installed?.any((p) => p.id == pack.id) ?? false;
         await widget.packs.install(pack);
@@ -155,6 +208,20 @@ class _SystemsPageState extends State<SystemsPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (_editing case (:final module)) {
+      return ModuleEditor(
+        module: module,
+        assets: widget.assets,
+        onSave: (pack) async {
+          await widget.packs.install(pack);
+          _notice = '${pack.name} saved, version ${pack.version}.';
+        },
+        onClose: () {
+          setState(() => _editing = null);
+          _run(() async {});
+        },
+      );
+    }
     final installed = _installed;
     return HubPage(
       child: Column(
@@ -164,14 +231,20 @@ class _SystemsPageState extends State<SystemsPage> {
           Row(crossAxisAlignment: CrossAxisAlignment.end, spacing: 16, children: [
             const Expanded(
               child: HubTitle('Systems',
-                  subtitle: 'The game systems your scenes can be played with. '
-                      'Install more from a pack file or an Atlas preset.'),
+                  subtitle: 'The game systems your scenes can be played with, '
+                      'and the tokens and cards they bring. Make a module, or '
+                      'install one.'),
             ),
             CvButton(
-              label: 'Install system',
+              label: 'Install',
               icon: Lucide.upload,
-              variant: CvButtonVariant.primary,
               onPressed: _install,
+            ),
+            CvButton(
+              label: 'New module',
+              icon: Lucide.plus,
+              variant: CvButtonVariant.primary,
+              onPressed: () => setState(() => _editing = (module: null)),
             ),
           ]),
           if (_error case final error?)
@@ -192,15 +265,17 @@ class _SystemsPageState extends State<SystemsPage> {
                 _Row(
                   pack: pack,
                   badge: 'Version ${pack.version}',
+                  onEdit: () => setState(() => _editing = (module: pack)),
+                  onExport: () => _export(pack),
                   onRemove: () => _remove(pack),
                 ),
             ]),
           ),
           Text(
-              'A pack is a JSON file: units, range bands, conditions and '
-              'region tags with their effects, initiative and trackers. '
-              'Scenes carry the pack they use, so players need nothing '
-              'installed.',
+              'A module is a game system with the tokens, cards and art it '
+              'brings. Make one here, or install a module bundle (.chimera), '
+              'a pack file (.json) or an Atlas preset. Scenes carry the '
+              'system they use, so players need nothing installed.',
               style: CvTypography.caption.copyWith(color: CvColors.textSecondary)),
         ],
       ),
@@ -209,10 +284,18 @@ class _SystemsPageState extends State<SystemsPage> {
 }
 
 class _Row extends StatelessWidget {
-  const _Row({required this.pack, required this.badge, this.onRemove});
+  const _Row({
+    required this.pack,
+    required this.badge,
+    this.onEdit,
+    this.onExport,
+    this.onRemove,
+  });
 
   final SystemPack pack;
   final String badge;
+  final VoidCallback? onEdit;
+  final VoidCallback? onExport;
   final VoidCallback? onRemove;
 
   @override
@@ -236,6 +319,22 @@ class _Row extends StatelessWidget {
           Text(badge,
               style: CvTypography.caption.copyWith(
                   fontFamily: CvTypography.mono, color: CvColors.textSecondary)),
+          if (onEdit case final edit?)
+            CvButton(
+              label: 'Edit',
+              icon: Lucide.pencil,
+              variant: CvButtonVariant.ghost,
+              small: true,
+              onPressed: edit,
+            ),
+          if (onExport case final export?)
+            CvButton(
+              label: 'Export',
+              icon: Lucide.download,
+              variant: CvButtonVariant.ghost,
+              small: true,
+              onPressed: export,
+            ),
           if (onRemove case final remove?)
             CvButton(
               label: 'Remove',

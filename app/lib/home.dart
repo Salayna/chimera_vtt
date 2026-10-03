@@ -72,7 +72,8 @@ class _GmHomeState extends State<GmHome> {
               HubTab.library =>
                 LibraryPage(library: _library, assets: widget.assets),
               HubTab.systems =>
-                SystemsPage(packs: InstalledPacks(widget.client)),
+                SystemsPage(
+                    packs: InstalledPacks(widget.client), assets: widget.assets),
             },
           ),
         ]),

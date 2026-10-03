@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:chimera_core/chimera_core.dart';
 import 'package:chimera_sync/chimera_sync.dart';
@@ -848,7 +849,11 @@ class TokenCardLayer extends StatelessWidget {
     this.onDuplicate,
     this.onSetImage,
     this.fullPack,
+    this.loadImage,
   });
+
+  /// Loads a pack card's images.
+  final Future<ui.Image> Function(AssetId id)? loadImage;
 
   final SceneStore store;
   final Session session;
@@ -909,6 +914,7 @@ class TokenCardLayer extends StatelessWidget {
                     token: token,
                     scene: scene,
                     pack: fullPack?.call(scene) ?? packOf(scene),
+                    loadImage: loadImage,
                     snap: controller.snap,
                     session: session,
                     send: send,
@@ -940,6 +946,7 @@ class _TokenCard extends StatelessWidget {
     super.key,
     required this.maxHeight,
     required this.pack,
+    this.loadImage,
     required this.token,
     required this.scene,
     required this.snap,
@@ -966,6 +973,7 @@ class _TokenCard extends StatelessWidget {
 
   /// For the grid, and the rules in force where the token stands.
   final Scene scene;
+  final Future<ui.Image> Function(AssetId id)? loadImage;
   Grid get grid => scene.settings.grid;
 
   /// Resizing snaps the token too, like a drop.
@@ -1145,7 +1153,7 @@ class _TokenCard extends StatelessWidget {
                   if (gm)
                     if (pack.tokens[token.template]?.card case final card?
                         when card.isNotEmpty)
-                      TokenCardSections(sections: card),
+                      TokenCardSections(sections: card, loadImage: loadImage),
                 ],
               ),
               ),

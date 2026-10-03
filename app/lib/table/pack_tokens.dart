@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:chimera_core/chimera_core.dart';
 import 'package:flutter/widgets.dart';
 import 'package:tactical_engine/tactical_engine.dart'
@@ -141,9 +143,12 @@ List<TrackerDef> trackersFor(Token token, SystemPack pack) {
 /// A pack token's card on the GM's token card: each section titled, its
 /// text as written.
 class TokenCardSections extends StatelessWidget {
-  const TokenCardSections({super.key, required this.sections});
+  const TokenCardSections({super.key, required this.sections, this.loadImage});
 
   final List<CardSection> sections;
+
+  /// Loads a section's image; without it, images aren't shown.
+  final Future<ui.Image> Function(AssetId id)? loadImage;
 
   @override
   Widget build(BuildContext context) => Column(
@@ -156,7 +161,17 @@ class TokenCardSections extends StatelessWidget {
               spacing: 4,
               children: [
                 CvOverline(s.title),
-                Text(s.text, style: CvTypography.bodySm),
+                if ((s.image, loadImage) case (final image?, final load?))
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(CvRadii.md),
+                    child: FutureBuilder(
+                      future: load(AssetId(image)),
+                      builder: (context, snapshot) => snapshot.data == null
+                          ? const SizedBox(height: 120)
+                          : RawImage(image: snapshot.data, fit: BoxFit.fitWidth),
+                    ),
+                  ),
+                if (s.text.isNotEmpty) Text(s.text, style: CvTypography.bodySm),
               ],
             ),
         ],

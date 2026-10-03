@@ -202,8 +202,18 @@ final class TurnForm {
 typedef TokenTracker = ({String name, int? max, int value});
 
 /// A titled block of a pack token's card: attack profiles, actions,
-/// traits.
-typedef CardSection = ({String title, String text});
+/// traits. [image] is an asset id (see [assetIdPattern]): art, a diagram.
+typedef CardSection = ({String title, String text, String? image});
+
+/// Images in a module are named by the SHA-256 of their bytes, in hex, like
+/// every asset (ADR 006). A module bundle carries the bytes.
+final assetIdPattern = RegExp(r'^[0-9a-f]{64}$');
+
+String? _asset(Object? value, String what) => switch (value) {
+      null => null,
+      final String a when assetIdPattern.hasMatch(a) => a,
+      _ => throw FormatException('$what is not an image id: $value'),
+    };
 
 /// A ready-made token a pack offers, such as a Solaris threat: everything
 /// the GM needs to put it on the map and run it. Its card is the GM's: it
@@ -214,9 +224,13 @@ final class TokenTemplate {
       this.form,
       this.trackers = const [],
       this.conditions = const {},
-      this.card = const []});
+      this.card = const [],
+      this.image});
 
   final String name;
+
+  /// Its picture on the map, as an asset id.
+  final String? image;
 
   /// Width in cells.
   final int size;
@@ -231,6 +245,7 @@ final class TokenTemplate {
 
   Json toJson() => {
         'name': name,
+        if (image != null) 'image': image,
         if (size != 1) 'size': size,
         if (form != null) 'form': form,
         if (trackers.isNotEmpty)
@@ -244,7 +259,10 @@ final class TokenTemplate {
           ],
         if (conditions.isNotEmpty) 'conditions': conditions,
         if (card.isNotEmpty)
-          'card': [for (final c in card) {'title': c.title, 'text': c.text}],
+          'card': [
+            for (final c in card)
+              {'title': c.title, 'text': c.text, if (c.image != null) 'image': c.image},
+          ],
       };
 
   factory TokenTemplate.fromJson(Json json) {
@@ -252,6 +270,7 @@ final class TokenTemplate {
     if (size < 1 || size > 8) throw const FormatException('A token size from 1 to 8 cells');
     return TokenTemplate(
       _text(json['name'], 'token name', 60),
+      image: _asset(json['image'], 'A token image'),
       size: size,
       form: switch (json['form']) {
         final String f => _text(f, 'token form', 30),
@@ -275,6 +294,7 @@ final class TokenTemplate {
           (
             title: _text((c as Json)['title'], 'section title', 80),
             text: _text(c['text'], 'section text', 4000, empty: true),
+            image: _asset(c['image'], 'A card image'),
           ),
       ],
     );
@@ -310,6 +330,8 @@ final class SystemPack {
     List<TokenTemplate> tokens = const [],
     this.trackers = const [],
     List<TagDef> tags = const [],
+    this.description = '',
+    this.cover,
   })  : tags = {for (final t in tags) t.name: t},
         tokens = {for (final t in tokens) t.name: t};
 
@@ -325,6 +347,21 @@ final class SystemPack {
 
   /// The pack's own version, bumped by its author.
   final int version;
+
+  /// What the module is, for whoever installs it.
+  final String description;
+
+  /// Its cover art, as an asset id.
+  final String? cover;
+
+  /// Every image the module uses, which its bundle carries.
+  Set<String> get assets => {
+        ?cover,
+        for (final t in tokens.values) ...[
+          ?t.image,
+          for (final c in t.card) ?c.image,
+        ],
+      };
   final TopologyKind topology;
   final DiagonalRule diagonal;
 
@@ -384,6 +421,8 @@ final class SystemPack {
         'id': id,
         'name': name,
         'version': version,
+        if (description.isNotEmpty) 'description': description,
+        if (cover != null) 'cover': cover,
         'topology': topology.name,
         'diagonal': diagonal.name,
         'unit': unit,
@@ -432,6 +471,9 @@ final class SystemPack {
         id: id,
         name: _text(json['name'], 'name', 60),
         version: json['version'] as int? ?? 1,
+        description:
+            _text(json['description'] ?? '', 'description', 2000, empty: true),
+        cover: _asset(json['cover'], 'The cover'),
         topology: TopologyKind.values
             .byName(json['topology'] as String? ?? TopologyKind.square.name),
         diagonal: DiagonalRule.values

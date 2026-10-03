@@ -742,7 +742,10 @@ class _GmRoomState extends State<GmRoom> {
       position: grid.freeSpot(
           _controller.snap ? grid.snap(center, size) : center, size, scene.tokens.values),
       cellSize: grid.cellSize,
-      image: AssetId('token${scene.tokens.length % widget.art.tokens.length}'),
+      image: switch (template.image) {
+        final image? => AssetId(image),
+        null => AssetId('token${scene.tokens.length % widget.art.tokens.length}'),
+      },
     )));
     _controller
       ..tool = Tool.move
@@ -957,7 +960,7 @@ class _GmRoomState extends State<GmRoom> {
 
   Future<void> _installPack() async {
     try {
-      final pack = await pickPackFile();
+      final pack = await pickModule(widget.assets);
       if (pack == null) return;
       await _installedPacks.install(pack);
       await _loadPacks();
@@ -1123,6 +1126,7 @@ class _GmRoomState extends State<GmRoom> {
             onDuplicate: _duplicateToken,
             onSetImage: (id) => _openTokens(forToken: id),
             fullPack: _fullPack,
+            loadImage: widget.assets.image,
           ),
         ),
         Positioned(

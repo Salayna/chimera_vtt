@@ -45,6 +45,10 @@ class AssetStore {
     return id;
   }
 
+  /// The file itself, for a module bundle. Not kept.
+  Future<Uint8List> bytes(AssetId id) =>
+      _client.storage.from(bucket).download(id.value);
+
   /// The decoded image, downloaded once per session.
   Future<ui.Image> image(AssetId id) =>
       _images[id] ??= _download(id).catchError((Object e, StackTrace s) {
