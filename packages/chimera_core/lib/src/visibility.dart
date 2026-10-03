@@ -25,6 +25,9 @@ Scene visibleTo(Scene scene, Actor viewer) => switch (viewer) {
             null => null,
           },
           packFile: scene.packFile,
+          // ponytail: everyone at the table reads every character; per-player
+          // batches would keep sheets to their owner and the GM.
+          characters: scene.characters,
         ),
     };
 

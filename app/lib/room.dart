@@ -18,6 +18,7 @@ import 'package:tactical_engine/tactical_engine.dart'
 import 'account.dart';
 import 'assets.dart';
 import 'campaigns.dart';
+import 'characters.dart';
 import 'home.dart';
 import 'library.dart';
 import 'members.dart';
@@ -27,6 +28,7 @@ import 'table/grid_align.dart';
 import 'table/initiative.dart';
 import 'table/log_panel.dart';
 import 'table/pack_tokens.dart';
+import 'table/room_characters.dart';
 import 'table/rules.dart';
 import 'table/table_view.dart';
 import 'theme.dart';
@@ -78,8 +80,9 @@ String normalizeRoomCode(String input) =>
     input.toUpperCase().replaceAll(RegExp('[^A-Z0-9]'), '');
 
 /// A scene as a file: indented JSON, so a save is readable and diffable.
+/// Without the players' characters, which their owners keep.
 Uint8List sceneToFile(Scene scene) => utf8.encode(
-    const JsonEncoder.withIndent('  ').convert(scene.toJson()));
+    const JsonEncoder.withIndent('  ').convert(scene.withCharacters(const {}).toJson()));
 
 /// Throws [FormatException] for anything that isn't a scene this version
 /// can read.
@@ -470,6 +473,10 @@ class _GmRoomState extends State<GmRoom> {
   StreamSubscription<Scene>? _autosave;
 
   late final _scenes = Scenes(widget.client, widget.campaign);
+  late final _characters = SavedCharacters(widget.client);
+
+  /// The character whose sheet is open.
+  CharacterId? _sheet;
 
   /// The live scene, which autosave writes to.
   String? _sceneId;
@@ -498,7 +505,8 @@ class _GmRoomState extends State<GmRoom> {
     try {
       await _loadPacks();
       _system = await Campaigns(widget.client).system(widget.campaign);
-      final scene = _onSystem(await _loadScene());
+      final scene = _onSystem(await _loadScene())
+          .withCharacters(await _linkedCharacters());
       final log = LogEntries(widget.client, widget.campaign);
       final stored = await log.recent();
       final transport = await SupabaseTransport.join(widget.client, widget.code);
@@ -537,6 +545,20 @@ class _GmRoomState extends State<GmRoom> {
       if (mounted) setState(() => _host = host);
     } on Object catch (e) {
       if (mounted) setState(() => _error = '$e');
+    }
+  }
+
+  /// The players' characters linked to the campaign, as their owners last
+  /// saved them. They span scenes, so the room keeps them from then on.
+  Future<Map<CharacterId, Character>> _linkedCharacters() async {
+    try {
+      return {
+        for (final c in await _characters.linked(widget.campaign))
+          if (c.system == _system) c.id: c,
+      };
+    } on Object catch (e) {
+      _toasts.show('Characters failed to load: $e', tone: CvTone.danger);
+      return const {};
     }
   }
 
@@ -633,7 +655,8 @@ class _GmRoomState extends State<GmRoom> {
     if (id == _sceneId) return;
     try {
       await _flushSave();
-      final next = _onSystem(scene ?? await _scenes.load(id));
+      final next = _onSystem(scene ?? await _scenes.load(id))
+          .withCharacters(_host!.store.scene.characters);
       _sceneId = id;
       _host!.load(next);
       _controller.selected.value = null;
@@ -1051,7 +1074,7 @@ class _GmRoomState extends State<GmRoom> {
         ],
       );
       if (confirmed ?? false) {
-        _host!.load(scene);
+        _host!.load(scene.withCharacters(_host!.store.scene.characters));
         _controller.selected.value = null;
         _toasts.show('Scene replaced for everyone', tone: CvTone.gm);
       }
@@ -1130,6 +1153,22 @@ class _GmRoomState extends State<GmRoom> {
             images: (id) => widget.art.tokens[id],
           ),
         ),
+        // Under the token card and the log, which it would otherwise hide.
+        if (_sheet case final id?)
+          Positioned(
+            left: 0,
+            right: 0,
+            top: pad + CvSizes.hit + CvSpacing.s4,
+            child: Center(
+              child: SheetPanel(
+                store: host.store,
+                id: id,
+                self: widget.me,
+                send: host.execute,
+                onClose: () => setState(() => _sheet = null),
+              ),
+            ),
+          ),
         Positioned.fill(
           child: TokenCardLayer(
             store: host.store,
@@ -1141,6 +1180,8 @@ class _GmRoomState extends State<GmRoom> {
             onSetImage: (id) => _openTokens(forToken: id),
             fullPack: _fullPack,
             loadImage: widget.assets.image,
+            self: widget.me,
+            onOpenSheet: (id) => setState(() => _sheet = id),
           ),
         ),
         Positioned.fill(
@@ -1407,6 +1448,11 @@ class _PlayerRoomState extends State<PlayerRoom> {
   StreamSubscription<Set<String>>? _peers;
   StreamSubscription<TableEvent>? _pings;
   VoidCallback? _stopRulers;
+  VoidCallback? _stopSaving;
+  late final _characters = SavedCharacters(widget.client);
+
+  /// The character whose sheet is open.
+  CharacterId? _sheet;
 
   Future<void> _loadMembers() async {
     if (widget.campaign case final campaign?) {
@@ -1440,6 +1486,8 @@ class _PlayerRoomState extends State<PlayerRoom> {
       await session.setCursor(null);
       // Completes when the GM answers, now or once they open the room.
       final store = await session.join();
+      _stopSaving = saveOwnCharacters(store, widget.me, _characters,
+          onError: (e) => debugPrint('A character failed to save: $e'));
       if (mounted) setState(() => _store = store);
     } on ProtocolMismatch {
       if (mounted) setState(() => _mismatch = true);
@@ -1453,6 +1501,7 @@ class _PlayerRoomState extends State<PlayerRoom> {
     _peers?.cancel();
     _pings?.cancel();
     _stopRulers?.call();
+    _stopSaving?.call();
     members.value = {};
     _session?.close();
     _controller.dispose();
@@ -1519,6 +1568,22 @@ class _PlayerRoomState extends State<PlayerRoom> {
             images: (id) => widget.art.tokens[id],
           ),
         ),
+        // Under the token card and the log, which it would otherwise hide.
+        if (_sheet case final id?)
+          Positioned(
+            left: 0,
+            right: 0,
+            top: pad + CvSizes.hit + CvSpacing.s4,
+            child: Center(
+              child: SheetPanel(
+                store: store,
+                id: id,
+                self: widget.me,
+                send: session.request,
+                onClose: () => setState(() => _sheet = null),
+              ),
+            ),
+          ),
         Positioned.fill(
           child: TokenCardLayer(
             store: store,
@@ -1526,6 +1591,8 @@ class _PlayerRoomState extends State<PlayerRoom> {
             controller: _controller,
             send: session.request,
             gm: false,
+            self: widget.me,
+            onOpenSheet: (id) => setState(() => _sheet = id),
           ),
         ),
         Positioned(
@@ -1542,7 +1609,22 @@ class _PlayerRoomState extends State<PlayerRoom> {
         Positioned(
           left: pad + CvSizes.rail + CvSpacing.s4,
           top: pad + CvSizes.hit + CvSpacing.s4,
-          child: YourTokens(store: store, self: widget.me, controller: _controller),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            spacing: CvSpacing.s4,
+            children: [
+              YourTokens(store: store, self: widget.me, controller: _controller),
+              if (widget.campaign case final campaign?)
+                CharactersPanel(
+                  store: store,
+                  self: widget.me,
+                  campaign: campaign,
+                  characters: _characters,
+                  send: session.request,
+                  onOpen: (id) => setState(() => _sheet = id),
+                ),
+            ],
+          ),
         ),
         Positioned(
           left: 0,

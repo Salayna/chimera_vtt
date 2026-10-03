@@ -170,14 +170,15 @@ class Scenes {
   Future<String> create(String name, Scene scene) async {
     final row = await _client
         .from('scenes')
-        .insert({'campaign': campaign, 'name': name, 'data': scene.toJson()})
+        .insert({'campaign': campaign, 'name': name, 'data': scene.withCharacters(const {}).toJson()})
         .select('id')
         .single();
     return row['id'] as String;
   }
 
   Future<void> save(String id, Scene scene) => _client.from('scenes').update({
-        'data': scene.toJson(),
+        // Characters are their owners' to save.
+        'data': scene.withCharacters(const {}).toJson(),
         'updated_at': DateTime.now().toUtc().toIso8601String(),
       }).eq('id', id);
 

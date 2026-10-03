@@ -472,4 +472,53 @@ void main() {
     expect(decoded.tokens[const TokenId('npc')]!.template, 'Raider');
     expect(decoded.tokens[const TokenId('npc')]!.moveTo((x: 1, y: 1)).template, 'Raider');
   });
+
+  test('only owners write their characters; tokens play them', () {
+    final ayla = Character(
+        id: const CharacterId('ayla'),
+        owner: alice.id,
+        system: 'generic',
+        name: 'Ayla',
+        values: const {'HP': 8});
+    final scene = sceneWith([token('a', owner: alice.id), token('b', owner: bob.id)]);
+    Scene run(Scene s, Actor actor, Command c) =>
+        s.applyPatches((reduce(s, actor, c) as Accepted).patches);
+    Refusal? why(Scene s, Actor actor, Command c) => switch (reduce(s, actor, c)) {
+          Refused(:final reason) => reason,
+          Accepted() => null,
+        };
+
+    final inRoom = run(scene, alice, UpdateCharacter(ayla));
+    expect(inRoom.characters[ayla.id]!.values, {'HP': 8});
+    expect(why(scene, bob, UpdateCharacter(ayla)), Refusal.notOwner);
+    expect(why(scene, gm, UpdateCharacter(ayla)), Refusal.notOwner);
+    // Bob can't take Ayla over by sending her as his.
+    final stolen = Character(id: ayla.id, owner: bob.id, system: 'generic', name: 'Mine');
+    expect(why(inRoom, bob, UpdateCharacter(stolen)), Refusal.notOwner);
+    expect(why(scene, alice, UpdateCharacter(ayla.copyWith(name: ' '))), Refusal.invalid);
+    final other = Character(id: ayla.id, owner: alice.id, system: 'dnd5e', name: 'Ayla');
+    expect(why(scene, alice, UpdateCharacter(other)), Refusal.invalid);
+
+    const link = LinkCharacter(TokenId('a'), CharacterId('ayla'));
+    final linked = run(inRoom, alice, link);
+    expect(linked.tokens[const TokenId('a')]!.character, ayla.id);
+    expect(why(inRoom, bob, const LinkCharacter(TokenId('b'), CharacterId('ayla'))),
+        Refusal.notOwner);
+    expect(why(inRoom, alice, const LinkCharacter(TokenId('b'), CharacterId('ayla'))),
+        Refusal.notOwner);
+    expect(reduce(inRoom, gm, const LinkCharacter(TokenId('b'), CharacterId('ayla'))),
+        isA<Accepted>());
+
+    // Characters ride along with the scene's JSON and players' copies.
+    final decoded = Scene.fromJson(jsonDecode(jsonEncode(linked.toJson())) as Json);
+    expect(decoded.characters[ayla.id]!.name, 'Ayla');
+    expect(decoded.tokens[const TokenId('a')]!.moveTo((x: 0, y: 0)).character, ayla.id);
+    expect(visibleTo(linked, bob).characters.keys, [ayla.id]);
+    expect(linked.withCharacters(const {}).characters, isEmpty);
+
+    expect(why(linked, bob, RemoveCharacter(ayla.id)), Refusal.notOwner);
+    final gone = run(linked, alice, RemoveCharacter(ayla.id));
+    expect(gone.characters, isEmpty);
+    expect(gone.tokens[const TokenId('a')]!.character, isNull);
+  });
 }

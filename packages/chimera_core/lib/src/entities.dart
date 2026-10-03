@@ -33,6 +33,7 @@ sealed class Entity {
       EntityKind.region => Region._fromJson(json),
       EntityKind.initiative => Initiative._fromJson(json),
       EntityKind.pack => ScenePack._fromJson(json),
+      EntityKind.character => Character.fromJson(json),
     };
   }
 }
@@ -186,6 +187,7 @@ final class Token extends Entity {
     this.conditions = const {},
     this.trackers = const {},
     this.template,
+    this.character,
   });
 
   final TokenId id;
@@ -217,6 +219,9 @@ final class Token extends Entity {
   /// maximums. Null for a plain token.
   final String? template;
 
+  /// The character it plays, whose trackers it shows.
+  final CharacterId? character;
+
   @override
   EntityKind get kind => EntityKind.token;
 
@@ -230,7 +235,8 @@ final class Token extends Entity {
       name: name,
       conditions: conditions,
       trackers: trackers,
-      template: template);
+      template: template,
+      character: character);
 
   Token withOwner(PlayerId? owner) => Token(
       id: id,
@@ -242,7 +248,8 @@ final class Token extends Entity {
       name: name,
       conditions: conditions,
       trackers: trackers,
-      template: template);
+      template: template,
+      character: character);
 
   Token withHidden(bool hidden) => Token(
       id: id,
@@ -254,7 +261,8 @@ final class Token extends Entity {
       name: name,
       conditions: conditions,
       trackers: trackers,
-      template: template);
+      template: template,
+      character: character);
 
   /// The owner can't be cleared here: use [withOwner].
   Token copyWith(
@@ -273,7 +281,8 @@ final class Token extends Entity {
           name: name ?? this.name,
           conditions: conditions,
       trackers: trackers,
-      template: template);
+      template: template,
+      character: character);
 
   Token withConditions(Map<String, int?> conditions) => Token(
       id: id,
@@ -285,7 +294,8 @@ final class Token extends Entity {
       name: name,
       conditions: Map.unmodifiable(conditions),
       trackers: trackers,
-      template: template);
+      template: template,
+      character: character);
 
   Token withTrackers(Map<String, int> trackers) => Token(
       id: id,
@@ -297,7 +307,21 @@ final class Token extends Entity {
       name: name,
       conditions: conditions,
       trackers: Map.unmodifiable(trackers),
-      template: template);
+      template: template,
+      character: character);
+
+  Token withCharacter(CharacterId? character) => Token(
+      id: id,
+      position: position,
+      size: size,
+      image: image,
+      owner: owner,
+      hidden: hidden,
+      name: name,
+      conditions: conditions,
+      trackers: trackers,
+      template: template,
+      character: character);
 
   @override
   Json _fields() => {
@@ -311,6 +335,7 @@ final class Token extends Entity {
         if (conditions.isNotEmpty) 'conditions': conditions,
         if (trackers.isNotEmpty) 'trackers': trackers,
         if (template != null) 'template': template,
+        if (character != null) 'character': character!.value,
       };
 
   factory Token._fromJson(Json json) => Token(
@@ -328,6 +353,10 @@ final class Token extends Entity {
             key as String: value as int,
         }),
         template: json['template'] as String?,
+        character: switch (json['character']) {
+          final String c => CharacterId(c),
+          _ => null,
+        },
       );
 }
 
@@ -585,4 +614,67 @@ final class ScenePack extends Entity {
   Json _fields() => {'data': data};
 
   factory ScenePack._fromJson(Json json) => ScenePack(json['data'] as Json);
+}
+
+/// A player's character, made on their home for one system and owned by
+/// them. Its sheet is its values by field name; what they mean is the
+/// system pack's, which core doesn't read: the app cleans them against the
+/// pack's sheet.
+final class Character extends Entity {
+  Character({
+    required this.id,
+    required this.owner,
+    required this.system,
+    required this.name,
+    Map<String, Object> values = const {},
+  }) : values = Map.unmodifiable(values);
+
+  static const maxName = 60;
+
+  final CharacterId id;
+  final PlayerId owner;
+
+  /// The id of the system pack it's played with.
+  final String system;
+  final String name;
+
+  /// Its sheet: numbers, texts and booleans by field name.
+  final Map<String, Object> values;
+
+  Character copyWith({String? name, Map<String, Object>? values}) => Character(
+        id: id,
+        owner: owner,
+        system: system,
+        name: name ?? this.name,
+        values: values ?? this.values,
+      );
+
+  /// The sheet, as the `characters` table's `sheet` column holds it.
+  Json get sheet => {'values': values};
+
+  @override
+  EntityKind get kind => EntityKind.character;
+
+  @override
+  Json _fields() => {
+        'id': id.value,
+        'owner': owner.value,
+        'system': system,
+        'name': name,
+        'sheet': sheet,
+      };
+
+  /// A row of the `characters` table, or the entity's JSON. Throws on
+  /// malformed input; the values' meaning isn't checked here.
+  factory Character.fromJson(Json json) => Character(
+        id: CharacterId(json['id'] as String),
+        owner: PlayerId(json['owner'] as String),
+        system: json['system'] as String,
+        name: json['name'] as String,
+        values: {
+          for (final MapEntry(:key, :value)
+              in ((json['sheet'] as Map?)?['values'] as Map? ?? const {}).entries)
+            if (value is num || value is bool || value is String) key as String: value as Object,
+        },
+      );
 }

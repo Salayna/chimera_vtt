@@ -10,9 +10,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import 'package:tactical_engine/tactical_engine.dart'
-    show SystemPack, TagDef, TrackerDef, builtInPacks;
+    show SheetDef, SystemPack, TagDef, TrackerDef, builtInPacks;
 
 import '../members.dart';
+import '../sheet_view.dart';
 import '../theme.dart';
 import '../ui/cv.dart';
 import 'pack_tokens.dart';
@@ -859,7 +860,15 @@ class TokenCardLayer extends StatelessWidget {
     this.onSetImage,
     this.fullPack,
     this.loadImage,
+    this.self,
+    this.onOpenSheet,
   });
+
+  /// Who's looking, so a player can link their token to their character.
+  final PlayerId? self;
+
+  /// Opens a character's whole sheet.
+  final ValueChanged<CharacterId>? onOpenSheet;
 
   /// Loads a pack card's images.
   final Future<ui.Image> Function(AssetId id)? loadImage;
@@ -924,6 +933,8 @@ class TokenCardLayer extends StatelessWidget {
                     scene: scene,
                     pack: fullPack?.call(scene) ?? packOf(scene),
                     loadImage: loadImage,
+                    self: self,
+                    onOpenSheet: onOpenSheet,
                     snap: controller.snap,
                     session: session,
                     send: send,
@@ -956,6 +967,8 @@ class _TokenCard extends StatelessWidget {
     required this.maxHeight,
     required this.pack,
     this.loadImage,
+    this.self,
+    this.onOpenSheet,
     required this.token,
     required this.scene,
     required this.snap,
@@ -983,6 +996,8 @@ class _TokenCard extends StatelessWidget {
   /// For the grid, and the rules in force where the token stands.
   final Scene scene;
   final Future<ui.Image> Function(AssetId id)? loadImage;
+  final PlayerId? self;
+  final ValueChanged<CharacterId>? onOpenSheet;
   Grid get grid => scene.settings.grid;
 
   /// Resizing snaps the token too, like a drop.
@@ -997,6 +1012,19 @@ class _TokenCard extends StatelessWidget {
   final bool arrowOnLeft;
   final double arrowTop;
   final bool menuAbove;
+
+  /// The character this token plays, when the pack has sheets.
+  Character? get _character =>
+      pack.sheet == null ? null : scene.characters[token.character];
+
+  /// The characters this viewer may link the token to: any for the GM, a
+  /// token's owner's own; null when they may not.
+  List<Character>? get _linkable {
+    if (pack.sheet == null) return null;
+    if (gm) return scene.characters.values.toList();
+    if (self == null || token.owner != self) return null;
+    return [for (final c in scene.characters.values) if (c.owner == self) c];
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1142,7 +1170,25 @@ class _TokenCard extends StatelessWidget {
                       ]),
                     ),
                   ],
-                  if (trackersFor(token, pack) case final trackers
+                  if (_linkable case final choices? when choices.isNotEmpty)
+                    CvDropdown<CharacterId?>(
+                      label: 'Character',
+                      value: token.character,
+                      above: menuAbove,
+                      onChanged: (c) => send(LinkCharacter(token.id, c)),
+                      entries: [
+                        const CvMenuItem(null, 'No character'),
+                        for (final c in choices) CvMenuItem(c.id, c.name),
+                      ],
+                    ),
+                  if (_character case final c?)
+                    _CharacterTrackers(
+                      character: c,
+                      sheet: pack.sheet!,
+                      send: c.owner == self ? send : null,
+                      onOpenSheet: onOpenSheet,
+                    )
+                  else if (trackersFor(token, pack) case final trackers
                       when trackers.isNotEmpty)
                     _Trackers(
                       key: ValueKey(token.id),
@@ -1388,6 +1434,56 @@ class _NameFieldState extends State<_NameField> {
           maxLength: 40,
           onChanged: widget.onChanged,
         ),
+      );
+}
+
+/// The trackers of the character a token plays, changed by its owner (when
+/// [send] is given), and a way to its whole sheet.
+class _CharacterTrackers extends StatelessWidget {
+  const _CharacterTrackers({
+    required this.character,
+    required this.sheet,
+    required this.send,
+    required this.onOpenSheet,
+  });
+
+  final Character character;
+  final SheetDef sheet;
+  final Outcome Function(Command)? send;
+  final ValueChanged<CharacterId>? onOpenSheet;
+
+  @override
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: 6,
+        children: [
+          Row(children: [
+            Expanded(
+              child: Text(character.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: CvTypography.label.copyWith(color: CvColors.textSecondary)),
+            ),
+            if (onOpenSheet case final open?)
+              CvButton(
+                label: 'Sheet',
+                icon: Lucide.bookOpen,
+                variant: CvButtonVariant.ghost,
+                small: true,
+                onPressed: () => open(character.id),
+              ),
+          ]),
+          SheetView(
+            sheet: sheet,
+            values: sheet.clean(character.values),
+            trackersOnly: true,
+            onSet: switch (send) {
+              final send? => (name, value) => send(UpdateCharacter(
+                  character.copyWith(values: {...character.values, name: value}))),
+              null => null,
+            },
+          ),
+        ],
       );
 }
 

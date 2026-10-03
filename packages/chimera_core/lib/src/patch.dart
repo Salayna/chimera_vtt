@@ -68,6 +68,7 @@ Entity? _old(Scene before, Patch patch) {
     EntityKind.region => before.regions[RegionId(id)],
     EntityKind.initiative => before.initiative,
     EntityKind.pack => before.packFile,
+    EntityKind.character => before.characters[CharacterId(id)],
   };
 }
 
@@ -76,5 +77,6 @@ String _id(Entity entity) => switch (entity) {
       Token(:final id) => id.value,
       FogOp(:final id) => id.value,
       Region(:final id) => id.value,
+      Character(:final id) => id.value,
       Initiative() || ScenePack() => '',
     };

@@ -11,9 +11,11 @@ final class Scene {
     Map<RegionId, Region> regions = const {},
     this.initiative,
     this.packFile,
+    Map<CharacterId, Character> characters = const {},
   })  : tokens = Map.unmodifiable(tokens),
         fogOps = Map.unmodifiable(fogOps),
-        regions = Map.unmodifiable(regions);
+        regions = Map.unmodifiable(regions),
+        characters = Map.unmodifiable(characters);
 
   /// Version of the save format, checked before any entity is parsed.
   static const format = 1;
@@ -30,6 +32,15 @@ final class Scene {
   /// a built-in pack.
   final ScenePack? packFile;
 
+  /// The players' characters in the room. They span scenes: the room
+  /// carries them from one to the next, and saves leave them out, since
+  /// their owners keep them.
+  final Map<CharacterId, Character> characters;
+
+  /// This scene with [characters] instead of its own.
+  Scene withCharacters(Map<CharacterId, Character> characters) => Scene._(
+      settings, tokens, fogOps, regions, initiative, packFile, Map.unmodifiable(characters));
+
   /// Fog ops in drawing order.
   List<FogOp> get fogInOrder =>
       fogOps.values.toList()..sort((a, b) => a.order.compareTo(b.order));
@@ -44,6 +55,8 @@ final class Scene {
           ..sort((a, b) => a.id.value.compareTo(b.id.value))),
         ?initiative,
         ?packFile,
+        ...(characters.values.toList()
+          ..sort((a, b) => a.id.value.compareTo(b.id.value))),
       ];
 
   /// The only way a scene changes, for the GM and players alike.
@@ -58,6 +71,7 @@ final class Scene {
     Map<RegionId, Region>? regions;
     var initiative = this.initiative;
     var packFile = this.packFile;
+    Map<CharacterId, Character>? characters;
     for (final patch in patches) {
       switch (patch) {
         case Upsert(entity: final SceneSettings s):
@@ -78,6 +92,10 @@ final class Scene {
           packFile = p;
         case Delete(kind: EntityKind.pack):
           packFile = null;
+        case Upsert(entity: final Character c):
+          (characters ??= {...this.characters})[c.id] = c;
+        case Delete(kind: EntityKind.character, :final id):
+          (characters ??= {...this.characters}).remove(CharacterId(id));
         case Delete(kind: EntityKind.token, :final id):
           (tokens ??= {...this.tokens}).remove(TokenId(id));
         case Delete(kind: EntityKind.fogOp, :final id):
@@ -93,11 +111,12 @@ final class Scene {
       regions == null ? this.regions : Map.unmodifiable(regions),
       initiative,
       packFile,
+      characters == null ? this.characters : Map.unmodifiable(characters),
     );
   }
 
   Scene._(this.settings, this.tokens, this.fogOps, this.regions,
-      this.initiative, this.packFile);
+      this.initiative, this.packFile, this.characters);
 
   Json toJson() => {
         'format': format,

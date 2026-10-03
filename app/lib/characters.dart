@@ -9,10 +9,11 @@ import 'theme.dart';
 import 'ui/cv.dart';
 import 'ui/hub.dart';
 
-/// A user's characters, in Postgres: only their owner reads and writes
-/// them. Each is played with one system.
-class Characters {
-  Characters(this._client);
+/// A user's characters, in Postgres: only their owner writes them, and
+/// the GMs of campaigns they're linked to read them. Each is played with
+/// one system.
+class SavedCharacters {
+  SavedCharacters(this._client);
 
   final SupabaseClient _client;
 
@@ -27,7 +28,31 @@ class Characters {
           Character.fromJson(r),
       ];
 
-  /// A new character for [system], starting with [values].
+  /// This user's characters played with [system].
+  Future<List<Character>> forSystem(String system) async =>
+      [for (final c in await list()) if (c.system == system) c];
+
+  /// The characters linked to [campaign], which its GM reads.
+  Future<List<Character>> linked(String campaign) async => [
+        for (final r in await _client
+            .from('characters')
+            .select('$_fields, campaign_characters!inner(campaign)')
+            .eq('campaign_characters.campaign', campaign))
+          Character.fromJson(r),
+      ];
+
+  /// Links this user's character [id] to [campaign], which must be played
+  /// with its system and have them as a member.
+  Future<void> link(String campaign, CharacterId id) => _client
+      .rpc('link_character', params: {'campaign': campaign, 'character_id': id.value});
+
+  Future<void> unlink(String campaign, CharacterId id) => _client
+      .from('campaign_characters')
+      .delete()
+      .eq('campaign', campaign)
+      .eq('character', id.value);
+
+  /// A new character for [system], starting with its sheet's values.
   Future<Character> create(String name, SystemPack system) async =>
       Character.fromJson(await _client
           .from('characters')
@@ -68,7 +93,7 @@ class CharactersPage extends StatefulWidget {
 }
 
 class _CharactersPageState extends State<CharactersPage> {
-  late final _characters = Characters(widget.client);
+  late final _characters = SavedCharacters(widget.client);
   late final _installed = InstalledPacks(widget.client);
   List<Character>? _list;
 

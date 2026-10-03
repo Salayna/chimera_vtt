@@ -45,7 +45,10 @@ Outcome reduce(Scene scene, Actor actor, Command command) {
       command is! Say &&
       command is! Ping &&
       command is! EndTurn &&
-      command is! SetTracker) {
+      command is! SetTracker &&
+      command is! UpdateCharacter &&
+      command is! RemoveCharacter &&
+      command is! LinkCharacter) {
     return const Refused(Refusal.gmOnly);
   }
   return switch (command) {
@@ -117,6 +120,25 @@ Outcome reduce(Scene scene, Actor actor, Command command) {
     UsePack(:final id, :final data) => _usePack(scene, id, data),
     SetTracker(:final id, :final name, :final value) =>
       _own(scene, actor, id, (t) => _setTracker(t, name, value)),
+    UpdateCharacter(:final character) => _updateCharacter(scene, actor, character),
+    RemoveCharacter(:final id) => switch (scene.characters[id]) {
+        null => const Refused(Refusal.notFound),
+        Character(:final owner) when actor is! Player || actor.id != owner =>
+          const Refused(Refusal.notOwner),
+        _ => Accepted([
+            Delete(EntityKind.character, id.value),
+            for (final t in scene.tokens.values)
+              if (t.character == id) Upsert(t.withCharacter(null)),
+          ]),
+      },
+    LinkCharacter(token: final id, :final character) => _own(scene, actor, id, (t) {
+        final c = scene.characters[character];
+        if (character != null && c == null) return const Refused(Refusal.notFound);
+        if (actor case Player(id: final player) when c != null && c.owner != player) {
+          return const Refused(Refusal.notOwner);
+        }
+        return Accepted([Upsert(t.withCharacter(character))]);
+      }),
     AddFogOp(:final id, :final mode, :final shape) => scene.fogOps
             .containsKey(id)
         ? const Refused(Refusal.duplicateId)
@@ -217,6 +239,28 @@ Outcome _usePack(Scene scene, String id, Json? data) {
     else if (scene.packFile != null)
       const Delete(EntityKind.pack, ''),
   ]);
+}
+
+/// How much of a character the room carries: its JSON, values included.
+const maxCharacterBytes = 64 * 1024;
+
+/// Only a character's owner writes it, and only for the scene's system:
+/// the GM reads characters, never changes them.
+Outcome _updateCharacter(Scene scene, Actor actor, Character character) {
+  if (actor case Player(:final id) when id == character.owner) {
+    final had = scene.characters[character.id];
+    if (had != null && had.owner != character.owner) {
+      return const Refused(Refusal.notOwner);
+    }
+    final name = character.name.trim();
+    return name.isEmpty ||
+            name.length > Character.maxName ||
+            character.system != scene.settings.pack ||
+            jsonEncode(character.toJson()).length > maxCharacterBytes
+        ? const Refused(Refusal.invalid)
+        : Accepted([Upsert(character)]);
+  }
+  return const Refused(Refusal.notOwner);
 }
 
 /// Bounds for tags typed by people, on regions as on tokens.

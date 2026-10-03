@@ -49,6 +49,11 @@ sealed class Command {
         'usePack' => UsePack(json['id'] as String, data: json['data'] as Json?),
         'setTracker' => SetTracker(TokenId(json['id'] as String),
             json['name'] as String, json['value'] as int?),
+        'updateCharacter' =>
+          UpdateCharacter(Entity.fromJson(json['character'] as Json) as Character),
+        'removeCharacter' => RemoveCharacter(CharacterId(json['id'] as String)),
+        'linkCharacter' => LinkCharacter(TokenId(json['token'] as String),
+            json['character'] == null ? null : CharacterId(json['character'] as String)),
         final type => throw FormatException('Unknown command: $type'),
       };
 }
@@ -265,6 +270,44 @@ final class SetTracker extends Command {
         'id': id.value,
         'name': name,
         if (value != null) 'value': value,
+      };
+}
+
+/// Brings a character into the room, or changes it: its owner's, from their
+/// sheet. Only owners write their characters, so the GM never does.
+final class UpdateCharacter extends Command {
+  const UpdateCharacter(this.character);
+
+  final Character character;
+
+  @override
+  Json toJson() => {'type': 'updateCharacter', 'character': character.toJson()};
+}
+
+/// Takes a character out of the room, and off the tokens playing it. Its
+/// owner's.
+final class RemoveCharacter extends Command {
+  const RemoveCharacter(this.id);
+
+  final CharacterId id;
+
+  @override
+  Json toJson() => {'type': 'removeCharacter', 'id': id.value};
+}
+
+/// Makes a token play a character, or none. The GM may link any; a player
+/// links their own token to their own character.
+final class LinkCharacter extends Command {
+  const LinkCharacter(this.token, this.character);
+
+  final TokenId token;
+  final CharacterId? character;
+
+  @override
+  Json toJson() => {
+        'type': 'linkCharacter',
+        'token': token.value,
+        if (character != null) 'character': character!.value,
       };
 }
 

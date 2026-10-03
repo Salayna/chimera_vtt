@@ -54,7 +54,7 @@ class Library {
       'owner': _client.auth.currentUser!.id,
       'kind': LibraryKind.scene.name,
       'name': name,
-      'data': scene.toJson(),
+      'data': scene.withCharacters(const {}).toJson(),
       'thumb': thumb?.value,
     });
   }

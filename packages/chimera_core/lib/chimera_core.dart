@@ -2,7 +2,6 @@
 library;
 
 export 'src/actor.dart';
-export 'src/character.dart';
 export 'src/commands.dart';
 export 'src/dice.dart';
 export 'src/entities.dart';

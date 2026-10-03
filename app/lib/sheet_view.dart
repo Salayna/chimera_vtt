@@ -14,7 +14,11 @@ class SheetView extends StatelessWidget {
     required this.sheet,
     required this.values,
     this.onSet,
+    this.trackersOnly = false,
   });
+
+  /// Only the trackers, in one column: a token card's.
+  final bool trackersOnly;
 
   final SheetDef sheet;
 
@@ -25,6 +29,17 @@ class SheetView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final read = SheetValues(sheet, values);
+    if (trackersOnly) {
+      return Column(crossAxisAlignment: CrossAxisAlignment.stretch, spacing: 6, children: [
+        for (final f in sheet.fields)
+          if (f.type == FieldType.tracker)
+            CvTooltip(
+                key: ValueKey(f.name),
+                message: f.text,
+                side: AxisDirection.up,
+                child: _field(f, read)),
+      ]);
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: 24,
@@ -96,6 +111,8 @@ class SheetView extends StatelessWidget {
         value: read[f.name] as String,
         onChanged: set,
       ),
+      FieldType.choice when set == null => _Text(
+          label: f.label, value: read[f.name] as String, onChanged: null),
       FieldType.choice => CvDropdown<String>(
         label: f.label,
         value: read[f.name] as String,
