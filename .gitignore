@@ -49,3 +49,6 @@ app.*.map.json
 
 # Hosted Supabase config, kept local.
 /app/config/prod.json
+
+# Packs built from the GM's own books (tool/solaris_threats.dart).
+packs/*.local.json

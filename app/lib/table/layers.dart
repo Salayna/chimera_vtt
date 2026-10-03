@@ -254,11 +254,13 @@ class TokenPainter extends CustomPainter {
   /// Laid-out labels, so a drag doesn't lay text out again every frame.
   final _labels = <TokenId, (String, double, TextPainter)>{};
 
-  /// The name, and the trackers and conditions on a second line:
-  /// "HP 12 · Darkness 2 · Prone". Empty for none.
+  /// The name, and the trackers (but zeros) and conditions on a second
+  /// line: "HP 12 · Darkness 2 · Prone". Empty for none.
   static String labelText(Token token) {
     final conditions = [
-      for (final MapEntry(:key, :value) in token.trackers.entries) '$key $value',
+      // Zeros (a fresh threat's wounds) would only crowd the label.
+      for (final MapEntry(:key, :value) in token.trackers.entries)
+        if (value != 0) '$key $value',
       for (final MapEntry(:key, :value) in token.conditions.entries)
         value == null ? key : '$key $value',
     ].join(' · ');

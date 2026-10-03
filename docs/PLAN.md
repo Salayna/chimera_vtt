@@ -470,7 +470,9 @@ Phase 6 status 2026-10-03: game systems are modules, as asked: a system is added
 - **Solaris:** `packs/solaris-arcanum.json` is the full module, from the rulebook in the GM's notes: the 15 sector tags of Appendix C, status, wound and archetype tags as conditions, trackers for AP, Stress, Armor Grade and wounds, and **Combat Forms** (Pre-Rush, Rush, Steady, Poise) ordering turns instead of a roll. Packs can now declare such forms.
 - **Token cards** list only the trackers a token has, with a menu adding the others, and scroll when long.
 
-Not yet: threat cards (NPC data cards with their own slot counts), Fantasy Statblocks and `.atlasmap` scene import, pack-defined sheet fields, and editing a pack inside the app (a pack is edited as a file and installed again). Protocol is version 4.
+- **Threat cards:** a pack can hold ready-made tokens with their own trackers, starting tags and card; the GM places them from the token panel, reads the card on the token card, and a fight starts them in their own form. Cards stay with the GM: scenes carry packs without tokens, and players don't get the trackers of tokens nobody owns. A tool builds the Solaris module's 157 threats from the GM's own notes of the books, kept out of the repository.
+
+Not yet: Fantasy Statblocks and `.atlasmap` scene import, pack-defined sheet fields, and editing a pack inside the app (a pack is edited as a file and installed again). Protocol is version 5.
 
 ---
 

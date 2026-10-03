@@ -41,11 +41,12 @@ Installed packs belong to the GM's account and serve all their campaigns. A scen
 | `initiative` | The dice formula each token rolls, as typed in the log (`d20`, `2d6+1`). |
 | `forms` | Turn order without a roll, as Solaris' Combat Forms: `name`, `value` (higher goes first), `npc` (for the GM's tokens), `default` (where a side starts) and `text`. A fight starts everyone in their side's default form, and the GM clicks a token's form in the turn order to change it. |
 | `trackers` | Numbers on every token: `name`, optional `min` (default 0), `max` and `text`. Players change their own tokens'. |
+| `tokens` | Ready-made tokens, such as a system's threats: `name`, `size` (cells), `form` (a form's name), `trackers` (each with its own `max` and starting `value`), `conditions` it starts with, and `card`: sections of `title` and `text` the GM reads on its token card. Players never get cards: scenes carry the pack without its tokens, and the trackers of tokens nobody owns stay with the GM. |
 | `tags` | Conditions (`"condition": true`, set on tokens) and region tags (the rest; `"sector": true` marks sector tags). Each may be `valued`, have a `color` (`#rrggbb`), `text` and `effects`. |
 
 Effects are the engine's building blocks (ADR 012): `{"type": "roll", "edge": -1, "scaled": true}` (advantage or disadvantage, times the tag's value when scaled), `{"type": "moveCost", "multiplier": 2}`, `{"type": "blocksSight"}`, `{"type": "occupantLimit", "max": 1}` and `{"type": "entryCheck", "check": "Traversal"}`. Anything they can't say goes in `text`.
 
-Limits: at most 200 tags, 20 trackers and 20 bands; names up to 30 characters and texts up to 2000.
+Limits: at most 200 tags, 20 trackers, 20 bands and 500 tokens (each with up to 20 trackers and 30 card sections of up to 4000 characters); names up to 30 characters and texts up to 2000. An installed pack holds up to 4 MB.
 
 ## Atlas VTT presets
 
@@ -54,3 +55,15 @@ An entry of Atlas' `userPresets` installs as a pack: Atlas conditions become con
 ## Shipped modules
 
 - `packs/solaris-arcanum.json`: Solaris Arcanum from the Core Rulebook and Appendix C, summarised: 20 ft sectors at 1 AP each, the four range bands, the 15 sector tags (Line of Sight Breaker blocks sight; Difficult Terrain and Zero-g ask for Traversal; Bottleneck holds one), the status, wound and archetype tags as conditions, Combat Forms for turn order, and trackers for AP, Stress, Armor Grade and each system's wounds.
+
+### Threats from your own books
+
+The Solaris threat database is book content, so the repository's module has none. `packages/tactical_engine/tool/solaris_threats.dart` reads the threat data cards in your own notes of the books (Markdown, as in an Obsidian vault) and writes the module with them as tokens, git-ignored:
+
+```sh
+cd packages/tactical_engine
+dart run tool/solaris_threats.dart "<vault>/Solaris Arcanum" \
+    ../../packs/solaris-arcanum.json ../../packs/solaris-arcanum.local.json
+```
+
+Install `packs/solaris-arcanum.local.json` from the Systems page. Each card becomes a token: its Combat Form, its damage tracks and other boxed counters (Ammo, Heat, Horde Counter) as trackers with their box counts, its per-round slots, immunities and vulnerabilities in a Profile section, its attack profiles, unique actions and traits, overload profile and tags as card sections, and book tags the pack knows (Synthetic) as conditions. A card without a damage table gets no trackers.
