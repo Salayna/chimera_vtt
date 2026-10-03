@@ -3,6 +3,10 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:chimera_core/chimera_core.dart';
+import 'package:chimera_sync/chimera_sync.dart';
+import 'package:chimera_vtt/table/chrome.dart';
+import 'package:chimera_vtt/table/table_view.dart';
+import 'package:flutter/services.dart';
 import 'package:chimera_vtt/packs.dart';
 import 'package:chimera_vtt/table/rules.dart';
 import 'package:chimera_vtt/ui/cv.dart';
@@ -61,5 +65,67 @@ void main() {
     expect(find.text('Install system'), findsOneWidget);
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 200)));
     await tester.pump();
+  });
+
+  testWidgets("a player tracks their token's numbers within the pack's bounds",
+      (tester) async {
+    tester.view.physicalSize = const Size(1440, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    const id = TokenId('t');
+    const me = PlayerId('me');
+    const pack = {
+      'id': 'mine',
+      'name': 'Mine',
+      'unit': 'ft',
+      'trackers': [
+        {'name': 'HP'},
+        {'name': 'Stress', 'max': 6},
+      ],
+    };
+    final host = HostSession(
+      LoopbackHub().connect(),
+      const PlayerId('gm'),
+      SceneStore(Scene(
+        settings: const SceneSettings(
+            width: 1000, height: 1000, grid: Grid(cellSize: 100), pack: 'mine'),
+        packFile: const ScenePack(pack),
+        tokens: {
+          id: const Token(id: id, position: (x: 50, y: 50), size: 100, owner: me),
+        },
+      )),
+    );
+    final controller = TableController();
+    addTearDown(controller.dispose);
+    controller.selected.value = id;
+    await tester.pumpWidget(cvApp(
+      title: 'test',
+      home: TokenCardLayer(
+        store: host.store,
+        session: host,
+        controller: controller,
+        send: (c) => host.store.execute(const Player(me), c),
+        gm: false,
+      ),
+    ));
+    expect(find.text('Trackers'), findsOneWidget);
+    expect(find.text('Stress / 6'), findsOneWidget);
+
+    await tester.enterText(find.byType(EditableText).first, '12');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pump();
+    expect(host.store.scene.tokens[id]!.trackers, {'HP': 12});
+
+    Finder button(String label) => find.byWidgetPredicate(
+        (w) => w is CvToolButton && w.label == label);
+    await tester.ensureVisible(button('Stress +1'));
+    for (var i = 0; i < 8; i++) {
+      await tester.tap(button('Stress +1'));
+      await tester.pump();
+    }
+    expect(host.store.scene.tokens[id]!.trackers['Stress'], 6); // Its max.
+    await tester.tap(button('HP −1'));
+    await tester.pump();
+    expect(host.store.scene.tokens[id]!.trackers['HP'], 11);
   });
 }

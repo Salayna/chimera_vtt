@@ -9,7 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import 'package:tactical_engine/tactical_engine.dart'
-    show SystemPack, TagDef, builtInPacks;
+    show SystemPack, TagDef, TrackerDef, builtInPacks;
 
 import '../members.dart';
 import '../theme.dart';
@@ -1106,6 +1106,14 @@ class _TokenCard extends StatelessWidget {
                       ]),
                     ),
                   ],
+                  if (packOf(scene).trackers case final trackers
+                      when trackers.isNotEmpty)
+                    _Trackers(
+                      key: ValueKey(token.id),
+                      token: token,
+                      trackers: trackers,
+                      send: send,
+                    ),
                   _TagEditor(
                     title: 'Conditions',
                     tags: token.conditions,
@@ -1337,6 +1345,97 @@ class _NameFieldState extends State<_NameField> {
           maxLength: 40,
           onChanged: widget.onChanged,
         ),
+      );
+}
+
+/// The pack's trackers on a token: − and + step one, or type a value.
+/// Values stay within each tracker's bounds; an empty field clears it.
+class _Trackers extends StatefulWidget {
+  const _Trackers(
+      {super.key, required this.token, required this.trackers, required this.send});
+
+  final Token token;
+  final List<TrackerDef> trackers;
+  final Outcome Function(Command) send;
+
+  @override
+  State<_Trackers> createState() => _TrackersState();
+}
+
+class _TrackersState extends State<_Trackers> {
+  final _fields = <String, TextEditingController>{};
+
+  TextEditingController _field(String name) => _fields[name] ??=
+      TextEditingController(text: '${widget.token.trackers[name] ?? ''}');
+
+  @override
+  void didUpdateWidget(_Trackers old) {
+    super.didUpdateWidget(old);
+    // Changed elsewhere (another client, the buttons): show it.
+    for (final MapEntry(key: name, value: field) in _fields.entries) {
+      final text = '${widget.token.trackers[name] ?? ''}';
+      if (field.text != text && int.tryParse(field.text) != widget.token.trackers[name]) {
+        field.text = text;
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    for (final f in _fields.values) {
+      f.dispose();
+    }
+    super.dispose();
+  }
+
+  void _set(TrackerDef def, int? value) {
+    final clamped = value == null ? null : def.clamp(value);
+    _field(def.name).text = '${clamped ?? ''}';
+    widget.send(SetTracker(widget.token.id, def.name, clamped));
+  }
+
+  @override
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: 6,
+        children: [
+          Text('Trackers',
+              style: CvTypography.label.copyWith(color: CvColors.textSecondary)),
+          for (final def in widget.trackers)
+            Row(spacing: 4, children: [
+              Expanded(
+                child: Text(def.max == null ? def.name : '${def.name} / ${def.max}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: CvTypography.bodySm),
+              ),
+              CvToolButton(
+                icon: Lucide.minus,
+                label: '${def.name} −1',
+                tooltipSide: AxisDirection.up,
+                onPressed: () =>
+                    _set(def, (widget.token.trackers[def.name] ?? def.min) - 1),
+              ),
+              SizedBox(
+                width: 72,
+                child: TextKeysOnly(
+                  child: CvTextInput(
+                    controller: _field(def.name),
+                    placeholder: '–',
+                    maxLength: 6,
+                    onSubmitted: (v) => _set(def, int.tryParse(v.trim())),
+                  ),
+                ),
+              ),
+              CvToolButton(
+                icon: Lucide.plus,
+                label: '${def.name} +1',
+                tooltipSide: AxisDirection.up,
+                onPressed: () =>
+                    _set(def, (widget.token.trackers[def.name] ?? def.min) + 1),
+              ),
+            ]),
+        ],
       );
 }
 
