@@ -897,6 +897,17 @@ class _GmRoomState extends State<GmRoom> {
 
   List<PaletteItem> _paletteItems(HostSession host) => [
         ...tokenItems(host.store.scene, _controller),
+        ...characterItems(host.store.scene.characters.values,
+            (id) => setState(() => _sheet = id)),
+        for (final s in _sceneList)
+          if (s.id != _sceneId)
+            (
+              group: 'Scenes',
+              label: 'Switch to ${s.name}',
+              icon: Lucide.layers,
+              shortcut: null,
+              run: () => _switchScene(s.id),
+            ),
         ...toolItems(_controller, gm: true),
         (group: 'Table', label: 'Add token', icon: Lucide.circlePlus, shortcut: 'T', run: _openTokens),
         (group: 'Table', label: 'Change map', icon: Lucide.imageUp, shortcut: 'M', run: () => _toggleLibrary(LibraryKind.map)),
@@ -1835,6 +1846,10 @@ class _PlayerRoomState extends State<PlayerRoom> {
             child: PaletteLayer(
               items: [
                 ...tokenItems(store.scene, _controller),
+                ...characterItems(
+                    store.scene.characters.values
+                        .where((c) => c.owner == widget.me),
+                    (id) => setState(() => _sheet = id)),
                 ...toolItems(_controller),
               ],
               onClose: () => setState(() => _palette = false),

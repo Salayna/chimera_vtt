@@ -95,4 +95,38 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(CommandPalette), findsOneWidget);
   });
+
+  testWidgets('the arrows keep the picked row in view', (tester) async {
+    tester.view.physicalSize = const Size(1440, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final ran = <int>[];
+    await tester.pumpWidget(cvApp(
+      title: 'test',
+      home: CommandPalette(
+        items: [
+          for (var i = 0; i < 30; i++)
+            (
+              group: 'Tokens',
+              label: 'Goblin $i',
+              icon: Lucide.locateFixed,
+              shortcut: null,
+              run: () => ran.add(i),
+            ),
+        ],
+        onClose: () {},
+      ),
+    ));
+    await tester.pumpAndSettle();
+    for (var i = 0; i < 20; i++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+    }
+    final list = tester.getRect(find.byType(ListView));
+    final row = tester.getRect(find.text('Goblin 20'));
+    expect(row.top, greaterThanOrEqualTo(list.top));
+    expect(row.bottom, lessThanOrEqualTo(list.bottom));
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    expect(ran, [20]);
+  });
 }

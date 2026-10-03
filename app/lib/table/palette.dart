@@ -50,6 +50,20 @@ List<PaletteItem> tokenItems(Scene scene, TableController c) => [
         ),
     ];
 
+/// [characters]' sheets, to open through [onOpen].
+List<PaletteItem> characterItems(
+        Iterable<Character> characters, ValueChanged<CharacterId> onOpen) =>
+    [
+      for (final c in characters)
+        (
+          group: 'Characters',
+          label: c.name.isEmpty ? 'Unnamed character' : c.name,
+          icon: Lucide.bookOpen,
+          shortcut: null,
+          run: () => onOpen(c.id),
+        ),
+    ];
+
 /// The palette over the table, a third of the way down, on a scrim that
 /// closes it.
 class PaletteLayer extends StatelessWidget {
@@ -102,6 +116,8 @@ class CommandPalette extends StatefulWidget {
 
 class _CommandPaletteState extends State<CommandPalette> {
   final _query = TextEditingController();
+  final _scroll = ScrollController();
+  final _selected = GlobalKey();
   int _at = 0;
 
   /// What had the keys before: the table, which gets them back on close.
@@ -116,6 +132,7 @@ class _CommandPaletteState extends State<CommandPalette> {
   @override
   void dispose() {
     _query.dispose();
+    _scroll.dispose();
     final before = _before;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (before?.context != null) before!.requestFocus();
@@ -143,6 +160,21 @@ class _CommandPaletteState extends State<CommandPalette> {
   void _move(int by, int count) {
     if (count == 0) return;
     setState(() => _at = (_at + by) % count);
+    // Keep the picked row in view; wrapping round jumps to the far end,
+    // where the row may not be built yet.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_scroll.hasClients) return;
+      if (_at == 0) return _scroll.jumpTo(0);
+      if (_at == count - 1) {
+        return _scroll.jumpTo(_scroll.position.maxScrollExtent);
+      }
+      if (_selected.currentContext case final row?) {
+        Scrollable.ensureVisible(row,
+            alignmentPolicy: by > 0
+                ? ScrollPositionAlignmentPolicy.keepVisibleAtEnd
+                : ScrollPositionAlignmentPolicy.keepVisibleAtStart);
+      }
+    });
   }
 
   @override
@@ -193,10 +225,12 @@ class _CommandPaletteState extends State<CommandPalette> {
               ConstrainedBox(
                 constraints: const BoxConstraints(maxHeight: 360),
                 child: ListView.builder(
+                  controller: _scroll,
                   shrinkWrap: true,
                   itemCount: shown.length,
                   itemBuilder: (context, i) => _row(
                     shown[i],
+                    key: i == at ? _selected : null,
                     selected: i == at,
                     // A group's name heads its first row.
                     heading: i == 0 || shown[i - 1].group != shown[i].group,
@@ -214,8 +248,9 @@ class _CommandPaletteState extends State<CommandPalette> {
   }
 
   Widget _row(PaletteItem item,
-          {required bool selected, required bool heading}) =>
+          {Key? key, required bool selected, required bool heading}) =>
       Column(
+        key: key,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (heading)
