@@ -599,8 +599,11 @@ final class Initiative extends Entity {
 final class ScenePack extends Entity {
   const ScenePack(this.data);
 
-  /// Packs are small; this bounds what a scene carries.
-  static const maxBytes = 256 * 1024;
+  /// Bounds what a scene carries: a module with a whole compendium (the
+  /// Solaris one is about 270 KB) fits.
+  // ponytail: sent whole in every snapshot; a hosted plan's Realtime message
+  // limit may be lower than this; fetch the compendium apart if it bites.
+  static const maxBytes = 1024 * 1024;
 
   final Json data;
 

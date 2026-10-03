@@ -65,7 +65,7 @@ Installed packs belong to the GM's account and serve all their campaigns. A scen
 
 Effects are the engine's building blocks (ADR 012): `{"type": "roll", "edge": -1, "scaled": true}` (advantage or disadvantage, times the tag's value when scaled), `{"type": "moveCost", "multiplier": 2}`, `{"type": "blocksSight"}`, `{"type": "occupantLimit", "max": 1}` and `{"type": "entryCheck", "check": "Traversal"}`. Anything they can't say goes in `text`.
 
-Limits: at most 200 tags, 20 trackers, 20 bands and 500 tokens (each with up to 20 trackers and 30 card sections of up to 4000 characters); names up to 30 characters and texts up to 2000. An installed pack holds up to 4 MB.
+Limits: at most 200 tags, 20 trackers, 20 bands and 500 tokens (each with up to 20 trackers and 30 card sections of up to 4000 characters); names up to 30 characters and texts up to 2000. An installed pack holds up to 4 MB, and the copy a scene carries (the pack without its tokens) up to 1 MB.
 
 ### Sheets
 
@@ -180,6 +180,13 @@ The Solaris threat database is book content, so the repository's module has none
 cd packages/tactical_engine
 dart run tool/solaris_threats.dart "<vault>/Solaris Arcanum" \
     ../../packs/solaris-arcanum.json ../../packs/solaris-arcanum.local.json
+```
+
+Then `tool/solaris_characters.dart` gives that module its characters, from the same notes: the weapons, explosives, armor, items, talents and flaws as a compendium (attack profiles as actions with their hit tiers), a sheet, and the Constellation's stars as far as the notes have them (its graph is art in the book: place and link the stars in the editor's Advancement tab):
+
+```sh
+dart run tool/solaris_characters.dart "<vault>/Solaris Arcanum" \
+    ../../packs/solaris-arcanum.local.json ../../packs/solaris-arcanum.local.json
 ```
 
 Install `packs/solaris-arcanum.local.json` from the Systems page. Each card becomes a token: its Combat Form, its damage tracks and other boxed counters (Ammo, Heat, Horde Counter) as trackers with their box counts, its per-round slots, immunities and vulnerabilities in a Profile section, its attack profiles, unique actions and traits, overload profile and tags as card sections, and book tags the pack knows (Synthetic) as conditions. A card without a damage table gets no trackers.
