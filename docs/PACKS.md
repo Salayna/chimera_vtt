@@ -97,6 +97,8 @@ A sheet is sections of fields. Each field has a `name` that formulas read (lette
 | `tracker` | A number changed in play, kept within `min` (default 0) and `max`, which may be formulas; formulas read them as `AP.min` and `AP.max`. It starts at `value`, a formula too (`"AP.max"`), or at its min. |
 | `items` | The character's items of one compendium `kind`, as cards. Formulas don't read it by name: `count("Weapon")` is how many there are, `sum("Armor", "apReduction")` adds up a number field of them. |
 
+A sheet's `layout` lays its sections out: `list` (one under another, the default), `columns` (side by side in as many columns as fit) or `tabs` (a tab each, with the advancement and actions).
+
 Formulas are those of [SYSTEMS.md](SYSTEMS.md): they read the sheet's names, never roll dice, and a field can't depend on itself. A bad sheet refuses the whole pack with the reason. Limits: 20 sections, 200 fields.
 
 ### Former names

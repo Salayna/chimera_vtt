@@ -113,6 +113,8 @@ void main() {
     expect(error([{'name': 'a', 'type': 'checkbox', 'value': 1}]), contains('not a checkbox value'));
     expect(error([{'name': 'a', 'type': 'tracker', 'max': '"x"'}]), contains('gives a text'));
     expect(error([{'name': 'a', 'type': 'spell'}]), contains('unknown field type'));
+    expect(SheetDef.fromJson({...json, 'layout': 'tabs'}).toJson()['layout'], 'tabs');
+    expect(() => SheetDef.fromJson({...json, 'layout': 'grid'}), throwsFormatException);
     expect(error([for (var i = 0; i < 201; i++) {'name': 'f$i'}]), contains('at most 200'));
   });
 

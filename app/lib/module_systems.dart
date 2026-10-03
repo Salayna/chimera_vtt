@@ -354,6 +354,19 @@ class _SheetTab extends StatelessWidget {
           'checkboxes, computed fields, trackers and items. Formulas: + - * /, '
           'min, max, floor, ceil, round, abs, if … then … else, count("Kind"), '
           'sum("Kind", "field").'),
+      SizedBox(
+        width: 260,
+        child: CvDropdown<String>(
+          label: 'Layout',
+          value: sheet['layout'] as String? ?? 'list',
+          onChanged: (l) => change(() => l == 'list' ? sheet.remove('layout') : sheet['layout'] = l),
+          entries: const [
+            CvMenuItem('list', 'Sections in one list'),
+            CvMenuItem('columns', 'Sections in columns'),
+            CvMenuItem('tabs', 'A tab for each section'),
+          ],
+        ),
+      ),
       for (final s in sections.cast<Json>())
         Column(key: ObjectKey(s), crossAxisAlignment: CrossAxisAlignment.stretch, spacing: 8, children: [
           Row(spacing: 8, children: [

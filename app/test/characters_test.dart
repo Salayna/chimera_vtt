@@ -137,4 +137,40 @@ void main() {
     await tester.pump();
     expect(c.items, isEmpty);
   });
+
+  testWidgets('a sheet laid out in tabs or columns', (tester) async {
+    tester.view.physicalSize = const Size(1200, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    SystemPack laidOut(String layout) => SystemPack.fromJson({
+          ...dnd.toJson(),
+          'id': 'laid',
+          'sheet': {...dnd.sheet!.toJson(), 'layout': layout},
+        });
+    final c = Character(
+        id: const CharacterId('c'),
+        owner: const PlayerId('me'),
+        system: 'laid',
+        name: 'Ayla',
+        values: dnd.sheet!.start());
+    await tester.pumpWidget(cvApp(
+      title: 'test',
+      home: SingleChildScrollView(child: SheetView(pack: laidOut('tabs'), character: c)),
+    ));
+    expect(find.text('Strength'), findsOneWidget);
+    expect(find.text('Armor class'), findsNothing, reason: 'on the Combat tab');
+    await tester.tap(find.text('Combat'));
+    await tester.pump();
+    expect(find.text('Armor class'), findsOneWidget);
+    expect(find.text('Levels'), findsOneWidget, reason: 'the advancement has its tab');
+
+    await tester.pumpWidget(cvApp(
+      title: 'test',
+      home: SingleChildScrollView(child: SheetView(pack: laidOut('columns'), character: c)),
+    ));
+    // Three columns fit: Abilities and Attacks share the first.
+    final x = tester.getTopLeft(find.text('ABILITIES')).dx;
+    expect(tester.getTopLeft(find.text('ATTACKS')).dx, x);
+    expect(tester.getTopLeft(find.text('CHARACTER')).dx, greaterThan(x));
+  });
 }

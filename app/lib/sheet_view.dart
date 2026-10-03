@@ -59,58 +59,65 @@ class SheetView extends StatelessWidget {
                 child: _field(f, read, _setter(f.name))),
       ]);
     }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      spacing: 24,
-      children: [
-        for (final s in _sheet.sections)
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            spacing: 10,
-            children: [
-              CvOverline(s.title),
-              Wrap(
-                spacing: 16,
-                runSpacing: 10,
+    Widget section(SheetSection s) => Wrap(
+          spacing: 16,
+          runSpacing: 10,
+          children: [
+            for (final f in s.fields)
+              SizedBox(
+                key: ValueKey(f.name),
+                width: f.type == FieldType.text || f.type == FieldType.items
+                    ? double.infinity
+                    : 260,
+                child: f.type == FieldType.items
+                    ? _items(f)
+                    : CvTooltip(
+                        message: f.text,
+                        side: AxisDirection.up,
+                        child: _field(f, read, _setter(f.name)),
+                      ),
+              ),
+          ],
+        );
+    final sections = [for (final s in _sheet.sections) (title: s.title, child: section(s))];
+    final rest = [
+      if (pack.advancement case final adv?)
+        (
+          title: adv.name,
+          child: AdvancementView(pack: pack, character: character, onChanged: onChanged),
+        ),
+      if (onAction != null && _sheet.actions.isNotEmpty)
+        (title: 'Actions', child: _actions(_sheet.actions, null)),
+    ];
+    return switch (_sheet.layout) {
+      SheetLayout.tabs => _Tabs([...sections, ...rest]),
+      SheetLayout.columns => Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          spacing: 24,
+          children: [
+            LayoutBuilder(builder: (context, constraints) {
+              const gap = 24.0;
+              final n = (constraints.maxWidth / 360).floor().clamp(1, 3);
+              // Sections go round the columns in order.
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                spacing: gap,
                 children: [
-                  for (final f in s.fields)
-                    SizedBox(
-                      key: ValueKey(f.name),
-                      width: f.type == FieldType.text || f.type == FieldType.items
-                          ? double.infinity
-                          : 260,
-                      child: f.type == FieldType.items
-                          ? _items(f)
-                          : CvTooltip(
-                              message: f.text,
-                              side: AxisDirection.up,
-                              child: _field(f, read, _setter(f.name)),
-                            ),
+                  for (var c = 0; c < n; c++)
+                    Expanded(
+                      child: _Blocks([
+                        for (final (i, s) in sections.indexed)
+                          if (i % n == c) s,
+                      ]),
                     ),
                 ],
-              ),
-            ],
-          ),
-        if (pack.advancement case final adv?)
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            spacing: 10,
-            children: [
-              CvOverline(adv.name),
-              AdvancementView(pack: pack, character: character, onChanged: onChanged),
-            ],
-          ),
-        if (onAction != null && _sheet.actions.isNotEmpty)
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            spacing: 10,
-            children: [
-              const CvOverline('Actions'),
-              _actions(_sheet.actions, null),
-            ],
-          ),
-      ],
-    );
+              );
+            }),
+            _Blocks(rest),
+          ],
+        ),
+      SheetLayout.list => _Blocks([...sections, ...rest]),
+    };
   }
 
   /// A button for each of [actions], greyed out with the reason when its
@@ -306,6 +313,60 @@ class _ItemCard extends StatelessWidget {
         ],
       ]),
     );
+  }
+}
+
+typedef _Block = ({String title, Widget child});
+
+/// Titled blocks of a sheet, one under another.
+class _Blocks extends StatelessWidget {
+  const _Blocks(this.blocks);
+
+  final List<_Block> blocks;
+
+  @override
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: 24,
+        children: [
+          for (final b in blocks)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              spacing: 10,
+              children: [CvOverline(b.title), b.child],
+            ),
+        ],
+      );
+}
+
+/// Titled blocks of a sheet, one tab each.
+class _Tabs extends StatefulWidget {
+  const _Tabs(this.blocks);
+
+  final List<_Block> blocks;
+
+  @override
+  State<_Tabs> createState() => _TabsState();
+}
+
+class _TabsState extends State<_Tabs> {
+  var _tab = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    final blocks = widget.blocks;
+    if (blocks.isEmpty) return const SizedBox.shrink();
+    final tab = _tab.clamp(0, blocks.length - 1);
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, spacing: 16, children: [
+      CvSegmentedControl<int>(
+        value: tab,
+        onChanged: (t) => setState(() => _tab = t),
+        segments: [
+          for (final (i, b) in blocks.indexed) (value: i, label: b.title, icon: null, checked: null),
+        ],
+      ),
+      KeyedSubtree(key: ValueKey(tab), child: blocks[tab].child),
+    ]);
   }
 }
 

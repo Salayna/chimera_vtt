@@ -151,6 +151,10 @@ Formula _parse(Object? text, String what) {
   }
 }
 
+/// How a sheet lays its sections out: one under another, side by side in
+/// as many columns as fit, or one tab each.
+enum SheetLayout { list, columns, tabs }
+
 /// A titled group of fields on a sheet: Attributes, Combat, Notes.
 typedef SheetSection = ({String title, List<FieldDef> fields});
 
@@ -160,7 +164,10 @@ final class SheetDef {
   /// [kinds] are the compendium's, by name: what items fields hold and
   /// `count` and `sum` read.
   SheetDef(this.sections,
-      {this.kinds = const {}, this.groups = const {}, this.actions = const []}) {
+      {this.kinds = const {},
+      this.groups = const {},
+      this.actions = const [],
+      this.layout = SheetLayout.list}) {
     final seen = <String>{};
     for (final f in fields) {
       for (final n in [
@@ -197,6 +204,8 @@ final class SheetDef {
 
   /// Its buttons: the character's, or every item's of a kind.
   final List<ActionDef> actions;
+
+  final SheetLayout layout;
 
   Iterable<FieldDef> get fields => sections.expand((s) => s.fields);
 
@@ -352,6 +361,7 @@ final class SheetDef {
             },
         ],
         if (actions.isNotEmpty) 'actions': _actionsJson(actions),
+        if (layout != SheetLayout.list) 'layout': layout.name,
       };
 
   factory SheetDef.fromJson(Json json,
@@ -370,7 +380,11 @@ final class SheetDef {
       throw const FormatException('A sheet has at most $maxFields fields');
     }
     return SheetDef(sections,
-        kinds: kinds, groups: groups, actions: _actionsFromJson(json['actions']));
+        kinds: kinds,
+        groups: groups,
+        actions: _actionsFromJson(json['actions']),
+        layout: SheetLayout.values.asNameMap()[json['layout'] ?? 'list'] ??
+            (throw FormatException('A sheet layout is list, columns or tabs: ${json['layout']}')));
   }
 }
 
