@@ -28,6 +28,7 @@ import 'table/grid_align.dart';
 import 'table/initiative.dart';
 import 'table/log_panel.dart';
 import 'table/pack_tokens.dart';
+import 'table/palette.dart';
 import 'table/room_characters.dart';
 import 'table/rules.dart';
 import 'table/table_view.dart';
@@ -879,6 +880,35 @@ class _GmRoomState extends State<GmRoom> {
         _tokenImageFor = null;
       });
 
+  void _toggleScenes() => setState(() {
+        final open = !_scenesOpen;
+        _closePanels();
+        _scenesOpen = open;
+      });
+
+  void _toggleMembers() => setState(() {
+        final open = !_membersOpen;
+        _closePanels();
+        _membersOpen = open;
+      });
+
+  /// The command palette is open.
+  bool _palette = false;
+
+  List<PaletteItem> _paletteItems(HostSession host) => [
+        ...tokenItems(host.store.scene, _controller),
+        ...toolItems(_controller, gm: true),
+        (group: 'Table', label: 'Add token', icon: Lucide.circlePlus, shortcut: 'T', run: _openTokens),
+        (group: 'Table', label: 'Change map', icon: Lucide.imageUp, shortcut: 'M', run: () => _toggleLibrary(LibraryKind.map)),
+        (group: 'Table', label: 'Grid', icon: Lucide.grid3x3, shortcut: 'G', run: _controller.toggleGridOptions),
+        (group: 'Table', label: 'Scenes', icon: Lucide.layers, shortcut: null, run: _toggleScenes),
+        (group: 'Table', label: 'Players', icon: Lucide.userRound, shortcut: null, run: _toggleMembers),
+        (group: 'Table', label: 'Undo', icon: Lucide.undo2, shortcut: '${modKey}Z', run: host.undo),
+        (group: 'Table', label: 'Redo', icon: Lucide.redo2, shortcut: '$modKey⇧Z', run: host.redo),
+        (group: 'Table', label: 'Export scene', icon: Lucide.download, shortcut: 'E', run: _export),
+        (group: 'Table', label: 'Import scene', icon: Lucide.upload, shortcut: 'I', run: _import),
+      ];
+
   /// The token strip shows the pack's tokens rather than the images.
   bool _stripPack = false;
 
@@ -1292,6 +1322,7 @@ class _GmRoomState extends State<GmRoom> {
       onUndo: host.undo,
       onRedo: host.redo,
       onEscape: _libraryOpen == null ? null : _closeLibrary,
+      onPalette: () => setState(() => _palette = true),
       grid: () => host.store.scene.settings.grid,
       child: Stack(children: [
         Positioned.fill(
@@ -1382,17 +1413,9 @@ class _GmRoomState extends State<GmRoom> {
               onSetMap: () => _toggleLibrary(LibraryKind.map),
               mapsOpen: _libraryOpen == LibraryKind.map,
               scenesOpen: _scenesOpen,
-              onScenes: () => setState(() {
-                final open = !_scenesOpen;
-                _closePanels();
-                _scenesOpen = open;
-              }),
+              onScenes: _toggleScenes,
               membersOpen: _membersOpen,
-              onMembers: () => setState(() {
-                final open = !_membersOpen;
-                _closePanels();
-                _membersOpen = open;
-              }),
+              onMembers: _toggleMembers,
             ),
           ),
         ),
@@ -1473,7 +1496,8 @@ class _GmRoomState extends State<GmRoom> {
                     onUndo: host.undo,
                     onRedo: host.redo,
                     onAddToken: _openTokens,
-                    tokensOpen: _libraryOpen == LibraryKind.token),
+                    tokensOpen: _libraryOpen == LibraryKind.token,
+                    onSearch: () => setState(() => _palette = true)),
               ],
             ),
             side: Column(
@@ -1507,6 +1531,14 @@ class _GmRoomState extends State<GmRoom> {
                   ),
                 ),
               ),
+            ),
+          ),
+        if (_palette)
+          Positioned.fill(
+            child: PaletteLayer(
+              items: _paletteItems(host),
+              onClose: () => setState(() => _palette = false),
+              onRoll: (dice) => host.execute(RollDice(dice)),
             ),
           ),
         if (_uploading case final name?)
@@ -1588,6 +1620,9 @@ class _PlayerRoomState extends State<PlayerRoom> {
 
   /// The character whose sheet is open.
   CharacterId? _sheet;
+
+  /// The command palette is open.
+  bool _palette = false;
 
   Future<void> _loadMembers() async {
     if (widget.campaign case final campaign?) {
@@ -1689,6 +1724,7 @@ class _PlayerRoomState extends State<PlayerRoom> {
     const pad = CvSizes.insetScreen;
     return TableShortcuts(
       controller: _controller,
+      onPalette: () => setState(() => _palette = true),
       child: Stack(children: [
         Positioned.fill(
           child: TableView(
@@ -1780,7 +1816,9 @@ class _PlayerRoomState extends State<PlayerRoom> {
           top: pad + CvSizes.hit + CvSpacing.s4,
           bottom: pad,
           child: BottomRow(
-            dock: ToolDock(controller: _controller),
+            dock: ToolDock(
+                controller: _controller,
+                onSearch: () => setState(() => _palette = true)),
             side: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.end,
@@ -1792,6 +1830,17 @@ class _PlayerRoomState extends State<PlayerRoom> {
             ),
           ),
         ),
+        if (_palette)
+          Positioned.fill(
+            child: PaletteLayer(
+              items: [
+                ...tokenItems(store.scene, _controller),
+                ...toolItems(_controller),
+              ],
+              onClose: () => setState(() => _palette = false),
+              onRoll: (dice) => session.request(RollDice(dice)),
+            ),
+          ),
       ]),
     );
   }

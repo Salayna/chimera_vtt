@@ -905,7 +905,11 @@ class CvTextInput extends StatefulWidget {
     this.keepFocus = false,
     this.icon,
     this.multiline = false,
+    this.autofocus = false,
   });
+
+  /// Takes the keys as it appears, even from a focused table.
+  final bool autofocus;
 
   /// Several lines, growing with the text: Enter starts a new line.
   final bool multiline;
@@ -940,6 +944,12 @@ class _CvTextInputState extends State<CvTextInput> {
   void initState() {
     super.initState();
     _focus.addListener(() => setState(() {}));
+    // Not EditableText's autofocus: that yields to anything already focused.
+    if (widget.autofocus) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _focus.requestFocus();
+      });
+    }
   }
 
   @override

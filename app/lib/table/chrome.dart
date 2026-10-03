@@ -105,8 +105,8 @@ VoidCallback shareRulers(
   };
 }
 
-/// The undo key's modifier, as the GM's platform writes it.
-String get _mod => defaultTargetPlatform == TargetPlatform.macOS ? '⌘' : 'Ctrl ';
+/// The command key, as the platform writes it: ⌘ or Ctrl.
+String get modKey => defaultTargetPlatform == TargetPlatform.macOS ? '⌘' : 'Ctrl ';
 
 /// The GM's panels, a rail on the left edge: scenes, players, the map and
 /// its grid. The tools themselves, tokens included, are in the [ToolDock].
@@ -164,8 +164,8 @@ class GmRail extends StatelessWidget {
       );
 }
 
-/// The tools, docked at the bottom centre: move, ruler, ping, and for the
-/// [gm] undo and redo, fog, regions and the token strip.
+/// The tools, docked at the bottom centre: search, move, ruler, ping, and
+/// for the [gm] undo and redo, fog, regions and the token strip.
 class ToolDock extends StatelessWidget {
   const ToolDock({
     super.key,
@@ -175,10 +175,14 @@ class ToolDock extends StatelessWidget {
     this.onRedo,
     this.onAddToken,
     this.tokensOpen = false,
+    this.onSearch,
   });
 
   final TableController controller;
   final bool gm;
+
+  /// Opens the command palette.
+  final VoidCallback? onSearch;
   final VoidCallback? onUndo;
   final VoidCallback? onRedo;
   final VoidCallback? onAddToken;
@@ -198,17 +202,26 @@ class ToolDock extends StatelessWidget {
                 onPressed: () => controller.tool = t,
               );
           return CvToolbar(axis: Axis.horizontal, children: [
+            if (onSearch != null) ...[
+              CvToolButton(
+                  icon: Lucide.search,
+                  label: 'Search',
+                  shortcut: '${modKey}K',
+                  tooltipSide: AxisDirection.up,
+                  onPressed: onSearch),
+              const CvToolbarSeparator(),
+            ],
             if (gm) ...[
               CvToolButton(
                   icon: Lucide.undo2,
                   label: 'Undo',
-                  shortcut: '${_mod}Z',
+                  shortcut: '${modKey}Z',
                   tooltipSide: AxisDirection.up,
                   onPressed: onUndo),
               CvToolButton(
                   icon: Lucide.redo2,
                   label: 'Redo',
-                  shortcut: '$_mod⇧Z',
+                  shortcut: '$modKey⇧Z',
                   tooltipSide: AxisDirection.up,
                   onPressed: onRedo),
               const CvToolbarSeparator(),
@@ -1346,6 +1359,7 @@ class TableShortcuts extends StatelessWidget {
     this.onUndo,
     this.onRedo,
     this.onEscape,
+    this.onPalette,
     this.grid,
   });
 
@@ -1364,8 +1378,11 @@ class TableShortcuts extends StatelessWidget {
   final VoidCallback? onUndo;
   final VoidCallback? onRedo;
 
-  /// Escape also closes what this is given to close: a pop-up.
+  /// Escape also closes what this is given to close: a library.
   final VoidCallback? onEscape;
+
+  /// ⌘K (Ctrl+K): the command palette.
+  final VoidCallback? onPalette;
 
   @override
   Widget build(BuildContext context) {
@@ -1383,6 +1400,10 @@ class TableShortcuts extends StatelessWidget {
         const CharacterActivator('='): () => c.zoomBy(1.25),
         const CharacterActivator('-'): () => c.zoomBy(1 / 1.25),
         const CharacterActivator('0'): c.fit,
+        const SingleActivator(LogicalKeyboardKey.keyK, meta: true): () =>
+            onPalette?.call(),
+        const SingleActivator(LogicalKeyboardKey.keyK, control: true): () =>
+            onPalette?.call(),
         const SingleActivator(LogicalKeyboardKey.escape): () {
           onEscape?.call();
           c.selected.value = null;
