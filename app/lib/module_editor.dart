@@ -1,11 +1,17 @@
 import 'dart:convert';
 
-import 'package:chimera_core/chimera_core.dart' show AssetId, DiceFormula;
+import 'dart:math' as math;
+
+import 'package:chimera_core/chimera_core.dart'
+    show AssetId, Character, CharacterId, DiceFormula, Item, PlayerId, UseAction;
 import 'package:flutter/widgets.dart';
 import 'package:tactical_engine/tactical_engine.dart';
 
 import 'assets.dart';
+import 'actions.dart';
+import 'characters.dart' show cleaned;
 import 'library.dart' show pickImage;
+import 'sheet_view.dart';
 import 'theme.dart';
 import 'ui/cv.dart';
 import 'ui/hub.dart';
@@ -245,7 +251,7 @@ class DraftToken {
       };
 }
 
-enum _Section { about, rules, tags, trackers, tokens, sheet, compendium, advancement }
+enum _Section { about, rules, tags, trackers, tokens, sheet, compendium, advancement, preview }
 
 /// Writing a module in the app (design: the hub's pages): what it is, its
 /// rules, its conditions and region tags, its trackers, and its ready-made
@@ -278,9 +284,30 @@ class _ModuleEditorState extends State<ModuleEditor> {
   String? _error;
   bool _saving = false;
 
+  /// The module as it stands, or what's wrong with it, worked out after
+  /// every change.
+  ({SystemPack? pack, String? problem}) _checked = (pack: null, problem: null);
+  bool _changed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _check();
+  }
+
+  void _check() {
+    try {
+      _checked = (pack: _draft.build(), problem: null);
+    } on FormatException catch (e) {
+      _checked = (pack: null, problem: e.message);
+    }
+  }
+
   void _change(VoidCallback edit) => setState(() {
         edit();
         _error = null;
+        _changed = true;
+        _check();
       });
 
   Future<void> _save() async {
@@ -342,10 +369,10 @@ class _ModuleEditorState extends State<ModuleEditor> {
               onPressed: _saving ? null : _save,
             ),
           ]),
-          if (_error case final error?)
+          if (_error ?? (_changed ? _checked.problem : null) case final error?)
             Text(error, style: CvTypography.bodySm.copyWith(color: CvColors.textDanger)),
           SizedBox(
-            width: 1100,
+            width: 1240,
             child: CvSegmentedControl(
               segments: [
                 (value: _Section.about, label: 'About', icon: Lucide.info, checked: null),
@@ -356,6 +383,7 @@ class _ModuleEditorState extends State<ModuleEditor> {
                 (value: _Section.sheet, label: 'Sheet', icon: Lucide.userRound, checked: null),
                 (value: _Section.compendium, label: 'Compendium', icon: Lucide.bookOpen, checked: null),
                 (value: _Section.advancement, label: 'Advancement', icon: Lucide.layers, checked: null),
+                (value: _Section.preview, label: 'Try it', icon: Lucide.check, checked: null),
               ],
               value: _section,
               onChanged: (s) => setState(() => _section = s),
@@ -373,6 +401,7 @@ class _ModuleEditorState extends State<ModuleEditor> {
               _Section.sheet => _SheetTab(draft: d, change: _change),
               _Section.compendium => _CompendiumTab(draft: d, change: _change),
               _Section.advancement => _AdvancementTab(draft: d, change: _change),
+              _Section.preview => _PreviewTab(pack: _checked.pack, problem: _checked.problem),
             },
           ),
         ],

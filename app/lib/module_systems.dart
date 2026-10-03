@@ -753,3 +753,92 @@ class _EffectsEditor extends StatelessWidget {
         ),
       ]);
 }
+
+/// The Try it tab: the module's sheet on a sample character, as players will
+/// see it, its formulas worked out as values change and its actions rolled
+/// here, since no GM is there to roll them.
+class _PreviewTab extends StatefulWidget {
+  const _PreviewTab({required this.pack, required this.problem});
+
+  /// The module as it stands; null while something's wrong with it.
+  final SystemPack? pack;
+  final String? problem;
+
+  @override
+  State<_PreviewTab> createState() => _PreviewTabState();
+}
+
+class _PreviewTabState extends State<_PreviewTab> {
+  final _random = math.Random();
+  Character? _sample;
+  final _rolls = <String>[];
+
+  /// The sample, kept across edits and cleaned against the module as it
+  /// is now.
+  Character _character(SystemPack pack) => cleaned(
+      _sample ??= Character(
+        id: const CharacterId('preview'),
+        owner: const PlayerId('me'),
+        system: pack.id,
+        name: 'Sample',
+        values: pack.sheet!.start(),
+      ),
+      pack);
+
+  void _use(SystemPack pack, ActionDef action, Item? item) {
+    final use = useAction(pack, _character(pack), action, item: item);
+    if (use is! UseAction) return;
+    final dice = use.dice == null ? null : DiceFormula.tryParse(use.dice!);
+    setState(() {
+      _sample = use.character;
+      _rolls.insert(0, [
+        '${action.name}${use.dice == null ? '' : ' (${use.dice})'}',
+        if (dice != null)
+          for (var i = 0; i < use.times; i++)
+            () {
+              final faces = dice.roll(_random);
+              final total = dice.total(faces);
+              final band = action.bandFor(total);
+              return '$total${band == null ? action.bands.isEmpty ? '' : ' miss' : ' ${band.name}: ${band.text}'}';
+            }(),
+      ].join(' · '));
+      if (_rolls.length > 8) _rolls.removeLast();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final pack = widget.pack;
+    if (pack == null) {
+      return Text(widget.problem ?? '',
+          style: CvTypography.body.copyWith(color: CvColors.textDanger));
+    }
+    if (pack.sheet == null) return _hint('Give characters a sheet to try it.');
+    final c = _character(pack);
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, spacing: 16, children: [
+      Row(children: [
+        Expanded(
+            child: _hint('A sample character: change values, add items, take nodes '
+                'and use actions, rolled here.')),
+        CvButton(
+          label: 'Start again',
+          icon: Lucide.refreshCw,
+          small: true,
+          variant: CvButtonVariant.ghost,
+          onPressed: () => setState(() {
+            _sample = null;
+            _rolls.clear();
+          }),
+        ),
+      ]),
+      for (final r in _rolls)
+        Text(r, style: CvTypography.bodySm.copyWith(fontFamily: CvTypography.mono)),
+      SheetView(
+        pack: pack,
+        character: c,
+        onChanged: (changed) => setState(() => _sample = changed),
+        onAction: (action, item) => _use(pack, action, item),
+      ),
+    ]);
+  }
+}

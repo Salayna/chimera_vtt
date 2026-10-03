@@ -112,4 +112,60 @@ void main() {
     expect(saved!.sheet!.fields.single.least, 1);
     expect(saved!.compendium!.entries['P9 Pistol']!.kind, 'Weapon');
   });
+
+  testWidgets('Try it shows the sheet live; a problem shows as it is typed', (tester) async {
+    tester.view.physicalSize = const Size(1600, 1400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final client = SupabaseClient('http://127.0.0.1:9', 'key',
+        authOptions: const AuthClientOptions(autoRefreshToken: false));
+    final module = SystemPack.fromJson({
+      'id': 'mine',
+      'name': 'Mine',
+      'unit': 'ft',
+      'sheet': {
+        'sections': [
+          {
+            'title': 'Abilities',
+            'fields': [
+              {'name': 'STR', 'label': 'Strength', 'value': 10},
+              {'name': 'STR.mod', 'label': 'Modifier', 'type': 'computed', 'formula': 'floor((STR - 10) / 2)'},
+            ],
+          },
+        ],
+        'actions': [
+          {'name': 'Check', 'dice': 'd20', 'mod': 'STR.mod', 'bands': [{'name': 'Success', 'min': 1}]},
+        ],
+      },
+    });
+    await tester.pumpWidget(cvApp(
+      title: 'test',
+      home: ModuleEditor(
+        module: module,
+        assets: AssetStore(client),
+        onSave: (_) async {},
+        onClose: () {},
+      ),
+    ));
+    await tester.tap(find.text('Try it'));
+    await tester.pump();
+    for (var i = 0; i < 4; i++) {
+      await tester.tap(find.byWidgetPredicate((w) => w is CvToolButton && w.label == 'Strength +1'));
+      await tester.pump();
+    }
+    expect(find.text('2'), findsOneWidget, reason: 'the modifier of 14');
+    await tester.tap(find.text('Check'));
+    await tester.pump();
+    expect(find.textContaining('Check (d20+2) · '), findsOneWidget);
+    expect(find.textContaining('Success'), findsOneWidget);
+
+    await tester.tap(find.text('Sheet'));
+    await tester.pump();
+    await tester.enterText(
+        find.byWidgetPredicate(
+            (w) => w is EditableText && w.controller.text == 'floor((STR - 10) / 2)'),
+        'floor((STRR - 10) / 2)');
+    await tester.pump();
+    expect(find.textContaining('Unknown name "STRR"'), findsOneWidget);
+  });
 }
