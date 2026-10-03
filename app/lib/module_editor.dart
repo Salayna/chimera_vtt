@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:chimera_core/chimera_core.dart' show AssetId, DiceFormula;
 import 'package:flutter/widgets.dart';
 import 'package:tactical_engine/tactical_engine.dart';
@@ -8,9 +10,11 @@ import 'theme.dart';
 import 'ui/cv.dart';
 import 'ui/hub.dart';
 
+part 'module_systems.dart';
+
 /// A module being written: plain rows the editor changes in place, turned
 /// into a [SystemPack] on save. What the editor doesn't show (effects,
-/// range bands, turn forms, token trackers and starting tags, the sheet) is carried
+/// range bands, turn forms, token trackers and starting tags) is carried
 /// over from [base] unchanged.
 // ponytail: those are edited in the module's file for now; add them here
 // when GMs ask, they're already in the format.
@@ -30,7 +34,14 @@ class ModuleDraft {
         ],
         tokens = [
           for (final t in base?.tokens.values ?? const <TokenTemplate>[]) DraftToken.of(t),
-        ];
+        ],
+        sheet = _copy(base?.sheet?.toJson()),
+        compendium = _copy(base?.compendium?.toJson()),
+        advancement = _copy(base?.advancement?.toJson());
+
+  /// A mutable copy of [json], which the editor changes in place.
+  static Json? _copy(Json? json) =>
+      json == null ? null : jsonDecode(jsonEncode(json)) as Json;
 
   /// The installed module being edited; null for a new one.
   final SystemPack? base;
@@ -44,6 +55,12 @@ class ModuleDraft {
   final List<DraftTag> tags;
   final List<DraftTracker> trackers;
   final List<DraftToken> tokens;
+
+  /// The character sheet, compendium and advancement as the format's JSON,
+  /// which forms change in place; null for none.
+  Json? sheet;
+  Json? compendium;
+  Json? advancement;
 
   /// A new module's id, from its name: "Blades in the Dark" is
   /// `blades-in-the-dark`. An edited one keeps its own.
@@ -98,13 +115,18 @@ class ModuleDraft {
           TrackerDef(t.name.trim(), min: t.min, max: t.max, text: t.text.trim()),
       ],
       tags: [for (final t in tags) t.build()],
-      sheet: base?.sheet,
     );
     if (pack.initiative case final f? when DiceFormula.tryParse(f) == null) {
       throw FormatException('"$f" isn\'t a dice formula: try d20 or 2d6+1.');
     }
-    // The same checks as a file from anyone: names, lengths, duplicates.
-    return SystemPack.fromJson(pack.toJson());
+    // The same checks as a file from anyone: names, lengths, duplicates,
+    // formulas.
+    return SystemPack.fromJson({
+      ...pack.toJson(),
+      'sheet': ?sheet,
+      'compendium': ?compendium,
+      'advancement': ?advancement,
+    });
   }
 }
 
@@ -194,7 +216,7 @@ class DraftToken {
       ]);
 }
 
-enum _Section { about, rules, tags, trackers, tokens }
+enum _Section { about, rules, tags, trackers, tokens, sheet, compendium, advancement }
 
 /// Writing a module in the app (design: the hub's pages): what it is, its
 /// rules, its conditions and region tags, its trackers, and its ready-made
@@ -274,9 +296,9 @@ class _ModuleEditorState extends State<ModuleEditor> {
               child: HubTitle(
                 d.base == null ? 'New module' : 'Edit ${d.base!.name}',
                 overline: 'Module · ${d.id}',
-                subtitle: 'A game system with its rules, and the tokens and '
-                    'cards it brings. Saving installs it; Export shares it '
-                    'with its images.',
+                subtitle: 'A game system with its rules, its tokens and cards, '
+                    'and its characters: sheet, compendium, advancement. '
+                    'Saving installs it; Export shares it with its images.',
               ),
             ),
             CvButton(
@@ -294,7 +316,7 @@ class _ModuleEditorState extends State<ModuleEditor> {
           if (_error case final error?)
             Text(error, style: CvTypography.bodySm.copyWith(color: CvColors.textDanger)),
           SizedBox(
-            width: 640,
+            width: 1100,
             child: CvSegmentedControl(
               segments: [
                 (value: _Section.about, label: 'About', icon: Lucide.info, checked: null),
@@ -302,6 +324,9 @@ class _ModuleEditorState extends State<ModuleEditor> {
                 (value: _Section.tags, label: 'Tags ${d.tags.length}', icon: Lucide.scan, checked: null),
                 (value: _Section.trackers, label: 'Trackers ${d.trackers.length}', icon: Lucide.circleDashed, checked: null),
                 (value: _Section.tokens, label: 'Tokens ${d.tokens.length}', icon: Lucide.circle, checked: null),
+                (value: _Section.sheet, label: 'Sheet', icon: Lucide.userRound, checked: null),
+                (value: _Section.compendium, label: 'Compendium', icon: Lucide.bookOpen, checked: null),
+                (value: _Section.advancement, label: 'Advancement', icon: Lucide.layers, checked: null),
               ],
               value: _section,
               onChanged: (s) => setState(() => _section = s),
@@ -316,6 +341,9 @@ class _ModuleEditorState extends State<ModuleEditor> {
               _Section.tags => _tags(),
               _Section.trackers => _trackers(),
               _Section.tokens => _tokens(),
+              _Section.sheet => _SheetTab(draft: d, change: _change),
+              _Section.compendium => _CompendiumTab(draft: d, change: _change),
+              _Section.advancement => _AdvancementTab(draft: d, change: _change),
             },
           ),
         ],
