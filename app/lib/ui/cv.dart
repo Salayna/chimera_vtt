@@ -1113,7 +1113,9 @@ class CvMenuHeading<T> extends CvMenuEntry<T> {
 }
 
 /// A labelled select: shows the current item, opens a menu of [entries].
-/// [above] opens the menu upwards, for selects near the bottom.
+/// [above] opens the menu upwards, for selects near the bottom. The menu
+/// opens the other way when that side has more room for it, and scrolls
+/// when even that is too little.
 class CvDropdown<T> extends StatefulWidget {
   const CvDropdown({
     super.key,
@@ -1139,7 +1141,22 @@ class CvDropdown<T> extends StatefulWidget {
 class _CvDropdownState<T> extends State<CvDropdown<T>> {
   final _portal = OverlayPortalController();
   final _link = LayerLink();
+  final _target = GlobalKey();
   double _width = 220;
+
+  /// Room between the field and the screen's edge, above and below.
+  ({double above, double below}) _room(BuildContext context) {
+    const gap = 6 + CvSpacing.s4;
+    final box = _target.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) {
+      return (above: double.infinity, below: double.infinity);
+    }
+    final top = box.localToGlobal(Offset.zero).dy;
+    return (
+      above: top - gap,
+      below: MediaQuery.sizeOf(context).height - top - box.size.height - gap,
+    );
+  }
 
   void _toggle() => setState(_portal.toggle);
 
@@ -1173,33 +1190,43 @@ class _CvDropdownState<T> extends State<CvDropdown<T>> {
           child: CallbackShortcuts(
             bindings: {const SingleActivator(LogicalKeyboardKey.escape): _close},
             child: CompositedTransformTarget(
+              key: _target,
               link: _link,
               child: OverlayPortal(
                 controller: _portal,
-                overlayChildBuilder: (context) => Positioned(
-                  left: 0,
-                  top: 0,
-                  child: CompositedTransformFollower(
-                    link: _link,
-                    showWhenUnlinked: false,
-                    targetAnchor:
-                        widget.above ? Alignment.topLeft : Alignment.bottomLeft,
-                    followerAnchor:
-                        widget.above ? Alignment.bottomLeft : Alignment.topLeft,
-                    offset: Offset(0, widget.above ? -6 : 6),
-                    child: TapRegion(
-                      groupId: this,
-                      child: CvPopIn(
-                        child: CvMenu<T>(
-                          width: math.max(_width, 220),
-                          entries: widget.entries,
-                          value: widget.value,
-                          onSelected: _choose,
+                overlayChildBuilder: (context) {
+                  final room = _room(context);
+                  final needed = CvMenu.heightOf(widget.entries);
+                  final (want, other) = widget.above
+                      ? (room.above, room.below)
+                      : (room.below, room.above);
+                  final flip = want < needed && other > want;
+                  final up = widget.above != flip;
+                  return Positioned(
+                    left: 0,
+                    top: 0,
+                    child: CompositedTransformFollower(
+                      link: _link,
+                      showWhenUnlinked: false,
+                      targetAnchor: up ? Alignment.topLeft : Alignment.bottomLeft,
+                      followerAnchor: up ? Alignment.bottomLeft : Alignment.topLeft,
+                      offset: Offset(0, up ? -6 : 6),
+                      child: TapRegion(
+                        groupId: this,
+                        child: CvPopIn(
+                          child: CvMenu<T>(
+                            width: math.max(_width, 220),
+                            maxHeight: math.max(
+                                CvSizes.hit * 3, flip ? other : want),
+                            entries: widget.entries,
+                            value: widget.value,
+                            onSelected: _choose,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ),
+                  );
+                },
                 child: LayoutBuilder(builder: (context, constraints) {
                   _width = constraints.maxWidth;
                   return CvPressable(
@@ -1254,7 +1281,8 @@ class _CvDropdownState<T> extends State<CvDropdown<T>> {
   }
 }
 
-/// A list of choices on a solid popover surface.
+/// A list of choices on a solid popover surface, scrolling past
+/// [maxHeight].
 class CvMenu<T> extends StatelessWidget {
   const CvMenu({
     super.key,
@@ -1262,16 +1290,28 @@ class CvMenu<T> extends StatelessWidget {
     required this.onSelected,
     this.value,
     this.width = 220,
+    this.maxHeight = double.infinity,
   });
 
   final List<CvMenuEntry<T>> entries;
   final ValueChanged<T> onSelected;
   final T? value;
   final double width;
+  final double maxHeight;
+
+  /// How tall a menu of [entries] is, unscrolled.
+  static double heightOf(List<CvMenuEntry<Object?>> entries) =>
+      8 +
+      entries.fold(0.0, (h, e) => h + switch (e) {
+            CvMenuItem() => CvSizes.hit,
+            CvMenuHeading() => 32,
+            CvMenuDivider() => 9,
+          });
 
   @override
   Widget build(BuildContext context) => Container(
         width: width,
+        constraints: BoxConstraints(maxHeight: maxHeight),
         padding: const EdgeInsets.all(4),
         decoration: BoxDecoration(
           color: CvColors.surfacePanelSolid,
@@ -1279,7 +1319,8 @@ class CvMenu<T> extends StatelessWidget {
           border: Border.all(color: CvColors.borderSubtle),
           boxShadow: CvElevation.shadow2,
         ),
-        child: Column(
+        child: SingleChildScrollView(
+          child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -1324,6 +1365,7 @@ class CvMenu<T> extends StatelessWidget {
                   ),
               },
           ],
+          ),
         ),
       );
 }
