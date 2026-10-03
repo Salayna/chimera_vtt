@@ -4,7 +4,7 @@ import 'events.dart';
 
 /// Bumped on any incompatible message change. Clients on another version
 /// can't decode messages and report [ProtocolMismatch].
-const protocolVersion = 3; // 3: regions, initiative and the scene's pack.
+const protocolVersion = 4; // 4: installed packs ride with scenes; token trackers.
 
 final class ProtocolMismatch implements Exception {
   const ProtocolMismatch(this.version);

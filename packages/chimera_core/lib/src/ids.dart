@@ -16,7 +16,7 @@ extension type const PlayerId(String value) {}
 extension type const AssetId(String value) {}
 
 /// Which type of entity. Sent on the wire so a bare id can be resolved.
-enum EntityKind { settings, token, fogOp, region, initiative }
+enum EntityKind { settings, token, fogOp, region, initiative, pack }
 
 final _random = Random.secure();
 

@@ -10,6 +10,7 @@ final class Scene {
     Map<FogOpId, FogOp> fogOps = const {},
     Map<RegionId, Region> regions = const {},
     this.initiative,
+    this.packFile,
   })  : tokens = Map.unmodifiable(tokens),
         fogOps = Map.unmodifiable(fogOps),
         regions = Map.unmodifiable(regions);
@@ -25,6 +26,10 @@ final class Scene {
   /// The turn order, while a fight is on.
   final Initiative? initiative;
 
+  /// The installed pack the scene is played with, carried along; null for
+  /// a built-in pack.
+  final ScenePack? packFile;
+
   /// Fog ops in drawing order.
   List<FogOp> get fogInOrder =>
       fogOps.values.toList()..sort((a, b) => a.order.compareTo(b.order));
@@ -38,6 +43,7 @@ final class Scene {
         ...(regions.values.toList()
           ..sort((a, b) => a.id.value.compareTo(b.id.value))),
         ?initiative,
+        ?packFile,
       ];
 
   /// The only way a scene changes, for the GM and players alike.
@@ -51,6 +57,7 @@ final class Scene {
     Map<FogOpId, FogOp>? fogOps;
     Map<RegionId, Region>? regions;
     var initiative = this.initiative;
+    var packFile = this.packFile;
     for (final patch in patches) {
       switch (patch) {
         case Upsert(entity: final SceneSettings s):
@@ -67,6 +74,10 @@ final class Scene {
           (regions ??= {...this.regions}).remove(RegionId(id));
         case Delete(kind: EntityKind.initiative):
           initiative = null;
+        case Upsert(entity: final ScenePack p):
+          packFile = p;
+        case Delete(kind: EntityKind.pack):
+          packFile = null;
         case Delete(kind: EntityKind.token, :final id):
           (tokens ??= {...this.tokens}).remove(TokenId(id));
         case Delete(kind: EntityKind.fogOp, :final id):
@@ -81,10 +92,12 @@ final class Scene {
       fogOps == null ? this.fogOps : Map.unmodifiable(fogOps),
       regions == null ? this.regions : Map.unmodifiable(regions),
       initiative,
+      packFile,
     );
   }
 
-  Scene._(this.settings, this.tokens, this.fogOps, this.regions, this.initiative);
+  Scene._(this.settings, this.tokens, this.fogOps, this.regions,
+      this.initiative, this.packFile);
 
   Json toJson() => {
         'format': format,

@@ -1,3 +1,4 @@
+import 'dart:convert' show jsonEncode;
 import 'dart:math' as math;
 
 import 'actor.dart';
@@ -43,7 +44,8 @@ Outcome reduce(Scene scene, Actor actor, Command command) {
       command is! RollDice &&
       command is! Say &&
       command is! Ping &&
-      command is! EndTurn) {
+      command is! EndTurn &&
+      command is! SetTracker) {
     return const Refused(Refusal.gmOnly);
   }
   return switch (command) {
@@ -112,6 +114,9 @@ Outcome reduce(Scene scene, Actor actor, Command command) {
         ? const Refused(Refusal.notFound)
         : const Accepted([Delete(EntityKind.initiative, '')]),
     EndTurn() => _endTurn(scene, actor),
+    UsePack(:final id, :final data) => _usePack(scene, id, data),
+    SetTracker(:final id, :final name, :final value) =>
+      _own(scene, actor, id, (t) => _setTracker(t, name, value)),
     AddFogOp(:final id, :final mode, :final shape) => scene.fogOps
             .containsKey(id)
         ? const Refused(Refusal.duplicateId)
@@ -176,6 +181,42 @@ Outcome _editToken(Scene scene, TokenId id, Token Function(Token) edit) {
   return token == null
       ? const Refused(Refusal.notFound)
       : Accepted([Upsert(edit(token))]);
+}
+
+/// How many trackers a token holds, and their range.
+const maxTrackers = 20;
+const maxTrackerValue = 99999;
+
+Outcome? _setTracker(Token token, String name, int? value) {
+  if (value == null) {
+    return token.trackers.containsKey(name)
+        ? Accepted([Upsert(token.withTrackers({...token.trackers}..remove(name)))])
+        : const Accepted([]);
+  }
+  if (!_validTags({name: null}) ||
+      value.abs() > maxTrackerValue ||
+      (!token.trackers.containsKey(name) && token.trackers.length >= maxTrackers)) {
+    return null;
+  }
+  if (token.trackers[name] == value) return const Accepted([]);
+  return Accepted([Upsert(token.withTrackers({...token.trackers, name: value}))]);
+}
+
+/// The settings name the pack; an installed one's file rides along, and a
+/// built-in one needs none.
+Outcome _usePack(Scene scene, String id, Json? data) {
+  if (id.isEmpty || id.length > 40) return const Refused(Refusal.invalid);
+  if (data != null &&
+      (data['id'] != id || jsonEncode(data).length > ScenePack.maxBytes)) {
+    return const Refused(Refusal.invalid);
+  }
+  return Accepted([
+    Upsert(scene.settings.copyWith(pack: id)),
+    if (data != null)
+      Upsert(ScenePack(data))
+    else if (scene.packFile != null)
+      const Delete(EntityKind.pack, ''),
+  ]);
 }
 
 /// Bounds for tags typed by people, on regions as on tokens.

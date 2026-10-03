@@ -32,6 +32,7 @@ sealed class Entity {
       EntityKind.fogOp => FogOp._fromJson(json),
       EntityKind.region => Region._fromJson(json),
       EntityKind.initiative => Initiative._fromJson(json),
+      EntityKind.pack => ScenePack._fromJson(json),
     };
   }
 }
@@ -190,6 +191,7 @@ final class Token extends Entity {
     this.hidden = false,
     this.name = '',
     this.conditions = const {},
+    this.trackers = const {},
   });
 
   final TokenId id;
@@ -214,6 +216,9 @@ final class Token extends Entity {
   /// Saving to Postgres (jsonb) may reorder them.
   final Map<String, int?> conditions;
 
+  /// The pack's trackers by name, such as HP 12. Only those set are here.
+  final Map<String, int> trackers;
+
   @override
   EntityKind get kind => EntityKind.token;
 
@@ -225,7 +230,8 @@ final class Token extends Entity {
       owner: owner,
       hidden: hidden,
       name: name,
-      conditions: conditions);
+      conditions: conditions,
+      trackers: trackers);
 
   Token withOwner(PlayerId? owner) => Token(
       id: id,
@@ -235,7 +241,8 @@ final class Token extends Entity {
       owner: owner,
       hidden: hidden,
       name: name,
-      conditions: conditions);
+      conditions: conditions,
+      trackers: trackers);
 
   Token withHidden(bool hidden) => Token(
       id: id,
@@ -245,7 +252,8 @@ final class Token extends Entity {
       owner: owner,
       hidden: hidden,
       name: name,
-      conditions: conditions);
+      conditions: conditions,
+      trackers: trackers);
 
   /// The owner can't be cleared here: use [withOwner].
   Token copyWith(
@@ -262,7 +270,8 @@ final class Token extends Entity {
           owner: owner,
           hidden: hidden,
           name: name ?? this.name,
-          conditions: conditions);
+          conditions: conditions,
+      trackers: trackers);
 
   Token withConditions(Map<String, int?> conditions) => Token(
       id: id,
@@ -272,7 +281,19 @@ final class Token extends Entity {
       owner: owner,
       hidden: hidden,
       name: name,
-      conditions: Map.unmodifiable(conditions));
+      conditions: Map.unmodifiable(conditions),
+      trackers: trackers);
+
+  Token withTrackers(Map<String, int> trackers) => Token(
+      id: id,
+      position: position,
+      size: size,
+      image: image,
+      owner: owner,
+      hidden: hidden,
+      name: name,
+      conditions: conditions,
+      trackers: Map.unmodifiable(trackers));
 
   @override
   Json _fields() => {
@@ -284,6 +305,7 @@ final class Token extends Entity {
         'hidden': hidden,
         if (name.isNotEmpty) 'name': name,
         if (conditions.isNotEmpty) 'conditions': conditions,
+        if (trackers.isNotEmpty) 'trackers': trackers,
       };
 
   factory Token._fromJson(Json json) => Token(
@@ -295,6 +317,11 @@ final class Token extends Entity {
         hidden: json['hidden'] as bool,
         name: json['name'] as String? ?? '',
         conditions: _tagsFromJson(json['conditions']),
+        trackers: Map.unmodifiable({
+          for (final MapEntry(:key, :value)
+              in (json['trackers'] as Map? ?? const {}).entries)
+            key as String: value as int,
+        }),
       );
 }
 
@@ -529,4 +556,27 @@ final class Initiative extends Entity {
             ),
         ],
       );
+}
+
+/// The system pack a scene is played with, as its module file, when it
+/// isn't built in: players and scene files get the system with the scene.
+/// Single-instance, like the settings; core doesn't read [data].
+final class ScenePack extends Entity {
+  const ScenePack(this.data);
+
+  /// Packs are small; this bounds what a scene carries.
+  static const maxBytes = 256 * 1024;
+
+  final Json data;
+
+  /// The pack's id, as [SceneSettings.pack] names it.
+  String? get id => data['id'] as String?;
+
+  @override
+  EntityKind get kind => EntityKind.pack;
+
+  @override
+  Json _fields() => {'data': data};
+
+  factory ScenePack._fromJson(Json json) => ScenePack(json['data'] as Json);
 }

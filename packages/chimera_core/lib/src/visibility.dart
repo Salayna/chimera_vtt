@@ -24,6 +24,7 @@ Scene visibleTo(Scene scene, Actor viewer) => switch (viewer) {
             final i? => _initiativeFor(i, scene),
             null => null,
           },
+          packFile: scene.packFile,
         ),
     };
 

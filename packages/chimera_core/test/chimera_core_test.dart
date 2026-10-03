@@ -265,7 +265,7 @@ void main() {
     Command randomCommand() {
       final id = ids[random.nextInt(ids.length)];
       final region = RegionId('r${random.nextInt(3)}');
-      return switch (random.nextInt(10)) {
+      return switch (random.nextInt(12)) {
         0 => PlaceToken(token(id.value, hidden: random.nextBool())),
         1 => MoveToken(id, (x: random.nextDouble() * 4096, y: 0)),
         2 => AssignOwner(id, players[random.nextInt(2)].id),
@@ -290,7 +290,11 @@ void main() {
               for (final t in gmScene.tokens.keys)
                 (token: t, value: random.nextInt(20)),
             ]))),
-        _ => random.nextBool() ? const EndTurn() : const EndInitiative(),
+        9 => random.nextBool() ? const EndTurn() : const EndInitiative(),
+        10 => SetTracker(id, 'HP', random.nextBool() ? random.nextInt(30) : null),
+        _ => random.nextBool()
+            ? const UsePack('dnd5e')
+            : const UsePack('mine', data: {'id': 'mine', 'name': 'Mine'}),
       };
     }
 
@@ -421,5 +425,40 @@ void main() {
     expect(brush.contains((x: 50, y: 11)), isFalse);
     expect(const FogBrush([(x: 5, y: 5)], 3).contains((x: 7, y: 5)), isTrue);
     expect(const FogRect((x: 10, y: 10), (x: 0, y: 0)).contains((x: 5, y: 5)), isTrue);
+  });
+
+  group('packs and trackers', () {
+    const mine = {'id': 'mine', 'name': 'Mine', 'unit': 'ft'};
+
+    test('an installed pack rides with the scene; a built-in one drops it', () {
+      var scene = sceneWith([]);
+      expect(reduce(scene, alice, const UsePack('mine', data: mine)), isA<Refused>());
+      expect(reduce(scene, gm, const UsePack('other', data: mine)), isA<Refused>());
+      scene = scene.applyPatches(
+          (reduce(scene, gm, const UsePack('mine', data: mine)) as Accepted).patches);
+      expect(scene.settings.pack, 'mine');
+      expect(visibleTo(scene, alice).packFile!.id, 'mine');
+      final decoded = Scene.fromJson(jsonDecode(jsonEncode(scene.toJson())) as Json);
+      expect(decoded.packFile!.data, mine);
+      scene = scene.applyPatches(
+          (reduce(scene, gm, const UsePack('dnd5e')) as Accepted).patches);
+      expect((scene.settings.pack, scene.packFile), ('dnd5e', null));
+    });
+
+    test('players track their own tokens; values are bounded', () {
+      final scene = sceneWith([token('a', owner: alice.id), token('b')]);
+      final set = reduce(scene, alice, const SetTracker(TokenId('a'), 'HP', 12));
+      final after = scene.applyPatches((set as Accepted).patches);
+      expect(after.tokens[const TokenId('a')]!.trackers, {'HP': 12});
+      expect(reduce(scene, alice, const SetTracker(TokenId('b'), 'HP', 3)),
+          isA<Refused>());
+      expect(reduce(scene, gm, const SetTracker(TokenId('b'), 'HP', 1000000)),
+          isA<Refused>());
+      final cleared = reduce(after, alice, const SetTracker(TokenId('a'), 'HP', null));
+      expect(after.applyPatches((cleared as Accepted).patches)
+          .tokens[const TokenId('a')]!.trackers, isEmpty);
+      final moved = after.tokens[const TokenId('a')]!.moveTo((x: 1, y: 1));
+      expect(moved.trackers, {'HP': 12});
+    });
   });
 }

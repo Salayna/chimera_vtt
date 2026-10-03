@@ -46,6 +46,9 @@ sealed class Command {
             Entity.fromJson(json['initiative'] as Json) as Initiative),
         'endInitiative' => const EndInitiative(),
         'endTurn' => const EndTurn(),
+        'usePack' => UsePack(json['id'] as String, data: json['data'] as Json?),
+        'setTracker' => SetTracker(TokenId(json['id'] as String),
+            json['name'] as String, json['value'] as int?),
         final type => throw FormatException('Unknown command: $type'),
       };
 }
@@ -233,6 +236,36 @@ final class EndTurn extends Command {
 
   @override
   Json toJson() => {'type': 'endTurn'};
+}
+
+/// Plays the scene with the pack [id]: a built-in one, or an installed one
+/// whose module file is [data], carried by the scene from then on.
+final class UsePack extends Command {
+  const UsePack(this.id, {this.data});
+
+  final String id;
+  final Json? data;
+
+  @override
+  Json toJson() => {'type': 'usePack', 'id': id, if (data != null) 'data': data};
+}
+
+/// Sets a token's tracker, or clears it with a null [value]. Players may,
+/// on their own tokens. The pack's bounds are the app's to apply.
+final class SetTracker extends Command {
+  const SetTracker(this.id, this.name, this.value);
+
+  final TokenId id;
+  final String name;
+  final int? value;
+
+  @override
+  Json toJson() => {
+        'type': 'setTracker',
+        'id': id.value,
+        'name': name,
+        if (value != null) 'value': value,
+      };
 }
 
 /// The following commands change nothing in the scene: the GM session turns
