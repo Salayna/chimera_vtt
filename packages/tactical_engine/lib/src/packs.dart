@@ -29,7 +29,7 @@ final _dnd5e = SystemPack(
   unitsPerStep: 5,
   initiative: 'd20',
   compendium: _dnd5eWeapons,
-  advancement: _dnd5eLevels,
+  advancements: [_dnd5eLevels],
   sheet: _dnd5eSheet,
   tags: const [
     TagDef('Blinded',

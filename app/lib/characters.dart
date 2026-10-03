@@ -83,7 +83,6 @@ Character cleaned(Character c, SystemPack? system) {
   final sheet = system?.sheet;
   if (sheet == null) return c;
   final compendium = system!.compendium;
-  final advancement = system.advancement;
   return c.copyWith(
     values: sheet.clean(c.values),
     items: [
@@ -99,7 +98,7 @@ Character cleaned(Character c, SystemPack? system) {
         },
     ],
     nodes: [
-      for (final n in c.nodes) advancement?.nodeNow(n) ?? n,
+      for (final n in c.nodes) system.nodeNow(n),
     ],
   );
 }

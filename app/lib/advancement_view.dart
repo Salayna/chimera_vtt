@@ -8,7 +8,7 @@ import 'advancement.dart';
 import 'theme.dart';
 import 'ui/cv.dart';
 
-/// A pack's advancement as a graph: each node where the pack puts it (or in
+/// One of a pack's advancement tracks as a graph: each node where the pack puts it (or in
 /// a row, a chain), lines to what it requires, taken nodes in amber and
 /// those that can be taken outlined in teal. [onChanged] takes the
 /// character having taken one; null shows the graph read-only.
@@ -16,11 +16,13 @@ class AdvancementView extends StatelessWidget {
   const AdvancementView({
     super.key,
     required this.pack,
+    required this.track,
     required this.character,
     this.onChanged,
   });
 
   final SystemPack pack;
+  final Advancement track;
   final Character character;
   final ValueChanged<Character>? onChanged;
 
@@ -29,7 +31,7 @@ class AdvancementView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final adv = pack.advancement!;
+    final adv = track;
     final nodes = adv.nodes.values.toList();
     final at = {
       for (final (i, n) in nodes.indexed)

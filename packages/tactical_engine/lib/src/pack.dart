@@ -342,7 +342,7 @@ final class SystemPack {
     this.cover,
     this.sheet,
     this.compendium,
-    this.advancement,
+    this.advancements = const [],
   })  : tags = {for (final t in tags) t.name: t},
         tokens = {for (final t in tokens) t.name: t};
 
@@ -371,8 +371,28 @@ final class SystemPack {
   /// Its entries by kind, which characters hold copies of as items.
   final Compendium? compendium;
 
-  /// The nodes its characters take: a Constellation, a chain of levels.
-  final Advancement? advancement;
+  /// The tracks of nodes its characters take: a Constellation, a chain of
+  /// levels. Node names are unique across them.
+  final List<Advancement> advancements;
+
+  /// The track holding node [name], under its name now (see [nodeNow]).
+  Advancement? trackOf(String name) =>
+      advancements.where((a) => a.nodes.containsKey(nodeNow(name))).firstOrNull;
+
+  /// Node [name] in any track, under its name now.
+  AdvancementNode? node(String name) => trackOf(name)?.nodes[nodeNow(name)];
+
+  /// The node [name] is now: itself, or the one it was renamed to.
+  String nodeNow(String name) {
+    for (final a in advancements) {
+      if (a.nodes.containsKey(name)) return name;
+    }
+    for (final a in advancements) {
+      final now = a.nodeNow(name);
+      if (now != name) return now;
+    }
+    return name;
+  }
 
   /// Every image the module uses, which its bundle carries.
   Set<String> get assets => {
@@ -460,7 +480,11 @@ final class SystemPack {
         if (trackers.isNotEmpty) 'trackers': [for (final t in trackers) t.toJson()],
         if (compendium != null) 'compendium': compendium!.toJson(),
         if (sheet != null) 'sheet': sheet!.toJson(),
-        if (advancement != null) 'advancement': advancement!.toJson(),
+        // One track as an object, as files had it before there were several.
+        if (advancements.length == 1)
+          'advancement': advancements.single.toJson()
+        else if (advancements.isNotEmpty)
+          'advancement': [for (final a in advancements) a.toJson()],
         'tags': [for (final t in tags.values) t.toJson()],
       };
 
@@ -485,10 +509,20 @@ final class SystemPack {
       if (tags.map((t) => t.name).toSet().length != tags.length) {
         throw const FormatException('Two tags share a name');
       }
-      final advancement = switch (json['advancement']) {
-        null => null,
-        final a => Advancement.fromJson(a as Json),
+      final advancements = switch (json['advancement']) {
+        null => const <Advancement>[],
+        final List<Object?> list => [
+            for (final a in _list(list, 'advancement tracks', 5)) Advancement.fromJson(a as Json),
+          ],
+        final a => [Advancement.fromJson(a as Json)],
       };
+      final nodeNames = <String>{};
+      for (final a in advancements) {
+        for (final n in a.nodes.keys) {
+          if (!nodeNames.add(n)) throw FormatException('Two nodes are called "$n"');
+        }
+      }
+      final groups = {for (final a in advancements) ...a.groups};
       final compendium = switch (json['compendium']) {
         null => null,
         final c => Compendium.fromJson(c as Json),
@@ -532,15 +566,17 @@ final class SystemPack {
         ],
         tags: tags,
         compendium: compendium,
-        advancement: advancement,
+        advancements: advancements,
         sheet: switch (json['sheet']) {
           null => null,
           final s => SheetDef.fromJson(s as Json,
-              kinds: compendium?.kinds ?? const {}, groups: advancement?.groups ?? const {}),
+              kinds: compendium?.kinds ?? const {}, groups: groups),
         },
       );
       _checkActions(pack.sheet, pack.compendium);
-      advancement?.check(pack.sheet, pack.compendium);
+      for (final a in advancements) {
+        a.check(pack.sheet, pack.compendium, groups: groups);
+      }
       return pack;
     } on FormatException {
       rethrow;

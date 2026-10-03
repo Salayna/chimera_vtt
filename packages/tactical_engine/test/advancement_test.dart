@@ -48,7 +48,7 @@ void main() {
       {'name': 'archetypes', 'type': 'computed', 'formula': 'count("Archetype")'},
     ]));
     expect(SystemPack.fromJson(p.toJson()).toJson(), p.toJson());
-    expect(p.advancement!.groups, {'Archetype'});
+    expect(p.advancements.single.groups, {'Archetype'});
     final v = SheetValues(p.sheet!, const {}, groups: ['Archetype', 'Archetype']);
     expect(v['archetypes'], 2);
   });
@@ -64,5 +64,32 @@ void main() {
     expect(error(pack([{'name': 'A', 'cost': -1}])), contains('cost'));
     expect(error({...pack(const []), 'advancement': {'name': 'L', 'field': 'XP', 'nodes': <Json>[]}}),
         contains('spends "XP"'));
+  });
+
+  test('a module may have several tracks; node names are unique across them', () {
+    Json track(String name, List<Json> nodes) => {'name': name, 'field': 'CP', 'nodes': nodes};
+    final two = SystemPack.fromJson({
+      ...pack(const []),
+      'advancement': [
+        track('Threat Level', [
+          {'name': 'Alpha 1', 'cost': 0, 'adds': {'CP': 1}},
+        ]),
+        track('Archetypes', [
+          {'name': 'Duelist 1', 'group': 'Archetype'},
+        ]),
+      ],
+    });
+    expect([for (final a in two.advancements) a.name], ['Threat Level', 'Archetypes']);
+    expect(two.trackOf('Duelist 1')!.name, 'Archetypes');
+    expect(SystemPack.fromJson(two.toJson()).advancements.length, 2);
+    expect(
+        error({
+          ...pack(const []),
+          'advancement': [
+            track('A', [{'name': 'X'}]),
+            track('B', [{'name': 'X'}]),
+          ],
+        }),
+        contains('Two nodes are called "X"'));
   });
 }

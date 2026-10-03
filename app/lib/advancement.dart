@@ -3,10 +3,9 @@ import 'package:tactical_engine/tactical_engine.dart';
 
 /// What [c]'s sheet reads, with its items and taken nodes, for `count`.
 SheetValues readSheet(SystemPack pack, Character c) {
-  final nodes = pack.advancement?.nodes ?? const {};
   return SheetValues(pack.sheet!, c.values,
       items: [for (final i in c.items) (kind: i.kind, values: i.values)],
-      groups: [for (final n in c.nodes) ?nodes[n]?.group]);
+      groups: [for (final n in c.nodes) ?pack.node(n)?.group]);
 }
 
 /// Why [c] can't take [node], or null when they can.
@@ -19,7 +18,7 @@ String? whyNot(SystemPack pack, Character c, AdvancementNode node) {
   if (missing.isNotEmpty) return 'Needs ${missing.join(', ')}';
   final read = readSheet(pack, c);
   if (node.condition case final f? when read.run(f) != true) return 'Needs $f';
-  final field = pack.advancement!.field;
+  final field = pack.trackOf(node.name)!.field;
   if (read.number(field) < node.cost) return 'Needs ${node.cost} $field';
   return null;
 }
@@ -28,7 +27,7 @@ String? whyNot(SystemPack pack, Character c, AdvancementNode node) {
 /// given as items. Check [whyNot] first.
 Character take(SystemPack pack, Character c, AdvancementNode node) {
   final read = readSheet(pack, c);
-  final field = pack.advancement!.field;
+  final field = pack.trackOf(node.name)!.field;
   final values = {
     ...c.values,
     field: read.number(field).toInt() - node.cost,

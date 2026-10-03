@@ -51,7 +51,7 @@ Character fresh() => Character(
 
 void main() {
   test('nodes are taken along the graph, paid with CP, granting what they give', () {
-    final n = pack.advancement!.nodes;
+    final n = pack.advancements.single.nodes;
     var c = fresh();
     expect(whyNot(pack, c, n['Duelist']!), 'Needs Origin');
     c = take(pack, c, n['Origin']!);
@@ -76,7 +76,7 @@ void main() {
         system: 'dnd5e',
         name: 'Ayla',
         values: {...dnd.sheet!.start(), 'XP': 1000});
-    final levels = dnd.advancement!.nodes;
+    final levels = dnd.advancements.single.nodes;
     expect(whyNot(dnd, c, levels['Level 3']!), 'Needs Level 2');
     c = take(dnd, c, levels['Level 2']!);
     c = take(dnd, c, levels['Level 3']!);
@@ -91,6 +91,7 @@ void main() {
       home: StatefulBuilder(
         builder: (context, setState) => AdvancementView(
           pack: pack,
+          track: pack.advancements.single,
           character: c,
           onChanged: (changed) => setState(() => c = changed),
         ),

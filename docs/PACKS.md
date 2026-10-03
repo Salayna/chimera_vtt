@@ -161,7 +161,7 @@ Limits: 20 actions on a sheet, a kind or an entry.
 ]}
 ```
 
-`field` is the sheet number or tracker costs are paid from. A node has a `name`, `text`, a `cost` (1 by default, 0 to 1000), `requires` (taken once any of these is; none for a first node), `requiresAll` (once all are), a `condition` (a boolean formula on the sheet), `adds` (to number fields, kept within their bounds), `items` (entries given as items), a `group` (`count("Archetype")` counts taken nodes of it as well as items of that kind), and `x` and `y` to draw it (in a row by default). Limits: 300 nodes, each requiring up to 20.
+`advancement` may also be a list of up to 5 tracks, each with its own name, field and nodes (Solaris: the Threat Level's ranks, the archetypes, the Constellation); each is drawn apart on the sheet, node names are unique across them, and `count` counts groups across all of them. `field` is the sheet number or tracker a track's costs are paid from. A node has a `name`, `text`, a `cost` (1 by default, 0 to 1000), `requires` (taken once any of these is; none for a first node), `requiresAll` (once all are), a `condition` (a boolean formula on the sheet), `adds` (to number fields, kept within their bounds), `items` (entries given as items), a `group` (`count("Archetype")` counts taken nodes of it as well as items of that kind), and `x` and `y` to draw it (in a row by default). Limits: 300 nodes, each requiring up to 20.
 
 
 ## Atlas VTT presets

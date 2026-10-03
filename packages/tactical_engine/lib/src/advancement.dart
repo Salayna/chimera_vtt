@@ -146,7 +146,9 @@ final class Advancement {
     if (names.length != nodes.length) throw const FormatException('Two nodes share a name');
     for (final n in nodes) {
       for (final r in [...n.requires, ...n.requiresAll]) {
-        if (!names.contains(r)) throw FormatException('${n.name} requires "$r", which isn\'t a node');
+        if (!names.contains(r)) {
+          throw FormatException('${n.name} requires "$r", which isn\'t a node of its track');
+        }
       }
     }
     return Advancement(
@@ -158,7 +160,8 @@ final class Advancement {
 
   /// Its field, conditions, grants and items checked against the [sheet]
   /// and [compendium].
-  void check(SheetDef? sheet, Compendium? compendium) {
+  void check(SheetDef? sheet, Compendium? compendium, {Set<String>? groups}) {
+    final allGroups = groups ?? this.groups;
     final s = sheet ?? (throw const FormatException('An advancement needs a sheet'));
     final f = s.fields.where((f) => f.name == field).firstOrNull;
     if (f == null || (f.type != FieldType.number && f.type != FieldType.tracker)) {
@@ -177,7 +180,7 @@ final class Advancement {
           throw FormatException('${n.name} condition gives a ${got.name}, not a boolean');
         }
         for (final (:kind, field: _) in c.items) {
-          if (!s.kinds.containsKey(kind) && !groups.contains(kind)) {
+          if (!s.kinds.containsKey(kind) && !allGroups.contains(kind)) {
             throw FormatException('${n.name} condition: no kind or group "$kind"');
           }
         }

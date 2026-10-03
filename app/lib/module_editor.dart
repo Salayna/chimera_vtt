@@ -43,7 +43,9 @@ class ModuleDraft {
         forms = _jsonList(base?.toJson()['forms']),
         sheet = _copy(base?.sheet?.toJson()),
         compendium = _copy(base?.compendium?.toJson()),
-        advancement = _copy(base?.advancement?.toJson()) {
+        advancements = [
+          for (final a in base?.advancements ?? const <Advancement>[]) _copy(a.toJson())!,
+        ] {
     // Each named row remembers the name it came with, so renaming it
     // records its former name for characters who still carry it.
     for (final row in _named()) {
@@ -65,7 +67,9 @@ class ModuleDraft {
       yield* rows(k['fields']);
     }
     yield* rows(compendium?['entries']);
-    yield* rows(advancement?['nodes']);
+    for (final a in advancements) {
+      yield* rows(a['nodes']);
+    }
   }
 
   /// The draft's JSON as the format has it: a renamed row's former name in
@@ -117,11 +121,13 @@ class ModuleDraft {
   final List<Json> bands;
   final List<Json> forms;
 
-  /// The character sheet, compendium and advancement as the format's JSON,
+  /// The character sheet and compendium as the format's JSON,
   /// which forms change in place; null for none.
   Json? sheet;
   Json? compendium;
-  Json? advancement;
+
+  /// Its advancement tracks, as the format's JSON.
+  final List<Json> advancements;
 
   /// A new module's id, from its name: "Blades in the Dark" is
   /// `blades-in-the-dark`. An edited one keeps its own.
@@ -186,7 +192,11 @@ class ModuleDraft {
       'tags': [for (final t in tags) t.toJson()],
       'sheet': ?_saved(sheet),
       'compendium': ?_saved(compendium),
-      'advancement': ?_saved(advancement),
+      'advancement': switch (advancements) {
+        [] => null,
+        [final one] => _saved(one),
+        final all => [for (final a in all) _saved(a)],
+      },
     });
   }
 }

@@ -603,33 +603,65 @@ class _EntryValues extends StatelessWidget {
   }
 }
 
-/// The Advancement tab: what it spends, and its nodes.
-class _AdvancementTab extends StatelessWidget {
+/// The Advancement tab: its tracks (a Threat Level chain, a Constellation),
+/// each with what it spends and its nodes.
+class _AdvancementTab extends StatefulWidget {
   const _AdvancementTab({required this.draft, required this.change});
 
   final ModuleDraft draft;
   final _Change change;
 
   @override
+  State<_AdvancementTab> createState() => _AdvancementTabState();
+}
+
+class _AdvancementTabState extends State<_AdvancementTab> {
+  Json? _track;
+
+  @override
   Widget build(BuildContext context) {
-    final adv = draft.advancement;
-    if (adv == null) {
-      return Column(crossAxisAlignment: CrossAxisAlignment.start, spacing: 12, children: [
-        _hint('Nodes characters take with a sheet number: a Constellation bought '
-            'with CP, levels reached with XP.'),
-        CvButton(
-          label: 'Add an advancement',
-          icon: Lucide.plus,
-          onPressed: () => change(() => draft.advancement = {
-                'name': 'Advancement',
-                'field': '',
-                'nodes': <Object?>[],
-              }),
-        ),
-      ]);
-    }
+    final change = widget.change;
+    final tracks = widget.draft.advancements;
+    final adv = tracks.contains(_track) ? _track : tracks.firstOrNull;
+    return Row(crossAxisAlignment: CrossAxisAlignment.start, spacing: 24, children: [
+      SizedBox(
+        width: 220,
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, spacing: 4, children: [
+          for (final t in tracks)
+            CvButton(
+              key: ObjectKey(t),
+              label: _show(t['name']).isEmpty ? 'Unnamed track' : _show(t['name']),
+              variant: t == adv ? CvButtonVariant.primary : CvButtonVariant.ghost,
+              small: true,
+              block: true,
+              onPressed: () => setState(() => _track = t),
+            ),
+          const SizedBox(height: 8),
+          CvButton(
+            label: 'Add a track',
+            icon: Lucide.plus,
+            small: true,
+            block: true,
+            onPressed: () => change(() {
+              final t = <String, Object?>{'name': '', 'field': '', 'nodes': <Object?>[]};
+              tracks.add(t);
+              _track = t;
+            }),
+          ),
+        ]),
+      ),
+      Expanded(
+        child: adv == null
+            ? _hint('Tracks of nodes characters take with a sheet number: a '
+                'Constellation bought with CP, levels reached with XP.')
+            : _trackForm(adv, change, () => change(() => tracks.remove(adv))),
+      ),
+    ]);
+  }
+
+  Widget _trackForm(Json adv, _Change change, VoidCallback onRemove) {
     final nodes = _listAt(adv, 'nodes');
-    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, spacing: 12, children: [
+    return Column(key: ObjectKey(adv), crossAxisAlignment: CrossAxisAlignment.stretch, spacing: 12, children: [
       Row(crossAxisAlignment: CrossAxisAlignment.start, spacing: 8, children: [
         SizedBox(
             width: 260,
@@ -641,16 +673,16 @@ class _AdvancementTab extends StatelessWidget {
                 change: change, label: 'Spends', placeholder: 'A sheet number: CP', text: true, maxLength: 30)),
         const Spacer(),
         CvButton(
-          label: 'Remove the advancement',
+          label: 'Remove the track',
           icon: Lucide.trash2,
           variant: CvButtonVariant.dangerGhost,
           small: true,
-          onPressed: () => change(() => draft.advancement = null),
+          onPressed: onRemove,
         ),
       ]),
       _hint('A node is taken once any node it requires is, and all it requires '
           'all of, its condition holds and its cost is paid. Its group counts '
-          'with count("Group").'),
+          'with count("Group"), across tracks.'),
       for (final n in nodes.cast<Json>())
         _Card(
           key: ObjectKey(n),

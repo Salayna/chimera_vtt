@@ -89,7 +89,7 @@ void main() {
     final v = SheetValues(pack.sheet!, {...pack.sheet!.start(), 'END': 4, 'WIL': 3, 'threatLevel': 2},
         items: [(kind: 'Armor', values: pack.compendium!.start(pack.compendium!.entries['Test Vest']!))]);
     expect((v['stressThreshold'], v['AP.max'], v['AG.max'], v['rangedMod']), (9, 7, 3, 5));
-    expect(pack.advancement!.nodes['Test Star']!.items, ['Test Star']);
+    expect(pack.advancements.single.nodes['Test Star']!.items, ['Test Star']);
   });
 
   test('classes and archetypes become entries and Constellation nodes', () {
@@ -117,7 +117,7 @@ void main() {
       'advancement': constellation(const [], found.archetypes),
       'sheet': sheet,
     });
-    final nodes = pack.advancement!.nodes;
+    final nodes = pack.advancements.single.nodes;
     expect(nodes['Bastion']!.condition!.text, 'class == "Bastion"');
     expect(nodes['Tester 1']!.requires, ['Bastion']);
     expect((nodes['Tester 1']!.group, nodes['Tester 1']!.cost), ('Archetype', 5));

@@ -81,10 +81,11 @@ class SheetView extends StatelessWidget {
         );
     final sections = [for (final s in _sheet.sections) (title: s.title, child: section(s))];
     final rest = [
-      if (pack.advancement case final adv?)
+      for (final adv in pack.advancements)
         (
           title: adv.name,
-          child: AdvancementView(pack: pack, character: character, onChanged: onChanged),
+          child: AdvancementView(
+              pack: pack, track: adv, character: character, onChanged: onChanged),
         ),
       if (onAction != null && _sheet.actions.isNotEmpty)
         (title: 'Actions', child: _actions(_sheet.actions, null)),

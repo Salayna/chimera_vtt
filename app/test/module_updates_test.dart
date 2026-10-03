@@ -57,7 +57,7 @@ void main() {
     ((d.compendium!['entries'] as List).first as Map)
       ..['name'] = 'Rifle'
       ..['kind'] = 'Weapon';
-    ((d.advancement!['nodes'] as List).first as Map)['name'] = 'Origin';
+    ((d.advancements.single['nodes'] as List).first as Map)['name'] = 'Origin';
     final v2 = d.build();
     expect(v2.sheet!.fields.firstWhere((f) => f.name == 'finesse').was, ['FIN']);
     expect(v2.toJson().toString(), isNot(contains(r'$name')));

@@ -28,17 +28,17 @@ void main() {
         {'kind': 'Armor', 'name': 'Vulture', 'values': {'apReduction': 1}},
       ],
     };
-    d.advancement = {
+    d.advancements.add({
       'name': 'Constellation',
       'field': 'CP',
       'nodes': [{'name': 'Origin', 'cost': 0}],
-    };
+    });
     final pack = d.build();
     expect(pack.sheet!.fields.last.max!.text, '8 - sum("Armor", "apReduction")');
     expect(pack.compendium!.entries['Vulture']!.values, {'apReduction': 1});
     // An edit starts from the installed module's own.
-    expect(ModuleDraft(pack).build().advancement!.nodes.keys, ['Origin']);
-    d.advancement!['field'] = 'XP';
+    expect(ModuleDraft(pack).build().advancements.single.nodes.keys, ['Origin']);
+    d.advancements.single['field'] = 'XP';
     expect(() => d.build(), throwsA(isA<FormatException>().having((e) => e.message, 'message', contains('spends "XP"'))));
   });
 
