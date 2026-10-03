@@ -4,7 +4,7 @@ import 'events.dart';
 
 /// Bumped on any incompatible message change. Clients on another version
 /// can't decode messages and report [ProtocolMismatch].
-const protocolVersion = 8; // 8: characters' actions, rolled by the GM.
+const protocolVersion = 9; // 9: characters take advancement nodes.
 
 final class ProtocolMismatch implements Exception {
   const ProtocolMismatch(this.version);

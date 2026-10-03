@@ -1,6 +1,8 @@
 import 'package:chimera_core/chimera_core.dart';
 import 'package:tactical_engine/tactical_engine.dart';
 
+import 'advancement.dart';
+
 /// The actions an item has: its kind's, then its entry's (found by name, so
 /// they follow the module).
 List<ActionDef> actionsOf(Item item, SystemPack pack) => [
@@ -12,9 +14,7 @@ List<ActionDef> actionsOf(Item item, SystemPack pack) => [
 /// that pays its cost and asks the GM to roll it; or, as a [String], why it
 /// can't be used: a cost it can't pay.
 Object useAction(SystemPack pack, Character c, ActionDef action, {Item? item}) {
-  final sheet = pack.sheet!;
-  final read = SheetValues(sheet, c.values,
-      items: [for (final i in c.items) (kind: i.kind, values: i.values)]);
+  final read = readSheet(pack, c);
   final kind = item == null ? null : pack.compendium?.kinds[item.kind];
   final itemRead = kind == null ? null : SheetValues(kind, item!.values);
   // An item's names first: its ammo, then the character's AP.

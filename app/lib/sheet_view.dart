@@ -3,6 +3,8 @@ import 'package:flutter/widgets.dart';
 import 'package:tactical_engine/tactical_engine.dart';
 
 import 'actions.dart';
+import 'advancement.dart';
+import 'advancement_view.dart';
 import 'table/chrome.dart' show TextKeysOnly;
 import 'theme.dart';
 import 'ui/cv.dart';
@@ -45,9 +47,7 @@ class SheetView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final read = SheetValues(_sheet, character.values, items: [
-      for (final i in character.items) (kind: i.kind, values: i.values),
-    ]);
+    final read = readSheet(pack, character);
     if (trackersOnly) {
       return Column(crossAxisAlignment: CrossAxisAlignment.stretch, spacing: 6, children: [
         for (final f in _sheet.fields)
@@ -89,6 +89,15 @@ class SheetView extends StatelessWidget {
                     ),
                 ],
               ),
+            ],
+          ),
+        if (pack.advancement case final adv?)
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            spacing: 10,
+            children: [
+              CvOverline(adv.name),
+              AdvancementView(pack: pack, character: character, onChanged: onChanged),
             ],
           ),
         if (onAction != null && _sheet.actions.isNotEmpty)

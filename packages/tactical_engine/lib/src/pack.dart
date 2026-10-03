@@ -3,6 +3,7 @@ import 'geometry.dart';
 import 'topology.dart';
 
 part 'action.dart';
+part 'advancement.dart';
 part 'sheet.dart';
 
 typedef Json = Map<String, Object?>;
@@ -341,6 +342,7 @@ final class SystemPack {
     this.cover,
     this.sheet,
     this.compendium,
+    this.advancement,
   })  : tags = {for (final t in tags) t.name: t},
         tokens = {for (final t in tokens) t.name: t};
 
@@ -368,6 +370,9 @@ final class SystemPack {
 
   /// Its entries by kind, which characters hold copies of as items.
   final Compendium? compendium;
+
+  /// The nodes its characters take: a Constellation, a chain of levels.
+  final Advancement? advancement;
 
   /// Every image the module uses, which its bundle carries.
   Set<String> get assets => {
@@ -455,6 +460,7 @@ final class SystemPack {
         if (trackers.isNotEmpty) 'trackers': [for (final t in trackers) t.toJson()],
         if (compendium != null) 'compendium': compendium!.toJson(),
         if (sheet != null) 'sheet': sheet!.toJson(),
+        if (advancement != null) 'advancement': advancement!.toJson(),
         'tags': [for (final t in tags.values) t.toJson()],
       };
 
@@ -479,6 +485,10 @@ final class SystemPack {
       if (tags.map((t) => t.name).toSet().length != tags.length) {
         throw const FormatException('Two tags share a name');
       }
+      final advancement = switch (json['advancement']) {
+        null => null,
+        final a => Advancement.fromJson(a as Json),
+      };
       final compendium = switch (json['compendium']) {
         null => null,
         final c => Compendium.fromJson(c as Json),
@@ -522,12 +532,15 @@ final class SystemPack {
         ],
         tags: tags,
         compendium: compendium,
+        advancement: advancement,
         sheet: switch (json['sheet']) {
           null => null,
-          final s => SheetDef.fromJson(s as Json, kinds: compendium?.kinds ?? const {}),
+          final s => SheetDef.fromJson(s as Json,
+              kinds: compendium?.kinds ?? const {}, groups: advancement?.groups ?? const {}),
         },
       );
       _checkActions(pack.sheet, pack.compendium);
+      advancement?.check(pack.sheet, pack.compendium);
       return pack;
     } on FormatException {
       rethrow;

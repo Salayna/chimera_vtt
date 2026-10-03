@@ -504,6 +504,7 @@ void main() {
     final armed = run(scene, alice, UpdateCharacter(ayla.copyWith(items: [rifle])));
     expect(Character.fromJson(armed.characters[ayla.id]!.toJson()).items.single.values,
         {'ammo': 4});
+    expect(Character.fromJson(ayla.copyWith(nodes: ['Origin']).toJson()).nodes, ['Origin']);
 
     const link = LinkCharacter(TokenId('a'), CharacterId('ayla'));
     final linked = run(inRoom, alice, link);

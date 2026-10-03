@@ -150,7 +150,8 @@ Otherwise it's a field of some entity.
 | **Item** | `Item`, `FieldType.items` | A character's own copy of an entry, shown as a card with its own tracker values (a rifle with 4 of 6 shots). A sheet's items field lists one kind's; formulas read them with `count` and `sum`. |
 | **Action** | `ActionDef`, `UseAction`, `ActionEvent` | A button on a sheet or item card: costs, a roll (`dice` plus a `mod`, `times` times) and outcome bands. Its owner's client pays the costs; the GM rolls, and logs each roll's band and its text. It changes nothing on the target; the target's owner applies the damage. |
 | **Outcome band** | `ActionBand` | A range of an action's results from its `min` up, with what it does: Solaris' Grazing (12+), Precise (16+), Devastating (20+). A roll below every band is a miss. |
-| **Advancement** | — (planned) | A pack's graph of nodes a character unlocks: each with a cost, requirements and what it grants. D&D's levels are a chain; Solaris' Constellation a graph. |
+| **Advancement** | `Advancement`, `AdvancementView` | A pack's graph of nodes a character takes, paying each one's cost from a sheet number. D&D's levels are a chain; Solaris' Constellation a graph. |
+| **Node** | `AdvancementNode`, `Character.nodes` | One step of an advancement: its cost, what it requires (any of, all of, a condition), what it adds and gives, and its group. |
 
 ## Project
 

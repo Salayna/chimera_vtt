@@ -152,7 +152,8 @@ typedef SheetSection = ({String title, List<FieldDef> fields});
 final class SheetDef {
   /// [kinds] are the compendium's, by name: what items fields hold and
   /// `count` and `sum` read.
-  SheetDef(this.sections, {this.kinds = const {}, this.actions = const []}) {
+  SheetDef(this.sections,
+      {this.kinds = const {}, this.groups = const {}, this.actions = const []}) {
     final seen = <String>{};
     for (final f in fields) {
       for (final n in [
@@ -176,6 +177,9 @@ final class SheetDef {
   static const maxFields = 200;
 
   final Map<String, SheetDef> kinds;
+
+  /// The advancement's node groups, which `count` reads too.
+  final Set<String> groups;
 
   final List<SheetSection> sections;
 
@@ -213,9 +217,11 @@ final class SheetDef {
         if (f == null) return null;
         if (f.hasDice) throw FormatException('$what rolls dice: a sheet can\'t');
         for (final (:kind, :field) in f.items) {
-          final k = kinds[kind] ??
-              (throw FormatException('$what: no compendium kind "$kind"'));
-          if (field != null && k.types[field] != FormulaType.number) {
+          final k = kinds[kind];
+          if (k == null && (field != null || !groups.contains(kind))) {
+            throw FormatException('$what: no compendium kind "$kind"');
+          }
+          if (field != null && k!.types[field] != FormulaType.number) {
             throw FormatException('$what: "$kind" has no number "$field"');
           }
         }
@@ -314,7 +320,7 @@ final class SheetDef {
         _ => null,
       };
 
-  static const maxValue = 99999;
+  static const maxValue = 999999;
 
   static int _constant(Formula f) => f.eval((_) => 0) as int;
 
@@ -335,7 +341,8 @@ final class SheetDef {
         if (actions.isNotEmpty) 'actions': _actionsJson(actions),
       };
 
-  factory SheetDef.fromJson(Json json, {Map<String, SheetDef> kinds = const {}}) {
+  factory SheetDef.fromJson(Json json,
+      {Map<String, SheetDef> kinds = const {}, Set<String> groups = const {}}) {
     final sections = [
       for (final s in _list(json['sections'], 'sheet sections', 20))
         (
@@ -349,7 +356,8 @@ final class SheetDef {
     if (sections.fold(0, (n, s) => n + s.fields.length) > maxFields) {
       throw const FormatException('A sheet has at most $maxFields fields');
     }
-    return SheetDef(sections, kinds: kinds, actions: _actionsFromJson(json['actions']));
+    return SheetDef(sections,
+        kinds: kinds, groups: groups, actions: _actionsFromJson(json['actions']));
   }
 }
 
@@ -357,7 +365,8 @@ final class SheetDef {
 /// values first, each field's start otherwise; computed fields and tracker
 /// bounds are worked out when read, trackers kept within their bounds.
 final class SheetValues {
-  SheetValues(this.sheet, this.stored, {this.has, this.items = const []});
+  SheetValues(this.sheet, this.stored,
+      {this.has, this.items = const [], this.groups = const []});
 
   final SheetDef sheet;
   final Map<String, Object> stored;
@@ -365,6 +374,9 @@ final class SheetValues {
   /// The character's items: each one's kind and values, for `count` and
   /// `sum`.
   final List<({String kind, Map<String, Object> values})> items;
+
+  /// The group of each taken advancement node, which `count` counts too.
+  final List<String> groups;
 
   /// Whether the character has a condition, for `has(…)`.
   final bool Function(String tag)? has;
@@ -405,7 +417,7 @@ final class SheetValues {
 
   num _items(String kind, String? field) {
     final of = items.where((i) => i.kind == kind);
-    if (field == null) return of.length;
+    if (field == null) return of.length + groups.where((g) => g == kind).length;
     final def = sheet.kinds[kind];
     if (def == null) return 0;
     return of.fold<num>(0, (sum, i) => sum + SheetValues(def, i.values).number(field));

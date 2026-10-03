@@ -628,8 +628,10 @@ final class Character extends Entity {
     required this.name,
     Map<String, Object> values = const {},
     List<Item> items = const [],
+    List<String> nodes = const [],
   })  : values = Map.unmodifiable(values),
-        items = List.unmodifiable(items);
+        items = List.unmodifiable(items),
+        nodes = List.unmodifiable(nodes);
 
   static const maxName = 60;
   static const maxItems = 100;
@@ -647,7 +649,11 @@ final class Character extends Entity {
   /// Its copies of compendium entries.
   final List<Item> items;
 
-  Character copyWith({String? name, Map<String, Object>? values, List<Item>? items}) =>
+  /// The advancement nodes it has taken, by name, in order.
+  final List<String> nodes;
+
+  Character copyWith(
+          {String? name, Map<String, Object>? values, List<Item>? items, List<String>? nodes}) =>
       Character(
         id: id,
         owner: owner,
@@ -655,12 +661,14 @@ final class Character extends Entity {
         name: name ?? this.name,
         values: values ?? this.values,
         items: items ?? this.items,
+        nodes: nodes ?? this.nodes,
       );
 
   /// The sheet, as the `characters` table's `sheet` column holds it.
   Json get sheet => {
         'values': values,
         if (items.isNotEmpty) 'items': [for (final i in items) i.toJson()],
+        if (nodes.isNotEmpty) 'nodes': nodes,
       };
 
   @override
@@ -686,6 +694,10 @@ final class Character extends Entity {
         items: [
           for (final i in (json['sheet'] as Map?)?['items'] as List? ?? const [])
             Item.fromJson(i as Json),
+        ],
+        nodes: [
+          for (final n in (json['sheet'] as Map?)?['nodes'] as List? ?? const [])
+            n as String,
         ],
       );
 }

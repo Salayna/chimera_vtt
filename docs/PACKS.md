@@ -60,6 +60,7 @@ Installed packs belong to the GM's account and serve all their campaigns. A scen
 | `tokens` | Ready-made tokens, such as a system's threats: `name`, `image` (its picture, an image name), `size` (cells), `form` (a form's name), `trackers` (each with its own `max` and starting `value`), `conditions` it starts with, and `card`: sections of `title`, `text` and an optional `image` the GM reads on its token card. Players never get cards: scenes carry the pack without its tokens, and the trackers of tokens nobody owns stay with the GM. |
 | `sheet` | What the system's characters hold: see [Sheets](#sheets). Players make characters only for systems with one. |
 | `compendium` | Entries characters hold copies of, grouped in kinds: see [Compendium](#compendium). |
+| `advancement` | The nodes characters take: see [Advancement](#advancement). |
 | `tags` | Conditions (`"condition": true`, set on tokens) and region tags (the rest; `"sector": true` marks sector tags). Each may be `valued`, have a `color` (`#rrggbb`), `text` and `effects`. |
 
 Effects are the engine's building blocks (ADR 012): `{"type": "roll", "edge": -1, "scaled": true}` (advantage or disadvantage, times the tag's value when scaled), `{"type": "moveCost", "multiplier": 2}`, `{"type": "blocksSight"}`, `{"type": "occupantLimit", "max": 1}` and `{"type": "entryCheck", "check": "Traversal"}`. Anything they can't say goes in `text`.
@@ -140,6 +141,21 @@ The sheet's `actions` are the character's; a kind's and an entry's are its items
 | `bands` | Up to 10, from the lowest `min` up: a roll is in the highest band it reaches, with its `text`; below them all it misses. |
 
 Limits: 20 actions on a sheet, a kind or an entry.
+
+### Advancement
+
+```json
+"advancement": {"name": "Constellation", "field": "CP", "nodes": [
+  {"name": "Origin", "cost": 0, "x": 0, "y": 0},
+  {"name": "Duelist", "group": "Archetype", "requires": ["Origin"],
+   "condition": "count(\"Archetype\") < 3", "x": 1, "y": 0},
+  {"name": "Might", "requires": ["Origin"], "adds": {"STR": 1}, "x": 0, "y": 1},
+  {"name": "Ultimate Combatant", "requiresAll": ["Duelist", "Might"],
+   "items": ["Ultimate Combatant"], "x": 1, "y": 1}
+]}
+```
+
+`field` is the sheet number or tracker costs are paid from. A node has a `name`, `text`, a `cost` (1 by default, 0 to 1000), `requires` (taken once any of these is; none for a first node), `requiresAll` (once all are), a `condition` (a boolean formula on the sheet), `adds` (to number fields, kept within their bounds), `items` (entries given as items), a `group` (`count("Archetype")` counts taken nodes of it as well as items of that kind), and `x` and `y` to draw it (in a row by default). Limits: 300 nodes, each requiring up to 20.
 
 
 ## Atlas VTT presets

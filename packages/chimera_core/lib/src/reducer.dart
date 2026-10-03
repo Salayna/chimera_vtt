@@ -268,6 +268,7 @@ Outcome _updateCharacter(Scene scene, Actor actor, Character character) {
             name.length > Character.maxName ||
             character.system != scene.settings.pack ||
             character.items.length > Character.maxItems ||
+            character.nodes.length > 300 ||
             character.items.map((i) => i.id).toSet().length != character.items.length ||
             jsonEncode(character.toJson()).length > maxCharacterBytes
         ? const Refused(Refusal.invalid)

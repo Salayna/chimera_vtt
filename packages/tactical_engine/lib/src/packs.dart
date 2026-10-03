@@ -29,6 +29,7 @@ final _dnd5e = SystemPack(
   unitsPerStep: 5,
   initiative: 'd20',
   compendium: _dnd5eWeapons,
+  advancement: _dnd5eLevels,
   sheet: _dnd5eSheet,
   tags: const [
     TagDef('Blinded',
@@ -143,6 +144,7 @@ final _dnd5eSheet = SheetDef.fromJson(kinds: _dnd5eWeapons.kinds, {
           ],
         },
         {'name': 'level', 'label': 'Level', 'min': 1, 'max': 20},
+        {'name': 'XP', 'label': 'Experience points', 'min': 0, 'max': 355000},
         {
           'name': 'proficiency',
           'label': 'Proficiency bonus',
@@ -231,3 +233,24 @@ final _dnd5eWeapons = Compendium.fromJson({
 
 String _abilityMod(String kind) =>
     kind == 'finesse' ? 'max(STR.mod, DEX.mod)' : '$kind.mod';
+
+/// Levels as a chain: each needs the one before and the SRD's experience
+/// for it, and raises the level by one. Experience isn't spent.
+final _dnd5eLevels = Advancement.fromJson({
+  'name': 'Levels',
+  'field': 'XP',
+  'nodes': [
+    for (final (i, xp) in const [
+      300, 900, 2700, 6500, 14000, 23000, 34000, 48000, 64000, 85000, //
+      100000, 120000, 140000, 165000, 195000, 225000, 265000, 305000, 355000,
+    ].indexed)
+      {
+        'name': 'Level ${i + 2}',
+        'cost': 0,
+        if (i > 0) 'requires': ['Level ${i + 1}'],
+        'condition': 'XP >= $xp',
+        'adds': {'level': 1},
+        'text': '$xp XP',
+      },
+  ],
+});
