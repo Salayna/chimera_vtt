@@ -233,6 +233,33 @@ class _Entry extends StatelessWidget {
                   '${secret ? ' (hidden)' : ''}',
               style: quiet),
         ])),
+      ActionEvent(:final character, :final action, :final dice, :final banded, :final rolls) =>
+        Column(crossAxisAlignment: CrossAxisAlignment.stretch, spacing: 2, children: [
+          Text.rich(TextSpan(children: [
+            who,
+            TextSpan(
+                text: ' · $character used $action${dice == null ? '' : ' ($dice)'}',
+                style: quiet),
+          ])),
+          for (final r in rolls)
+            Row(crossAxisAlignment: CrossAxisAlignment.start, spacing: CvSpacing.s4, children: [
+              Text(_faces(dice!, r.faces),
+                  style: CvTypography.caption.copyWith(
+                      fontFamily: CvTypography.mono, color: CvColors.textSecondary)),
+              Expanded(
+                child: Text(
+                    switch (r.band) {
+                      null => banded ? 'Miss' : '',
+                      final band => '$band${r.text.isEmpty ? '' : ': ${r.text}'}',
+                    },
+                    style: CvTypography.bodySm),
+              ),
+              Text('${r.total}',
+                  semanticsLabel: 'total ${r.total}',
+                  style: CvTypography.weight(CvTypography.body, 600)
+                      .copyWith(fontFamily: CvTypography.mono)),
+            ]),
+        ]),
       PingEvent() => const SizedBox.shrink(), // Never logged.
     };
     return Padding(

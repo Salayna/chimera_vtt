@@ -28,6 +28,7 @@ final _dnd5e = SystemPack(
   unit: 'ft',
   unitsPerStep: 5,
   initiative: 'd20',
+  compendium: _dnd5eWeapons,
   sheet: _dnd5eSheet,
   tags: const [
     TagDef('Blinded',
@@ -106,7 +107,7 @@ final _dnd5e = SystemPack(
 
 /// A simple D&D 5e character: abilities and their modifiers, level and
 /// proficiency, hit points and armor class.
-final _dnd5eSheet = SheetDef.fromJson({
+final _dnd5eSheet = SheetDef.fromJson(kinds: _dnd5eWeapons.kinds, {
   'sections': [
     {
       'title': 'Abilities',
@@ -166,6 +167,12 @@ final _dnd5eSheet = SheetDef.fromJson({
       ],
     },
     {
+      'title': 'Attacks',
+      'fields': [
+        {'name': 'weapons', 'label': 'Weapons', 'type': 'items', 'kind': 'Weapon'},
+      ],
+    },
+    {
       'title': 'Notes',
       'fields': [
         {'name': 'notes', 'label': 'Notes', 'type': 'text'},
@@ -173,3 +180,54 @@ final _dnd5eSheet = SheetDef.fromJson({
     },
   ],
 });
+
+/// Some of the SRD's weapons, each with an attack and a damage roll, the
+/// character proficient. Finesse weapons use the better of STR and DEX.
+final _dnd5eWeapons = Compendium.fromJson({
+  'kinds': [
+    {'name': 'Weapon', 'fields': <Object>[]},
+  ],
+  'entries': [
+    for (final (name, damage, kind, properties) in [
+      ('Club', '1d4 bludgeoning', 'STR', 'Light'),
+      ('Dagger', '1d4 piercing', 'finesse', 'Finesse, light, thrown (20/60)'),
+      ('Handaxe', '1d6 slashing', 'STR', 'Light, thrown (20/60)'),
+      ('Mace', '1d6 bludgeoning', 'STR', ''),
+      ('Quarterstaff', '1d6 bludgeoning', 'STR', 'Versatile (1d8)'),
+      ('Shortsword', '1d6 piercing', 'finesse', 'Finesse, light'),
+      ('Rapier', '1d8 piercing', 'finesse', 'Finesse'),
+      ('Longsword', '1d8 slashing', 'STR', 'Versatile (1d10)'),
+      ('Warhammer', '1d8 bludgeoning', 'STR', 'Versatile (1d10)'),
+      ('Greataxe', '1d12 slashing', 'STR', 'Heavy, two-handed'),
+      ('Greatsword', '2d6 slashing', 'STR', 'Heavy, two-handed'),
+      ('Shortbow', '1d6 piercing', 'DEX', 'Ammunition (80/320), two-handed'),
+      ('Longbow', '1d8 piercing', 'DEX', 'Ammunition (150/600), heavy, two-handed'),
+      ('Light crossbow', '1d8 piercing', 'DEX', 'Ammunition (80/320), loading, two-handed'),
+    ])
+      {
+        'kind': 'Weapon',
+        'name': name,
+        if (properties.isNotEmpty)
+          'card': [
+            {'title': 'Properties', 'text': properties},
+          ],
+        'actions': [
+          {
+            'name': 'Attack',
+            'dice': 'd20',
+            'mod': '${_abilityMod(kind)} + proficiency',
+            'text': 'Against the target\'s AC.',
+          },
+          {
+            'name': 'Damage',
+            'dice': damage.split(' ').first,
+            'mod': _abilityMod(kind),
+            'text': damage.split(' ').last,
+          },
+        ],
+      },
+  ],
+});
+
+String _abilityMod(String kind) =>
+    kind == 'finesse' ? 'max(STR.mod, DEX.mod)' : '$kind.mod';

@@ -152,7 +152,7 @@ typedef SheetSection = ({String title, List<FieldDef> fields});
 final class SheetDef {
   /// [kinds] are the compendium's, by name: what items fields hold and
   /// `count` and `sum` read.
-  SheetDef(this.sections, {this.kinds = const {}}) {
+  SheetDef(this.sections, {this.kinds = const {}, this.actions = const []}) {
     final seen = <String>{};
     for (final f in fields) {
       for (final n in [
@@ -178,6 +178,9 @@ final class SheetDef {
   final Map<String, SheetDef> kinds;
 
   final List<SheetSection> sections;
+
+  /// Its buttons: the character's, or every item's of a kind.
+  final List<ActionDef> actions;
 
   Iterable<FieldDef> get fields => sections.expand((s) => s.fields);
 
@@ -329,6 +332,7 @@ final class SheetDef {
               'fields': [for (final f in s.fields) f.toJson()],
             },
         ],
+        if (actions.isNotEmpty) 'actions': _actionsJson(actions),
       };
 
   factory SheetDef.fromJson(Json json, {Map<String, SheetDef> kinds = const {}}) {
@@ -345,7 +349,7 @@ final class SheetDef {
     if (sections.fold(0, (n, s) => n + s.fields.length) > maxFields) {
       throw const FormatException('A sheet has at most $maxFields fields');
     }
-    return SheetDef(sections, kinds: kinds);
+    return SheetDef(sections, kinds: kinds, actions: _actionsFromJson(json['actions']));
   }
 }
 
@@ -390,8 +394,12 @@ final class SheetValues {
     return _cache[name] = value;
   }
 
-  Object _run(Formula f) {
-    final v = f.eval((n) => this[n], has: has, items: _items);
+  Object _run(Formula f) => run(f);
+
+  /// [f]'s value on this sheet: its names read through [value] when given
+  /// (an item's action reads the item first), [this] otherwise.
+  Object run(Formula f, [Object Function(String name)? value]) {
+    final v = f.eval(value ?? (n) => this[n], has: has, items: _items);
     return v is double && !v.isFinite ? 0 : v;
   }
 
@@ -417,18 +425,23 @@ final class SheetValues {
 /// One thing in a compendium, such as a weapon or a talent: values for its
 /// kind's fields, and a card. A character's item is a copy of one.
 final class Entry {
-  const Entry(this.kind, this.name, {this.values = const {}, this.card = const []});
+  const Entry(this.kind, this.name,
+      {this.values = const {}, this.card = const [], this.actions = const []});
 
   final String kind;
   final String name;
   final Map<String, Object> values;
   final List<CardSection> card;
 
+  /// Its own buttons, beside its kind's: a weapon's attack profiles.
+  final List<ActionDef> actions;
+
   Json toJson() => {
         'kind': kind,
         'name': name,
         if (values.isNotEmpty) 'values': values,
         if (card.isNotEmpty) 'card': _cardJson(card),
+        if (actions.isNotEmpty) 'actions': _actionsJson(actions),
       };
 }
 
@@ -460,6 +473,7 @@ final class Compendium {
             {
               'name': name,
               'fields': [for (final f in sheet.fields) f.toJson()],
+              if (sheet.actions.isNotEmpty) 'actions': _actionsJson(sheet.actions),
             },
         ],
         'entries': [for (final e in entries.values) e.toJson()],
@@ -474,6 +488,7 @@ final class Compendium {
         'sections': [
           {'title': name, 'fields': k['fields'] ?? const []},
         ],
+        'actions': k['actions'],
       });
     }
     final entries = <Entry>[];
@@ -491,7 +506,10 @@ final class Compendium {
       for (final key in values.keys) {
         if (clean[key] != values[key]) throw FormatException('$name: not a value for "$key"');
       }
-      entries.add(Entry(kind, name, values: clean, card: _cardFromJson(e['card'], 10)));
+      entries.add(Entry(kind, name,
+          values: clean,
+          card: _cardFromJson(e['card'], 10),
+          actions: _actionsFromJson(e['actions'])));
     }
     return Compendium(kinds, entries);
   }

@@ -329,6 +329,38 @@ void main() {
     table.expectConverged();
   });
 
+  test("a character's action is paid, rolled by the GM, banded and logged",
+      () async {
+    final brin = Character(
+        id: const CharacterId('brin'),
+        owner: alice,
+        system: settings.pack,
+        name: 'Brin',
+        values: const {'AP': 8});
+    final table = Table(Scene(settings: settings, characters: {brin.id: brin}));
+    await table.join();
+    table.clients[alice]!.request(UseAction(brin.copyWith(values: {'AP': 5}),
+        action: 'Quick Shot',
+        dice: 'd20+4',
+        times: 2,
+        bands: const [
+          (name: 'Grazing', min: 16, text: '1 Stress'),
+          (name: 'Precise', min: 20, text: '1 Stress & 1 CvW'),
+        ]));
+    table.hub.flush();
+    await Future<void>.delayed(Duration.zero);
+    final shot = table.host.currentLog.single as ActionEvent;
+    expect((shot.character, shot.action, shot.rolls.length), ('Brin', 'Quick Shot', 2));
+    for (final r in shot.rolls) {
+      expect(r.total, r.faces.first.single + 4);
+      expect(r.band,
+          r.total >= 20 ? 'Precise' : r.total >= 16 ? 'Grazing' : null);
+    }
+    expect(table.host.store.scene.characters[brin.id]!.values['AP'], 5);
+    expect(table.clients[bob]!.currentLog.single.toJson(), shot.toJson());
+    table.expectConverged();
+  });
+
   test('a ruler travels in presence, and goes when cleared', () async {
     final hub = LoopbackHub(manual: true);
     final host = HostSession(

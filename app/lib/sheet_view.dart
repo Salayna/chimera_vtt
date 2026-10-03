@@ -2,6 +2,7 @@ import 'package:chimera_core/chimera_core.dart' show Character, Item, newId;
 import 'package:flutter/widgets.dart';
 import 'package:tactical_engine/tactical_engine.dart';
 
+import 'actions.dart';
 import 'table/chrome.dart' show TextKeysOnly;
 import 'theme.dart';
 import 'ui/cv.dart';
@@ -16,8 +17,13 @@ class SheetView extends StatelessWidget {
     required this.pack,
     required this.character,
     this.onChanged,
+    this.onAction,
     this.trackersOnly = false,
   });
+
+  /// Uses an action, the sheet's or [Item]'s; null hides actions (outside a
+  /// room, where nobody rolls).
+  final void Function(ActionDef action, Item? item)? onAction;
 
   /// Its system: the sheet, and the compendium items come from.
   final SystemPack pack;
@@ -85,9 +91,43 @@ class SheetView extends StatelessWidget {
               ),
             ],
           ),
+        if (onAction != null && _sheet.actions.isNotEmpty)
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            spacing: 10,
+            children: [
+              const CvOverline('Actions'),
+              _actions(_sheet.actions, null),
+            ],
+          ),
       ],
     );
   }
+
+  /// A button for each of [actions], greyed out with the reason when its
+  /// cost can't be paid.
+  Widget _actions(List<ActionDef> actions, Item? item) => Wrap(spacing: 8, runSpacing: 8, children: [
+        for (final a in actions)
+          switch (useAction(pack, character, a, item: item)) {
+            final String why => CvTooltip(
+                message: why,
+                side: AxisDirection.up,
+                child: CvButton(label: a.name, small: true, onPressed: null)),
+            _ => CvTooltip(
+                message: [
+                  if (a.cost.isNotEmpty)
+                    a.cost.map((c) => '${c.amount} ${c.tracker}').join(', '),
+                  if (a.text.isNotEmpty) a.text,
+                ].join(' · '),
+                side: AxisDirection.up,
+                child: CvButton(
+                  label: a.name,
+                  small: true,
+                  onPressed: () => onAction!(a, item),
+                ),
+              ),
+          },
+      ]);
 
   /// An items field: the character's items of its kind as cards, and the
   /// kind's entries to add.
@@ -112,6 +152,9 @@ class SheetView extends StatelessWidget {
           onRemove: changed == null
               ? null
               : () => setItems([for (final o in character.items) if (o.id != item.id) o]),
+          actions: onAction == null || actionsOf(item, pack).isEmpty
+              ? null
+              : _actions(actionsOf(item, pack), item),
         ),
       if (mine.isEmpty && changed == null)
         Text('None', style: CvTypography.bodySm.copyWith(color: CvColors.textSecondary)),
@@ -198,7 +241,11 @@ class _ItemCard extends StatelessWidget {
     required this.field,
     required this.onChanged,
     required this.onRemove,
+    this.actions,
   });
+
+  /// Its action buttons.
+  final Widget? actions;
 
   final Item item;
   final SheetDef kind;
@@ -243,6 +290,7 @@ class _ItemCard extends StatelessWidget {
               ),
             ),
         ]),
+        ?actions,
         for (final c in item.card) ...[
           CvOverline(c.title),
           if (c.text.isNotEmpty) Text(c.text, style: CvTypography.bodySm),

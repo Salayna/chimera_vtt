@@ -48,7 +48,8 @@ Outcome reduce(Scene scene, Actor actor, Command command) {
       command is! SetTracker &&
       command is! UpdateCharacter &&
       command is! RemoveCharacter &&
-      command is! LinkCharacter) {
+      command is! LinkCharacter &&
+      command is! UseAction) {
     return const Refused(Refusal.gmOnly);
   }
   return switch (command) {
@@ -121,6 +122,16 @@ Outcome reduce(Scene scene, Actor actor, Command command) {
     SetTracker(:final id, :final name, :final value) =>
       _own(scene, actor, id, (t) => _setTracker(t, name, value)),
     UpdateCharacter(:final character) => _updateCharacter(scene, actor, character),
+    UseAction(:final action, :final dice, :final times, :final bands)
+        when action.trim().isEmpty ||
+            action.length > 60 ||
+            (dice != null && DiceFormula.tryParse(dice) == null) ||
+            times < 1 ||
+            times > UseAction.maxTimes ||
+            bands.length > UseAction.maxBands ||
+            bands.any((b) => b.name.length > 30 || b.text.length > 500) =>
+      const Refused(Refusal.invalid),
+    UseAction(:final character) => _updateCharacter(scene, actor, character),
     RemoveCharacter(:final id) => switch (scene.characters[id]) {
         null => const Refused(Refusal.notFound),
         Character(:final owner) when actor is! Player || actor.id != owner =>

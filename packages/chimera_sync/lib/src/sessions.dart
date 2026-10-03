@@ -275,6 +275,24 @@ final class HostSession extends Session {
         return Chat(by, at, text.trim(), gm: gm);
       case Ping(at: final point):
         return PingEvent(by, at, point, gm: gm);
+      case UseAction(:final character, :final action, :final dice, :final times, :final bands):
+        final formula = dice == null ? null : DiceFormula.tryParse(dice)!; // Checked.
+        return ActionEvent(by, at,
+            character: character.name,
+            action: action,
+            dice: dice,
+            banded: bands.isNotEmpty,
+            rolls: [
+              if (formula != null)
+                for (var i = 0; i < times; i++)
+                  () {
+                    final faces = formula.roll(_random);
+                    final total = formula.total(faces);
+                    final band = bands.where((b) => total >= b.min).lastOrNull;
+                    return (faces: faces, total: total, band: band?.name, text: band?.text ?? '');
+                  }(),
+            ],
+            gm: gm);
       case SetCondition(:final id, :final name) ||
             RemoveCondition(:final id, :final name):
         final token = before.tokens[id]!; // The reducer checked.

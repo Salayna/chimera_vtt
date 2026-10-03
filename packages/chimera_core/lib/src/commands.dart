@@ -54,6 +54,20 @@ sealed class Command {
         'removeCharacter' => RemoveCharacter(CharacterId(json['id'] as String)),
         'linkCharacter' => LinkCharacter(TokenId(json['token'] as String),
             json['character'] == null ? null : CharacterId(json['character'] as String)),
+        'useAction' => UseAction(
+            Entity.fromJson(json['character'] as Json) as Character,
+            action: json['action'] as String,
+            dice: json['dice'] as String?,
+            times: json['times'] as int? ?? 1,
+            bands: [
+              for (final b in json['bands'] as List? ?? const [])
+                (
+                  name: (b as Json)['name'] as String,
+                  min: b['min'] as int,
+                  text: b['text'] as String? ?? '',
+                ),
+            ],
+          ),
         final type => throw FormatException('Unknown command: $type'),
       };
 }
@@ -308,6 +322,42 @@ final class LinkCharacter extends Command {
         'type': 'linkCharacter',
         'token': token.value,
         if (character != null) 'character': character!.value,
+      };
+}
+
+/// A character's action, used by its owner: [character] has paid its cost,
+/// and the GM's session rolls [dice] [times] times, each roll in its band,
+/// and logs it. The owner's client works the dice and bands out from their
+/// sheet; the GM rolls, so nobody picks their result.
+final class UseAction extends Command {
+  const UseAction(this.character,
+      {required this.action, this.dice, this.times = 1, this.bands = const []});
+
+  static const maxTimes = 10;
+  static const maxBands = 10;
+
+  final Character character;
+  final String action;
+
+  /// A dice formula with the modifier in it (`d20+4`), checked with
+  /// [DiceFormula.tryParse]; null when the action doesn't roll.
+  final String? dice;
+  final int times;
+
+  /// From the lowest [min] up.
+  final List<({String name, int min, String text})> bands;
+
+  @override
+  Json toJson() => {
+        'type': 'useAction',
+        'character': character.toJson(),
+        'action': action,
+        if (dice != null) 'dice': dice,
+        if (times != 1) 'times': times,
+        if (bands.isNotEmpty)
+          'bands': [
+            for (final b in bands) {'name': b.name, 'min': b.min, if (b.text.isNotEmpty) 'text': b.text},
+          ],
       };
 }
 

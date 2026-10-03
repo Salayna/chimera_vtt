@@ -522,6 +522,18 @@ void main() {
     expect(visibleTo(linked, bob).characters.keys, [ayla.id]);
     expect(linked.withCharacters(const {}).characters, isEmpty);
 
+    UseAction shot({String? dice = 'd20+4', int times = 2}) => UseAction(
+        ayla.copyWith(values: {'HP': 8, 'AP': 5}),
+        action: 'Quick Shot',
+        dice: dice,
+        times: times,
+        bands: const [(name: 'Grazing', min: 16, text: '1 Stress')]);
+    expect(run(linked, alice, shot()).characters[ayla.id]!.values['AP'], 5);
+    expect(why(linked, bob, shot()), Refusal.notOwner);
+    expect(why(linked, alice, shot(dice: 'lots')), Refusal.invalid);
+    expect(why(linked, alice, shot(times: 11)), Refusal.invalid);
+    expect(Command.fromJson(jsonDecode(jsonEncode(shot().toJson())) as Json), isA<UseAction>());
+
     expect(why(linked, bob, RemoveCharacter(ayla.id)), Refusal.notOwner);
     final gone = run(linked, alice, RemoveCharacter(ayla.id));
     expect(gone.characters, isEmpty);

@@ -64,6 +64,27 @@ sealed class TableEvent {
           secret: secret,
         ),
       'ping' => PingEvent(by, at, pointFromJson(json['point']), gm: gm),
+      'action' => ActionEvent(
+          by,
+          at,
+          character: json['character'] as String,
+          action: json['action'] as String,
+          dice: json['dice'] as String?,
+          banded: json['banded'] as bool? ?? false,
+          rolls: [
+            for (final r in json['rolls'] as List? ?? const [])
+              (
+                faces: [
+                  for (final term in (r as Json)['faces'] as List)
+                    [for (final f in term as List) f as int],
+                ],
+                total: r['total'] as int,
+                band: r['band'] as String?,
+                text: r['text'] as String? ?? '',
+              ),
+          ],
+          gm: gm,
+        ),
       final type => throw FormatException('Unknown event: $type'),
     };
   }
@@ -143,4 +164,50 @@ final class PingEvent extends TableEvent {
 
   @override
   Json _fields() => {'point': point.toJson()};
+}
+
+/// One roll of an action: each die's faces by term, the total, and the band
+/// it fell in with what that does (null below every band).
+typedef ActionRoll = ({List<List<int>> faces, int total, String? band, String text});
+
+/// A character's action: what was used, by whom, and each roll in its band.
+/// It changed nothing on the target; its owner applies what it says.
+final class ActionEvent extends TableEvent {
+  const ActionEvent(super.by, super.at,
+      {required this.character,
+      required this.action,
+      this.dice,
+      this.banded = false,
+      this.rolls = const [],
+      super.gm});
+
+  /// The character's name at the time.
+  final String character;
+  final String action;
+  final String? dice;
+
+  /// Whether the action has bands, so a roll in none is a miss.
+  final bool banded;
+  final List<ActionRoll> rolls;
+
+  @override
+  String get _type => 'action';
+
+  @override
+  Json _fields() => {
+        'character': character,
+        'action': action,
+        if (dice != null) 'dice': dice,
+        if (banded) 'banded': true,
+        if (rolls.isNotEmpty)
+          'rolls': [
+            for (final r in rolls)
+              {
+                'faces': r.faces,
+                'total': r.total,
+                if (r.band != null) 'band': r.band,
+                if (r.text.isNotEmpty) 'text': r.text,
+              },
+          ],
+      };
 }

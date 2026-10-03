@@ -2,6 +2,7 @@ import 'formula.dart';
 import 'geometry.dart';
 import 'topology.dart';
 
+part 'action.dart';
 part 'sheet.dart';
 
 typedef Json = Map<String, Object?>;
@@ -489,7 +490,7 @@ final class SystemPack {
       if (tokens.map((t) => t.name).toSet().length != tokens.length) {
         throw const FormatException('Two tokens share a name');
       }
-      return SystemPack(
+      final pack = SystemPack(
         id: id,
         name: _text(json['name'], 'name', 60),
         version: json['version'] as int? ?? 1,
@@ -526,6 +527,8 @@ final class SystemPack {
           final s => SheetDef.fromJson(s as Json, kinds: compendium?.kinds ?? const {}),
         },
       );
+      _checkActions(pack.sheet, pack.compendium);
+      return pack;
     } on FormatException {
       rethrow;
     } on Object catch (e) {

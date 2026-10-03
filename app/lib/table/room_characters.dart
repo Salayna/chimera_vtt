@@ -5,6 +5,7 @@ import 'package:chimera_core/chimera_core.dart';
 import 'package:flutter/widgets.dart';
 import 'package:tactical_engine/tactical_engine.dart';
 
+import '../actions.dart';
 import '../characters.dart';
 import '../sheet_view.dart';
 import '../theme.dart';
@@ -247,6 +248,14 @@ class SheetPanel extends StatelessWidget {
                         character: cleaned(c, packOf(scene)),
                         onChanged: c.owner == self
                             ? (changed) => send(UpdateCharacter(changed))
+                            : null,
+                        onAction: c.owner == self
+                            ? (action, item) {
+                                if (useAction(packOf(scene), cleaned(c, packOf(scene)), action,
+                                    item: item) case final UseAction use) {
+                                  send(use);
+                                }
+                              }
                             : null,
                       ),
                     ),

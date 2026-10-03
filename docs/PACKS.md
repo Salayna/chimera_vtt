@@ -117,7 +117,29 @@ Formulas are those of [SYSTEMS.md](SYSTEMS.md): they read the sheet's names, nev
 }
 ```
 
-A kind's `fields` are sheet fields (no items, and no `count` or `sum`). An entry has a `kind`, a `name` unique in the compendium, `values` for its kind's fields, each checked against them, and a `card` of sections like a token's. A character's item is a copy of an entry, its trackers starting from the entry's values. Limits: 20 kinds, 1000 entries, 10 card sections an entry.
+A kind's `fields` are sheet fields (no items, and no `count` or `sum`), and its `actions` every item of it has. An entry has a `kind`, a `name` unique in the compendium, `values` for its kind's fields, each checked against them, a `card` of sections like a token's, and its own `actions`. A character's item is a copy of an entry, its trackers starting from the entry's values. Limits: 20 kinds, 1000 entries, 10 card sections an entry.
+
+### Actions
+
+The sheet's `actions` are the character's; a kind's and an entry's are its items'. An item's action reads the item's fields first, then the sheet's.
+
+```json
+{"name": "Quick Shot", "text": "Point Blank / Adjacent",
+ "cost": [{"tracker": "AP", "amount": 3}, {"tracker": "ammo", "amount": 2}],
+ "dice": "d20", "mod": "FIN + threatLevel", "times": 2,
+ "bands": [{"name": "Grazing", "min": 16, "text": "1 Stress"},
+           {"name": "Precise", "min": 20, "text": "1 Stress & 1 CvW"},
+           {"name": "Devastating", "min": 24, "text": "2 Stress & 2 CvW"}]}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `cost` | Up to 5 trackers it spends, each with an `amount` (a formula, 1 by default): the item's tracker of that name if it has one, the character's otherwise. It can't be used when one would fall below its min; a negative amount gives back, up to the max (a reload: `"ammo - ammo.max"`). |
+| `dice` | Dice only (`d20`, `2d6+1d4`), rolled by the GM; none for an action that only spends. |
+| `mod`, `times` | Formulas: what's added to each roll, and how many rolls (1 to 10), each in its own band. |
+| `bands` | Up to 10, from the lowest `min` up: a roll is in the highest band it reaches, with its `text`; below them all it misses. |
+
+Limits: 20 actions on a sheet, a kind or an entry.
 
 
 ## Atlas VTT presets
