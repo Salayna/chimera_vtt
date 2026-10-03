@@ -1,7 +1,7 @@
 /// Gives the Solaris Arcanum module its characters, from the GM's own notes
 /// of the books: a sheet, a compendium of the weapons, explosives, armor,
-/// items, talents and flaws (Core Rulebook chapter 5, Appendix A), and the
-/// Constellation. The output holds book content, so it stays out of the
+/// items, talents and flaws (Core Rulebook chapter 5, Appendix A), the
+/// classes and archetypes (chapter 4), and the Constellation. The output holds book content, so it stays out of the
 /// repository. Run it on the threats tool's output:
 ///
 ///     dart run tool/solaris_characters.dart <vault>/Solaris\ Arcanum \
@@ -35,14 +35,24 @@ void main(List<String> args) {
   final talents = talentsFromMarkdown(read('$chapter5/02 Talents and Flaws.md'));
   add(talents);
   add(talentsFromMarkdown(read('$chapter5/03 Flaws.md'), kind: 'Flaw'));
+  const chapter4 = 'Core Rulebook/05 CHAPTER 4 Classes and Archetypes';
+  final classes = classesFromMarkdown([
+    for (final f in (Directory('${args[0]}/$chapter4').listSync().whereType<File>().toList()
+          ..sort((a, b) => a.path.compareTo(b.path))))
+      if (f.path.endsWith('.md')) f.readAsStringSync(),
+  ]);
+  add(classes.entries);
 
+  final input = jsonDecode(File(args[1]).readAsStringSync()) as Json;
   final out = {
-    ...jsonDecode(File(args[1]).readAsStringSync()) as Json,
+    ...input,
+    // A new build is a new version, so rooms playing the last one take it.
+    'version': (input['version'] as int? ?? 1) + 1,
     'compendium': {'kinds': kinds, 'entries': entries.values.toList()},
     'advancement': constellation([
       for (final t in talents)
         if (t['constellation'] == true) t['name'] as String,
-    ]),
+    ], classes.archetypes),
     'sheet': sheet,
   };
   for (final e in entries.values) {
@@ -299,6 +309,88 @@ List<Json> talentsFromMarkdown(String markdown, {String kind = 'Talent'}) {
   return talents;
 }
 
+/// Classes and archetypes from chapter 4's files, in order: a class's
+/// core abilities (`Bastion core`), and each archetype level's abilities
+/// (`Duelist, Level 1`, its gear and starting talent with it), and which
+/// archetypes each class has, with how many levels the notes give each. A group's file without levels (The Psions)
+/// goes on the first level of the archetypes after it.
+({List<Json> entries, Map<String, Map<String, int>> archetypes}) classesFromMarkdown(
+    List<String> files) {
+  final entries = <Json>[];
+  final archetypes = <String, Map<String, int>>{};
+  Json? current;
+  var group = <Json>[];
+  for (final md in files) {
+    final title = RegExp(r'^## (.+)$', multiLine: true).firstMatch(md)?[1]?.trim() ?? '';
+    final className = _classes[title];
+    if (className != null) {
+      current = {'kind': 'Class', 'name': '$className core', 'card': _sections(md)};
+      entries.add(current);
+      archetypes[className] = {};
+      group = [];
+    } else if (title.contains('Core Abilit') && current != null) {
+      (current['card'] as List).addAll(_sections(md));
+    } else if (!md.contains('### Level 1')) {
+      group = _sections(md);
+    } else if (current != null) {
+      final name = title.replaceFirst(RegExp(r'^The '), '');
+      final levels = md.split(RegExp(r'^#{3,4} Level (?=\d)', multiLine: true));
+      archetypes[_classes.entries.firstWhere((e) => '${e.value} core' == current!['name']).value]![name] =
+          levels.length - 1;
+      final preamble = levels.first;
+      final gear = preamble.indexOf('Recommended Gear');
+      for (final level in levels.skip(1)) {
+        final n = level.substring(0, 1);
+        entries.add({
+          'kind': 'Archetype',
+          'name': _short('$name, Level $n', 60),
+          'card': [
+            if (n == '1') ...[
+              if (gear >= 0)
+                _section('Recommended gear',
+                    _clean(preamble.substring(preamble.indexOf('\n', gear)).replaceAll(RegExp(r'\n+'), '\n'))),
+              ...group,
+            ],
+            ..._sections(level.substring(1)),
+          ].take(10).toList(),
+        });
+      }
+    }
+  }
+  for (final c in entries.where((e) => e['kind'] == 'Class')) {
+    c['card'] = (c['card'] as List).take(10).toList();
+  }
+  return (entries: entries, archetypes: archetypes);
+}
+
+const _classes = {
+  'Aethers': 'Aether',
+  'Bastions': 'Bastion',
+  'Specters': 'Specter',
+  'Synths': 'Synth',
+  'Vitalists': 'Vitalist',
+};
+
+/// A file's `####` abilities as card sections; text before the first, if
+/// any, as one titled by what it starts with. Callouts lose their marks.
+List<Json> _sections(String md) {
+  final body = md
+      .split('\n')
+      .where((l) => !l.startsWith('Up:') && !l.startsWith('## ') && !l.startsWith('### ') && !l.contains('[!note]'))
+      .map((l) => l.startsWith('>') ? l.substring(1).trim() : l)
+      .join('\n');
+  final parts = body.split(RegExp(r'^#### ', multiLine: true));
+  final head = parts.first.trim();
+  return [
+    // Before the abilities: a level's "Gain a Weapon Art" and its choices.
+    if (head.isNotEmpty && RegExp(r'^(Gain|Choose)', multiLine: true).hasMatch(head))
+      _section(head.split('\n').first.replaceAll(':', '').trim(), _clean(head.split('\n').skip(1).join('\n'))),
+    for (final p in parts.skip(1))
+      _section(p.split('\n').first.replaceAll(RegExp(r':\s*$'), '').trim(),
+          _clean(p.split('\n').skip(1).join('\n').replaceAll(RegExp(r'\n{2,}'), '\n'))),
+  ];
+}
+
 /// The compendium's kinds.
 const kinds = [
   {
@@ -329,6 +421,8 @@ const kinds = [
     ],
   },
   {'name': 'Item', 'fields': <Json>[]},
+  {'name': 'Class', 'fields': <Json>[]},
+  {'name': 'Archetype', 'fields': <Json>[]},
   {'name': 'Talent', 'fields': <Json>[]},
   {'name': 'Flaw', 'fields': <Json>[]},
 ];
@@ -445,7 +539,8 @@ final sheet = {
       'fields': [
         {'name': 'talents', 'label': 'Talents', 'type': 'items', 'kind': 'Talent'},
         {'name': 'flaws', 'label': 'Flaws', 'type': 'items', 'kind': 'Flaw'},
-        {'name': 'archetypes', 'label': 'Archetypes and their levels', 'type': 'text'},
+        {'name': 'classAbilities', 'label': 'Class', 'type': 'items', 'kind': 'Class'},
+        {'name': 'archetypes', 'label': 'Archetypes', 'type': 'items', 'kind': 'Archetype'},
         {'name': 'background', 'label': 'Background', 'type': 'text'},
         {'name': 'profile', 'label': 'Psychological Profile', 'type': 'text'},
         {'name': 'notes', 'label': 'Notes', 'type': 'text'},
@@ -464,7 +559,14 @@ final sheet = {
 /// unique talents, each a star giving its talent for 1 CP. The book draws
 /// where each star sits and which touch; the notes don't have it, so every
 /// star starts beside the origin, for the GM to place in the editor.
-Json constellation(List<String> talents) => {
+///
+/// Below them, one under another, each class's archetypes: the class's own node, free and
+/// open to that class alone, giving its core abilities; from it each
+/// archetype's first level, at most 3 archetypes, then its next levels in
+/// order, each an Individual Constellation Star's 5 CP and giving that
+/// level's abilities. (Levels the Threat Level rewards give free: add the
+/// CP first.)
+Json constellation(List<String> talents, [Map<String, Map<String, int>> archetypes = const {}]) => {
       'name': 'Constellation',
       'field': 'CP',
       'nodes': [
@@ -478,5 +580,29 @@ Json constellation(List<String> talents) => {
             'y': i ~/ 5 + 1,
             'text': 'Gives the talent $t.',
           },
+        for (final (c, MapEntry(key: className, value: types)) in archetypes.entries.indexed) ...[
+          {
+            'name': className,
+            'cost': 0,
+            'condition': 'class == "$className"',
+            'items': ['$className core'],
+            'x': 0,
+            'y': 5 + c * 6,
+            'text': 'The $className class and its core abilities.',
+          },
+          for (final (a, MapEntry(key: type, value: levels)) in types.entries.indexed)
+            for (var level = 1; level <= levels; level++)
+              {
+                'name': '$type $level',
+                'group': level == 1 ? 'Archetype' : null,
+                'cost': 5,
+                'requires': [level == 1 ? className : '$type ${level - 1}'],
+                if (level == 1) 'condition': 'count("Archetype") < 3',
+                'items': ['$type, Level $level'],
+                'x': a - (types.length - 1) / 2,
+                'y': 5 + c * 6 + level,
+                'text': level == 1 ? 'The $type archetype.' : '$type level $level.',
+              }..removeWhere((_, v) => v == null),
+        ],
       ],
     };

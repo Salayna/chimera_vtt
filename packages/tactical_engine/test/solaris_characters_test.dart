@@ -91,4 +91,38 @@ void main() {
     expect((v['stressThreshold'], v['AP.max'], v['AG.max'], v['rangedMod']), (9, 7, 3, 5));
     expect(pack.advancement!.nodes['Test Star']!.items, ['Test Star']);
   });
+
+  test('classes and archetypes become entries and Constellation nodes', () {
+    // Made-up files in the shape of chapter 4's.
+    final found = classesFromMarkdown([
+      '## Bastions\n\nLore.',
+      '## Bastion Core Ability\n\n#### Stubborn:\n\nNever falls.',
+      '## The Tester\n\n#### Tester Recommended Gear:\n\nA clipboard\n\n### Level 1\n\n'
+          '#### Probe:\n\nAction - 1 AP: Pokes.\n\n### Level 2\n\nGain a Trick:\n\nOne more.\n\n'
+          '#### Level 3:\n\n#### Check:\n\nChecks.',
+    ]);
+    expect(found.archetypes, {'Bastion': {'Tester': 3}});
+    final byName = {for (final e in found.entries) e['name']: e};
+    expect([for (final c in byName['Bastion core']!['card'] as List) (c as Json)['title']], ['Stubborn']);
+    expect([for (final c in byName['Tester, Level 1']!['card'] as List) (c as Json)['title']],
+        ['Recommended gear', 'Probe']);
+    expect([for (final c in byName['Tester, Level 2']!['card'] as List) (c as Json)['title']], ['Gain a Trick']);
+    expect(byName.containsKey('Tester, Level 3'), isTrue, reason: 'a level under #### still counts');
+
+    final pack = SystemPack.fromJson({
+      'id': 'solaris-arcanum',
+      'name': 'Solaris Arcanum',
+      'unit': 'sector',
+      'compendium': {'kinds': kinds, 'entries': found.entries},
+      'advancement': constellation(const [], found.archetypes),
+      'sheet': sheet,
+    });
+    final nodes = pack.advancement!.nodes;
+    expect(nodes['Bastion']!.condition!.text, 'class == "Bastion"');
+    expect(nodes['Tester 1']!.requires, ['Bastion']);
+    expect((nodes['Tester 1']!.group, nodes['Tester 1']!.cost), ('Archetype', 5));
+    expect(nodes['Tester 2']!.requires, ['Tester 1']);
+    expect(nodes['Tester 3']!.items, ['Tester, Level 3']);
+    expect(nodes.containsKey('Tester 4'), isFalse, reason: 'only the levels the notes have');
+  });
 }

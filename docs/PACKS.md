@@ -182,11 +182,11 @@ dart run tool/solaris_threats.dart "<vault>/Solaris Arcanum" \
     ../../packs/solaris-arcanum.json ../../packs/solaris-arcanum.local.json
 ```
 
-Then `tool/solaris_characters.dart` gives that module its characters, from the same notes: the weapons, explosives, armor, items, talents and flaws as a compendium (attack profiles as actions with their hit tiers), a sheet, and the Constellation's stars as far as the notes have them (its graph is art in the book: place and link the stars in the editor's Advancement tab):
+Then `tool/solaris_characters.dart` gives that module its characters, from the same notes: the weapons, explosives, armor, items, talents, flaws, classes and archetype levels as a compendium (attack profiles as actions with their hit tiers), a sheet, and the Constellation: each class's archetypes as chains of levels, and the unique talents' stars as far as the notes have them (its graph is art in the book: place and link the stars in the editor's Advancement tab):
 
 ```sh
 dart run tool/solaris_characters.dart "<vault>/Solaris Arcanum" \
     ../../packs/solaris-arcanum.local.json ../../packs/solaris-arcanum.local.json
 ```
 
-Install `packs/solaris-arcanum.local.json` from the Systems page. Each card becomes a token: its Combat Form, its damage tracks and other boxed counters (Ammo, Heat, Horde Counter) as trackers with their box counts, its per-round slots, immunities and vulnerabilities in a Profile section, its attack profiles, unique actions and traits, overload profile and tags as card sections, and book tags the pack knows (Synthetic) as conditions. A card without a damage table gets no trackers.
+Each run bumps the module's version, so installing it again updates the rooms playing it. Install `packs/solaris-arcanum.local.json` from the Systems page. Each threat card becomes a token: its Combat Form, its damage tracks and other boxed counters (Ammo, Heat, Horde Counter) as trackers with their box counts, its per-round slots, immunities and vulnerabilities in a Profile section, its attack profiles, unique actions and traits, overload profile and tags as card sections, and book tags the pack knows (Synthetic) as conditions. A card without a damage table gets no trackers.

@@ -1659,12 +1659,16 @@ class _PlayerRoomState extends State<PlayerRoom> {
   }
 }
 
-/// [scene] played with [system], a pack id: as it was if it already is, or
-/// if the system is neither built in nor among [installed] (it then keeps
-/// its own). An installed system's file goes with the scene.
+/// [scene] played with [system], a pack id: as it was if it already is
+/// with the installed version, or if the system is neither built in nor
+/// among [installed] (it then keeps its own). An installed system's file
+/// goes with the scene, so a module's new version reaches it as it opens.
 Scene sceneOnSystem(Scene scene, String system, List<SystemPack> installed) {
-  if (scene.settings.pack == system) return scene;
   final pack = installed.where((p) => p.id == system).firstOrNull;
+  if (scene.settings.pack == system &&
+      (pack == null || scene.packFile?.data['version'] == pack.version)) {
+    return scene;
+  }
   if (!builtInPacks.containsKey(system) && pack == null) return scene;
   return switch (reduce(
       scene, const Gm(), UsePack(system, data: pack?.toJson(tokens: false)))) {

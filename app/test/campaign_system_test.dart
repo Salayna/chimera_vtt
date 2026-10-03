@@ -16,6 +16,9 @@ void main() {
     expect(played.toJson().toString(), contains('Mine'));
     // Already on it: the same scene.
     expect(identical(sceneOnSystem(played, 'mine', [mine]), played), isTrue);
+    // A new version of the module reaches it.
+    final v2 = SystemPack.fromJson({...mine.toJson(), 'version': 2, 'name': 'Mine 2'});
+    expect(sceneOnSystem(played, 'mine', [v2]).packFile!.data['name'], 'Mine 2');
   });
 
   test('a system this GM no longer has leaves the scene as it is', () {
