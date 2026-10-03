@@ -44,7 +44,7 @@ In the room a character is an entity (kind `character`), sent with the snapshot 
 
 ## Bricks
 
-1. The formula language: a parser and evaluator in `tactical_engine`, with tests.
+1. The formula language: a parser and evaluator in `tactical_engine`, with tests. Built 2026-10-03 (`Formula`): `parse` refuses bad syntax with its position, `check` refuses unknown names and mixed types given the sheet's names, `eval` takes the names' values and a die. Dividing by zero gives 0. `count` and `sum` over items wait for brick 4.
 2. Sheets in the pack format, the `characters` table, and a Characters tab on the home to make and edit them.
 3. Linking: a character to a campaign, then to a token, and played in the room.
 4. The compendium: kinds and entries in the format, and items on the sheet as cards with their trackers.

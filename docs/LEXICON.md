@@ -141,7 +141,7 @@ Otherwise it's a field of some entity.
 | **Precise movement** | — | Solaris' option to use exact positions inside sectors. |
 | **Character** | `Character` (planned) | A player's character, made on their home for one system and owned by them. Linked to campaigns of that system, and to a token in the room. Holds a sheet. |
 | **Sheet** | `SheetDef` (planned) | What a pack says a character holds: sections of fields, computed fields and trackers. A character's sheet is its values. |
-| **Formula** | `Formula` (planned) | An expression in a pack, read at install, never compiled into the app: `END + WIL + threatLevel`. No loops or side effects; dice from the GM's roller. Level 2 of the tiered scripting. |
+| **Formula** | `Formula` | An expression in a pack, read at install, never compiled into the app: `END + WIL + threatLevel`, `d20 + DEX.mod`. Numbers, booleans and text; names dotted or not; `if … then … else`; `min`, `max`, `floor`, `ceil`, `round`, `abs`, `has`. No loops or side effects; dice from the caller's roller. Level 2 of the tiered scripting. |
 | **Compendium** | — (planned) | A pack's entries, grouped in kinds. |
 | **Entry** | `Entry` (planned) | One thing in a compendium, such as a weapon or a talent, with the fields, trackers and card its kind declares. Pack tokens become entries of a Threat kind. |
 | **Item** | — (planned) | A character's own copy of an entry, shown as a card with its own tracker values (a rifle with 4 of 6 shots). |
