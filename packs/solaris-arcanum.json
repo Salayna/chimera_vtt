@@ -1,0 +1,27 @@
+{
+  "format": 1,
+  "id": "solaris-arcanum",
+  "name": "Solaris Arcanum",
+  "version": 1,
+  "topology": "square",
+  "diagonal": "chebyshev",
+  "unit": "sector",
+  "unitsPerStep": 1,
+  "bands": [
+    {"name": "Point Blank", "max": 0},
+    {"name": "Adjacent", "max": 1},
+    {"name": "Medium", "max": 10},
+    {"name": "Far"}
+  ],
+  "tags": [
+    {"name": "Heavy Cover", "sector": true},
+    {"name": "Darkness", "sector": true, "valued": true},
+    {"name": "Zero-g", "sector": true},
+    {"name": "Line of Sight Breaker", "sector": true,
+     "effects": [{"type": "blocksSight"}],
+     "text": "Line of sight can't pass through this sector."},
+    {"name": "Difficult Terrain", "sector": true,
+     "effects": [{"type": "entryCheck", "check": "Traversal"}],
+     "text": "Entering this sector needs a Traversal check."}
+  ]
+}

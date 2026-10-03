@@ -2,6 +2,7 @@
 /// tag effects. Pure Dart, no dependencies.
 library;
 
+export 'src/atlas.dart';
 export 'src/engine.dart';
 export 'src/geometry.dart';
 export 'src/pack.dart';

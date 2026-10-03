@@ -4,6 +4,7 @@ import 'topology.dart';
 /// The packs that ship with the app, by id: the id a scene's settings name.
 final builtInPacks = <String, SystemPack>{
   'generic': SystemPack(
+    id: 'generic',
     name: 'Generic',
     unit: 'cell',
     initiative: 'd20',
@@ -11,12 +12,17 @@ final builtInPacks = <String, SystemPack>{
   'dnd5e': _dnd5e,
 };
 
-/// The pack for [id], or Generic for an id this app doesn't know.
-SystemPack packFor(String id) => builtInPacks[id] ?? builtInPacks['generic']!;
+/// The pack for [id] among the built-in ones and [installed], or Generic
+/// for an id this app doesn't know.
+SystemPack packFor(String id, [Iterable<SystemPack> installed = const []]) =>
+    builtInPacks[id] ??
+    installed.where((p) => p.id == id).firstOrNull ??
+    builtInPacks['generic']!;
 
 // The conditions and terrain of the D&D 5e System Reference Document 5.1
 // (CC-BY-4.0), summarised. Advantage is edge +1, disadvantage -1.
 final _dnd5e = SystemPack(
+  id: 'dnd5e',
   name: 'D&D 5e',
   diagonal: DiagonalRule.chebyshev,
   unit: 'ft',

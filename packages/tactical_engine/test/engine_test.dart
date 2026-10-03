@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:tactical_engine/tactical_engine.dart';
 import 'package:test/test.dart';
@@ -7,6 +8,7 @@ import 'package:test/test.dart';
 // illustrate the engine, they aren't the systems' official rules.
 final solaris = SystemPack.fromJson(jsonDecode('''
 {
+  "id": "solaris",
   "name": "Solaris Arcanum",
   "topology": "square",
   "diagonal": "chebyshev",
@@ -31,6 +33,7 @@ final solaris = SystemPack.fromJson(jsonDecode('''
 ''') as Json);
 
 final dnd = SystemPack(
+  id: 'dnd',
   name: 'D&D 5e',
   diagonal: DiagonalRule.alternating,
   unit: 'ft',
@@ -41,6 +44,7 @@ final dnd = SystemPack(
 );
 
 final zones = SystemPack(
+  id: 'zones',
   name: 'Zone game',
   topology: TopologyKind.gridless,
   unit: 'zone',
@@ -187,5 +191,69 @@ void main() {
     expect(pack.regionTags.map((t) => t.name), contains('Difficult Terrain'));
     expect(pack.conditions.map((t) => t.name), isNot(contains('Difficult Terrain')));
     expect(packFor('nope').name, 'Generic');
+  });
+
+  test('a pack survives its own file, and bad files say why', () {
+    final again = SystemPack.fromJson(
+        jsonDecode(jsonEncode(packFor('dnd5e').toJson())) as Json);
+    expect(again.toJson(), packFor('dnd5e').toJson());
+    expect(again.tags['Difficult Terrain']!.effects.single, isA<MoveCost>());
+
+    Matcher says(String bit) =>
+        throwsA(isA<FormatException>().having((e) => e.message, 'message', contains(bit)));
+    expect(() => SystemPack.fromJson({'id': 'Bad Id', 'name': 'x', 'unit': 'ft'}),
+        says('lowercase'));
+    expect(() => SystemPack.fromJson({'id': 'x', 'name': 'x', 'unit': 'ft', 'tags': 3}),
+        says('tags'));
+    expect(() => SystemPack.fromJson({'id': 'x', 'name': 'x', 'unit': 'ft', 'format': 9}),
+        says('format'));
+    expect(
+        () => SystemPack.fromJson({
+              'id': 'x',
+              'name': 'x',
+              'unit': 'ft',
+              'trackers': [{'name': 'HP', 'min': 5, 'max': 1}],
+            }),
+        says('tracker'));
+  });
+
+  test('an Atlas preset becomes a pack: sector tags, conditions, bands', () {
+    final pack = packFromAtlasPreset({
+      'id': 'user-solaris',
+      'name': 'Solaris Arcanum',
+      'rules': {
+        'gridDefaults': {
+          'unitType': 'feet',
+          'unitDistance': 20,
+          'measurementMode': 'abstract',
+          'diagonalRule': 'equidistant',
+          'abstractRangeBands': [
+            {'name': 'Point Blank', 'maxSquares': 0},
+            {'name': 'Adjacent', 'maxSquares': 1},
+          ],
+        },
+        'conditions': [
+          {'id': 'hc', 'name': 'Heavy Cover', 'color': '#123456', 'sector': true},
+          {'id': 'dk', 'name': 'Darkness', 'color': '#000000', 'sector': true, 'valued': true},
+          {'id': 'st', 'name': 'Stunned', 'color': '#ffffff'},
+        ],
+      },
+    });
+    expect(pack.id, 'user-solaris');
+    expect(pack.unit, 'square');
+    expect(pack.bands.map((b) => b.name), ['Point Blank', 'Adjacent', 'Beyond']);
+    expect(pack.regionTags.map((t) => t.name), ['Heavy Cover', 'Darkness']);
+    expect(pack.tags['Darkness']!.valued, isTrue);
+    expect(pack.conditions.single.name, 'Stunned');
+    expect(() => packFromAtlasPreset({'name': 'x'}), throwsFormatException);
+  });
+
+  test('the shipped Solaris module reads', () {
+    final pack = SystemPack.fromJson(jsonDecode(
+        File('../../packs/solaris-arcanum.json').readAsStringSync()) as Json);
+    expect(pack.id, 'solaris-arcanum');
+    final engine = TacticalEngine(
+        pack: pack, topology: pack.topologyFor(cellSize: 100));
+    expect(engine.measure((x: 50, y: 50), (x: 150, y: 50)).band!.name, 'Adjacent');
   });
 }
