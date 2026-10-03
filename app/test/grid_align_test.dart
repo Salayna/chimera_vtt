@@ -61,4 +61,47 @@ void main() {
     expect(c.align.value, isNull);
     expect(c.gridFit.value, isNull);
   });
+
+  testWidgets('over the map, a handle drag moves the handle, not the map',
+      (tester) async {
+    tester.view.physicalSize = const Size(1200, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final store = SceneStore(Scene(
+        settings: const SceneSettings(
+            width: 1024, height: 1024, grid: Grid(cellSize: 128))));
+    final c = TableController();
+    addTearDown(c.dispose);
+    // Stacked as in the GM's room.
+    await tester.pumpWidget(cvApp(
+      title: 'test',
+      home: Stack(children: [
+        Positioned.fill(
+          child: TableView(
+            store: store,
+            controller: c,
+            gm: true,
+            self: const PlayerId('gm'),
+            send: (command) => store.execute(const Gm(), command),
+          ),
+        ),
+        Positioned.fill(child: GridAlignLayer(controller: c, onDone: (_) {})),
+      ]),
+    ));
+    await tester.pump();
+    c.align.value = startAlign(store.scene.settings.grid, c.viewCenter);
+    await tester.pump();
+    final view = c.view.value.clone();
+    final anchor = c.align.value!.anchor;
+
+    await tester.dragFrom(c.toScreen(anchor), const Offset(30, 0));
+    await tester.pump();
+    expect(c.view.value, view); // The map stayed put.
+    expect(c.align.value!.anchor.x, closeTo(anchor.x + 30 / c.zoom, 0.5));
+
+    // Away from any handle, the map still pans.
+    await tester.dragFrom(const Offset(150, 150), const Offset(40, 0));
+    await tester.pump();
+    expect(c.view.value, isNot(view));
+  });
 }

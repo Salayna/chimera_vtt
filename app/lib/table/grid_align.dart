@@ -163,12 +163,14 @@ class _GridAlignLayerState extends State<GridAlignLayer> {
           if (a == null) return const SizedBox.shrink();
           return Stack(children: [
             Positioned.fill(
-              child: MouseRegion(
-                opaque: false,
-                onHover: (e) {
+              // Translucent: it hears hovers everywhere, but claims a press
+              // only on a handle, so the map below still pans and zooms. (A
+              // non-opaque MouseRegion would let the map take the press too.)
+              child: Listener(
+                behavior: HitTestBehavior.translucent,
+                onPointerHover: (e) {
                   if (a.step == AlignStep.refine) setState(() => _hover = e.localPosition);
                 },
-                onExit: (_) => setState(() => _hover = null),
                 child: GestureDetector(
                   behavior: HitTestBehavior.deferToChild,
                   onPanStart: (d) => setState(() {
