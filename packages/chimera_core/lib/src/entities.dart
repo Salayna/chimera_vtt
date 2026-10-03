@@ -192,6 +192,7 @@ final class Token extends Entity {
     this.name = '',
     this.conditions = const {},
     this.trackers = const {},
+    this.template,
   });
 
   final TokenId id;
@@ -219,6 +220,10 @@ final class Token extends Entity {
   /// The pack's trackers by name, such as HP 12. Only those set are here.
   final Map<String, int> trackers;
 
+  /// The pack token it was placed from, by name: its card and tracker
+  /// maximums. Null for a plain token.
+  final String? template;
+
   @override
   EntityKind get kind => EntityKind.token;
 
@@ -231,7 +236,8 @@ final class Token extends Entity {
       hidden: hidden,
       name: name,
       conditions: conditions,
-      trackers: trackers);
+      trackers: trackers,
+      template: template);
 
   Token withOwner(PlayerId? owner) => Token(
       id: id,
@@ -242,7 +248,8 @@ final class Token extends Entity {
       hidden: hidden,
       name: name,
       conditions: conditions,
-      trackers: trackers);
+      trackers: trackers,
+      template: template);
 
   Token withHidden(bool hidden) => Token(
       id: id,
@@ -253,7 +260,8 @@ final class Token extends Entity {
       hidden: hidden,
       name: name,
       conditions: conditions,
-      trackers: trackers);
+      trackers: trackers,
+      template: template);
 
   /// The owner can't be cleared here: use [withOwner].
   Token copyWith(
@@ -271,7 +279,8 @@ final class Token extends Entity {
           hidden: hidden,
           name: name ?? this.name,
           conditions: conditions,
-      trackers: trackers);
+      trackers: trackers,
+      template: template);
 
   Token withConditions(Map<String, int?> conditions) => Token(
       id: id,
@@ -282,7 +291,8 @@ final class Token extends Entity {
       hidden: hidden,
       name: name,
       conditions: Map.unmodifiable(conditions),
-      trackers: trackers);
+      trackers: trackers,
+      template: template);
 
   Token withTrackers(Map<String, int> trackers) => Token(
       id: id,
@@ -293,7 +303,8 @@ final class Token extends Entity {
       hidden: hidden,
       name: name,
       conditions: conditions,
-      trackers: Map.unmodifiable(trackers));
+      trackers: Map.unmodifiable(trackers),
+      template: template);
 
   @override
   Json _fields() => {
@@ -306,6 +317,7 @@ final class Token extends Entity {
         if (name.isNotEmpty) 'name': name,
         if (conditions.isNotEmpty) 'conditions': conditions,
         if (trackers.isNotEmpty) 'trackers': trackers,
+        if (template != null) 'template': template,
       };
 
   factory Token._fromJson(Json json) => Token(
@@ -322,6 +334,7 @@ final class Token extends Entity {
               in (json['trackers'] as Map? ?? const {}).entries)
             key as String: value as int,
         }),
+        template: json['template'] as String?,
       );
 }
 

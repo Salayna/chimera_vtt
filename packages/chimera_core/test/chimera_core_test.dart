@@ -461,4 +461,26 @@ void main() {
       expect(moved.trackers, {'HP': 12});
     });
   });
+
+  test("the GM's tokens keep their trackers from players; templates round-trip", () {
+    final scene = sceneWith([
+      token('pc', owner: alice.id).withTrackers({'HP': 9}),
+      Token(
+          id: const TokenId('npc'),
+          position: (x: 0, y: 0),
+          size: 64,
+          template: 'Raider',
+          trackers: const {'CvW': 2}),
+    ]);
+    final seen = visibleTo(scene, bob);
+    expect(seen.tokens[const TokenId('pc')]!.trackers, {'HP': 9});
+    expect(seen.tokens[const TokenId('npc')]!.trackers, isEmpty);
+    expect(seen.tokens[const TokenId('npc')]!.template, 'Raider');
+    final hit = reduce(scene, gm, const SetTracker(TokenId('npc'), 'CvW', 3)) as Accepted;
+    final sent = patchesFor(scene, hit.patches, bob).single as Upsert;
+    expect((sent.entity as Token).trackers, isEmpty);
+    final decoded = Scene.fromJson(jsonDecode(jsonEncode(scene.toJson())) as Json);
+    expect(decoded.tokens[const TokenId('npc')]!.template, 'Raider');
+    expect(decoded.tokens[const TokenId('npc')]!.moveTo((x: 1, y: 1)).template, 'Raider');
+  });
 }

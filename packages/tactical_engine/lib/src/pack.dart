@@ -197,6 +197,90 @@ final class TurnForm {
       );
 }
 
+/// A tracker on a pack token: its own maximum (a threat's slot count) and
+/// starting value.
+typedef TokenTracker = ({String name, int? max, int value});
+
+/// A titled block of a pack token's card: attack profiles, actions,
+/// traits.
+typedef CardSection = ({String title, String text});
+
+/// A ready-made token a pack offers, such as a Solaris threat: everything
+/// the GM needs to put it on the map and run it. Its card is the GM's: it
+/// never travels with a scene.
+final class TokenTemplate {
+  const TokenTemplate(this.name,
+      {this.size = 1,
+      this.form,
+      this.trackers = const [],
+      this.conditions = const {},
+      this.card = const []});
+
+  final String name;
+
+  /// Width in cells.
+  final int size;
+
+  /// The turn form it fights in, by name, if the pack has forms.
+  final String? form;
+  final List<TokenTracker> trackers;
+
+  /// Tags it starts with, as conditions.
+  final Map<String, int?> conditions;
+  final List<CardSection> card;
+
+  Json toJson() => {
+        'name': name,
+        if (size != 1) 'size': size,
+        if (form != null) 'form': form,
+        if (trackers.isNotEmpty)
+          'trackers': [
+            for (final t in trackers)
+              {
+                'name': t.name,
+                if (t.max != null) 'max': t.max,
+                if (t.value != 0) 'value': t.value,
+              },
+          ],
+        if (conditions.isNotEmpty) 'conditions': conditions,
+        if (card.isNotEmpty)
+          'card': [for (final c in card) {'title': c.title, 'text': c.text}],
+      };
+
+  factory TokenTemplate.fromJson(Json json) {
+    final size = json['size'] as int? ?? 1;
+    if (size < 1 || size > 8) throw const FormatException('A token size from 1 to 8 cells');
+    return TokenTemplate(
+      _text(json['name'], 'token name', 60),
+      size: size,
+      form: switch (json['form']) {
+        final String f => _text(f, 'token form', 30),
+        _ => null,
+      },
+      trackers: [
+        for (final t in _list(json['trackers'], 'token trackers', 20))
+          (
+            name: _text((t as Json)['name'], 'tracker name', 30),
+            max: t['max'] as int?,
+            value: t['value'] as int? ?? 0,
+          ),
+      ],
+      conditions: {
+        for (final MapEntry(:key, :value)
+            in (json['conditions'] as Map? ?? const {}).entries)
+          _text(key, 'condition name', 30): value as int?,
+      },
+      card: [
+        for (final c in _list(json['card'], 'card sections', 30))
+          (
+            title: _text((c as Json)['title'], 'section title', 80),
+            text: _text(c['text'], 'section text', 4000, empty: true),
+          ),
+      ],
+    );
+  }
+}
+
 /// A named distance bracket. [max] is inclusive, in pack units; null means
 /// no limit.
 final class RangeBand {
@@ -223,9 +307,11 @@ final class SystemPack {
     this.bands = const [],
     this.initiative,
     this.forms = const [],
+    List<TokenTemplate> tokens = const [],
     this.trackers = const [],
     List<TagDef> tags = const [],
-  }) : tags = {for (final t in tags) t.name: t};
+  })  : tags = {for (final t in tags) t.name: t},
+        tokens = {for (final t in tokens) t.name: t};
 
   /// The version of the pack file format this app reads.
   static const format = 1;
@@ -258,6 +344,9 @@ final class SystemPack {
   /// Turn order by form instead of a roll, when not empty.
   final List<TurnForm> forms;
 
+  /// The pack's ready-made tokens, by name.
+  final Map<String, TokenTemplate> tokens;
+
   /// The form a token starts a fight in: the default for its side, or the
   /// side's first.
   TurnForm? startingForm({required bool npc}) {
@@ -288,8 +377,9 @@ final class SystemPack {
         TopologyKind.gridless => Gridless(stepSize: cellSize),
       };
 
-  /// The pack as a module file.
-  Json toJson() => {
+  /// The pack as a module file. Without [tokens] for a scene to carry:
+  /// token cards are the GM's.
+  Json toJson({bool tokens = true}) => {
         'format': format,
         'id': id,
         'name': name,
@@ -304,6 +394,8 @@ final class SystemPack {
           ],
         if (initiative != null) 'initiative': initiative,
         if (forms.isNotEmpty) 'forms': [for (final f in forms) f.toJson()],
+        if (tokens && this.tokens.isNotEmpty)
+          'tokens': [for (final t in this.tokens.values) t.toJson()],
         if (trackers.isNotEmpty) 'trackers': [for (final t in trackers) t.toJson()],
         'tags': [for (final t in tags.values) t.toJson()],
       };
@@ -329,6 +421,13 @@ final class SystemPack {
       if (tags.map((t) => t.name).toSet().length != tags.length) {
         throw const FormatException('Two tags share a name');
       }
+      final tokens = [
+        for (final t in _list(json['tokens'], 'tokens', 500))
+          TokenTemplate.fromJson(t as Json),
+      ];
+      if (tokens.map((t) => t.name).toSet().length != tokens.length) {
+        throw const FormatException('Two tokens share a name');
+      }
       return SystemPack(
         id: id,
         name: _text(json['name'], 'name', 60),
@@ -351,6 +450,7 @@ final class SystemPack {
         forms: [
           for (final f in _list(json['forms'], 'forms', 20)) TurnForm.fromJson(f as Json),
         ],
+        tokens: tokens,
         trackers: [
           for (final t in _list(json['trackers'], 'trackers', 20))
             TrackerDef.fromJson(t as Json),

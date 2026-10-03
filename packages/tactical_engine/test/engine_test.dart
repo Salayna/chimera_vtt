@@ -263,4 +263,32 @@ void main() {
     expect(pack.forms.map((f) => f.value), [7, 6, 5, 4, 3, 2, 1]);
     expect(SystemPack.fromJson(pack.toJson()).toJson(), pack.toJson());
   });
+
+  test('pack tokens carry their trackers and card; scenes get the pack without them', () {
+    final pack = SystemPack.fromJson({
+      'id': 'mine',
+      'name': 'Mine',
+      'unit': 'ft',
+      'tokens': [
+        {
+          'name': 'Raider',
+          'size': 2,
+          'form': 'Rush (NPC)',
+          'trackers': [{'name': 'CvW', 'max': 6}, {'name': 'Stress', 'max': 9}],
+          'conditions': {'Synthetic': null},
+          'card': [{'title': 'Attack Profiles', 'text': 'Cleave | 2d20 | Point Blank'}],
+        },
+      ],
+    });
+    final raider = pack.tokens['Raider']!;
+    expect((raider.size, raider.form, raider.trackers.first.max), (2, 'Rush (NPC)', 6));
+    expect(SystemPack.fromJson(pack.toJson()).toJson(), pack.toJson());
+    expect(pack.toJson(tokens: false).containsKey('tokens'), isFalse);
+    expect(
+        () => SystemPack.fromJson({
+              'id': 'x', 'name': 'x', 'unit': 'ft',
+              'tokens': [{'name': 'A'}, {'name': 'A'}],
+            }),
+        throwsFormatException);
+  });
 }

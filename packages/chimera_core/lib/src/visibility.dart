@@ -13,7 +13,7 @@ Scene visibleTo(Scene scene, Actor viewer) => switch (viewer) {
           settings: scene.settings,
           tokens: {
             for (final t in scene.tokens.values)
-              if (!t.hidden) t.id: t,
+              if (!t.hidden) t.id: _forPlayers(t),
           },
           fogOps: scene.fogOps,
           regions: {
@@ -27,6 +27,13 @@ Scene visibleTo(Scene scene, Actor viewer) => switch (viewer) {
           packFile: scene.packFile,
         ),
     };
+
+/// [token] as players see it: the GM's tokens (no owner) keep their
+/// trackers to the GM, so a threat's wounds stay secret.
+// ponytail: by role, as batches are shared; a player can see another
+// player's token's trackers.
+Token _forPlayers(Token token) =>
+    token.owner == null && token.trackers.isNotEmpty ? token.withTrackers(const {}) : token;
 
 /// [initiative] as players see it: no hidden token's entry, and no turn
 /// while it's a hidden token's.
@@ -82,6 +89,7 @@ List<Patch> patchesFor(Scene before, List<Patch> batch, Actor viewer) {
             when !knownRegion(RegionId(id)) =>
           const [],
         Upsert(entity: final Initiative i) => [Upsert(_initiativeFor(i, after))],
+        Upsert(entity: final Token t) => [Upsert(_forPlayers(t))],
         _ => [patch],
       },
     if (tokensShift && !initiativeSent && after.initiative != null)
