@@ -74,12 +74,21 @@ class SavedCharacters {
       _client.from('characters').delete().eq('id', id.value);
 }
 
-/// [c] with its values cleaned against its system's sheet, as anything
-/// read from the table is: sheets come from players.
-Character cleaned(Character c, SystemPack? system) => switch (system?.sheet) {
-      final sheet? => c.copyWith(values: sheet.clean(c.values)),
-      null => c,
-    };
+/// [c] with its values cleaned against its system's sheet, and its items'
+/// against their kinds, as anything read from the table is: sheets come
+/// from players. Items of a kind the system lacks are kept as they are.
+Character cleaned(Character c, SystemPack? system) {
+  final sheet = system?.sheet;
+  if (sheet == null) return c;
+  final kinds = system!.compendium?.kinds ?? const {};
+  return c.copyWith(
+    values: sheet.clean(c.values),
+    items: [
+      for (final i in c.items)
+        if (kinds[i.kind] case final kind?) i.withValues(kind.clean(i.values)) else i,
+    ],
+  );
+}
 
 /// A user's characters on their home: each made for one system, opened to
 /// edit its sheet.
@@ -410,10 +419,10 @@ class _CharacterEditorState extends State<CharacterEditor> {
                       style: CvTypography.body.copyWith(color: CvColors.textSecondary))
                 else
                   SheetView(
-                    sheet: sheet,
-                    values: _c.values,
-                    onSet: (name, value) => setState(() {
-                      _c = _c.copyWith(values: {..._c.values, name: value});
+                    pack: widget.system!,
+                    character: _c,
+                    onChanged: (c) => setState(() {
+                      _c = c;
                       _dirty = true;
                     }),
                   ),

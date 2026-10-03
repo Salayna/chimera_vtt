@@ -261,11 +261,7 @@ final class TokenTemplate {
               },
           ],
         if (conditions.isNotEmpty) 'conditions': conditions,
-        if (card.isNotEmpty)
-          'card': [
-            for (final c in card)
-              {'title': c.title, 'text': c.text, if (c.image != null) 'image': c.image},
-          ],
+        if (card.isNotEmpty) 'card': _cardJson(card),
       };
 
   factory TokenTemplate.fromJson(Json json) {
@@ -292,17 +288,24 @@ final class TokenTemplate {
             in (json['conditions'] as Map? ?? const {}).entries)
           _text(key, 'condition name', 30): value as int?,
       },
-      card: [
-        for (final c in _list(json['card'], 'card sections', 30))
-          (
-            title: _text((c as Json)['title'], 'section title', 80),
-            text: _text(c['text'], 'section text', 4000, empty: true),
-            image: _asset(c['image'], 'A card image'),
-          ),
-      ],
+      card: _cardFromJson(json['card'], 30),
     );
   }
 }
+
+List<Json> _cardJson(List<CardSection> card) => [
+      for (final c in card)
+        {'title': c.title, 'text': c.text, if (c.image != null) 'image': c.image},
+    ];
+
+List<CardSection> _cardFromJson(Object? json, int max) => [
+      for (final c in _list(json, 'card sections', max))
+        (
+          title: _text((c as Json)['title'], 'section title', 80),
+          text: _text(c['text'], 'section text', 4000, empty: true),
+          image: _asset(c['image'], 'A card image'),
+        ),
+    ];
 
 /// A named distance bracket. [max] is inclusive, in pack units; null means
 /// no limit.
@@ -336,6 +339,7 @@ final class SystemPack {
     this.description = '',
     this.cover,
     this.sheet,
+    this.compendium,
   })  : tags = {for (final t in tags) t.name: t},
         tokens = {for (final t in tokens) t.name: t};
 
@@ -361,6 +365,9 @@ final class SystemPack {
   /// What its characters hold, or null when it has no characters.
   final SheetDef? sheet;
 
+  /// Its entries by kind, which characters hold copies of as items.
+  final Compendium? compendium;
+
   /// Every image the module uses, which its bundle carries.
   Set<String> get assets => {
         ?cover,
@@ -368,6 +375,8 @@ final class SystemPack {
           ?t.image,
           for (final c in t.card) ?c.image,
         ],
+        for (final e in compendium?.entries.values ?? const <Entry>[])
+          for (final c in e.card) ?c.image,
       };
   final TopologyKind topology;
   final DiagonalRule diagonal;
@@ -443,6 +452,7 @@ final class SystemPack {
         if (tokens && this.tokens.isNotEmpty)
           'tokens': [for (final t in this.tokens.values) t.toJson()],
         if (trackers.isNotEmpty) 'trackers': [for (final t in trackers) t.toJson()],
+        if (compendium != null) 'compendium': compendium!.toJson(),
         if (sheet != null) 'sheet': sheet!.toJson(),
         'tags': [for (final t in tags.values) t.toJson()],
       };
@@ -468,6 +478,10 @@ final class SystemPack {
       if (tags.map((t) => t.name).toSet().length != tags.length) {
         throw const FormatException('Two tags share a name');
       }
+      final compendium = switch (json['compendium']) {
+        null => null,
+        final c => Compendium.fromJson(c as Json),
+      };
       final tokens = [
         for (final t in _list(json['tokens'], 'tokens', 500))
           TokenTemplate.fromJson(t as Json),
@@ -506,9 +520,10 @@ final class SystemPack {
             TrackerDef.fromJson(t as Json),
         ],
         tags: tags,
+        compendium: compendium,
         sheet: switch (json['sheet']) {
           null => null,
-          final s => SheetDef.fromJson(s as Json),
+          final s => SheetDef.fromJson(s as Json, kinds: compendium?.kinds ?? const {}),
         },
       );
     } on FormatException {

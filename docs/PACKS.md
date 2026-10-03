@@ -59,6 +59,7 @@ Installed packs belong to the GM's account and serve all their campaigns. A scen
 | `trackers` | Numbers on every token: `name`, optional `min` (default 0), `max` and `text`. Players change their own tokens'. |
 | `tokens` | Ready-made tokens, such as a system's threats: `name`, `image` (its picture, an image name), `size` (cells), `form` (a form's name), `trackers` (each with its own `max` and starting `value`), `conditions` it starts with, and `card`: sections of `title`, `text` and an optional `image` the GM reads on its token card. Players never get cards: scenes carry the pack without its tokens, and the trackers of tokens nobody owns stay with the GM. |
 | `sheet` | What the system's characters hold: see [Sheets](#sheets). Players make characters only for systems with one. |
+| `compendium` | Entries characters hold copies of, grouped in kinds: see [Compendium](#compendium). |
 | `tags` | Conditions (`"condition": true`, set on tokens) and region tags (the rest; `"sector": true` marks sector tags). Each may be `valued`, have a `color` (`#rrggbb`), `text` and `effects`. |
 
 Effects are the engine's building blocks (ADR 012): `{"type": "roll", "edge": -1, "scaled": true}` (advantage or disadvantage, times the tag's value when scaled), `{"type": "moveCost", "multiplier": 2}`, `{"type": "blocksSight"}`, `{"type": "occupantLimit", "max": 1}` and `{"type": "entryCheck", "check": "Traversal"}`. Anything they can't say goes in `text`.
@@ -93,8 +94,30 @@ A sheet is sections of fields. Each field has a `name` that formulas read (lette
 | `checkbox` | On or off, starting at `value` or off. |
 | `computed` | The value of its `formula`, a number, boolean or text, never set by hand. |
 | `tracker` | A number changed in play, kept within `min` (default 0) and `max`, which may be formulas; formulas read them as `AP.min` and `AP.max`. It starts at `value`, a formula too (`"AP.max"`), or at its min. |
+| `items` | The character's items of one compendium `kind`, as cards. Formulas don't read it by name: `count("Weapon")` is how many there are, `sum("Armor", "apReduction")` adds up a number field of them. |
 
 Formulas are those of [SYSTEMS.md](SYSTEMS.md): they read the sheet's names, never roll dice, and a field can't depend on itself. A bad sheet refuses the whole pack with the reason. Limits: 20 sections, 200 fields.
+
+### Compendium
+
+```json
+"compendium": {
+  "kinds": [
+    {"name": "Weapon", "fields": [
+      {"name": "capacity"},
+      {"name": "ammo", "type": "tracker", "max": "capacity", "value": "ammo.max"}
+    ]},
+    {"name": "Armor", "fields": [{"name": "apReduction"}]}
+  ],
+  "entries": [
+    {"kind": "Weapon", "name": "P9 Pistol", "values": {"capacity": 5},
+     "card": [{"title": "Precision Shot", "text": "2 AP, 1d20, Point Blank / Adjacent"}]},
+    {"kind": "Armor", "name": "Vulture Harness", "values": {"apReduction": 1}}
+  ]
+}
+```
+
+A kind's `fields` are sheet fields (no items, and no `count` or `sum`). An entry has a `kind`, a `name` unique in the compendium, `values` for its kind's fields, each checked against them, and a `card` of sections like a token's. A character's item is a copy of an entry, its trackers starting from the entry's values. Limits: 20 kinds, 1000 entries, 10 card sections an entry.
 
 
 ## Atlas VTT presets

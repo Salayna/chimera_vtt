@@ -1,3 +1,4 @@
+import 'package:chimera_core/chimera_core.dart' show Character, Item, newId;
 import 'package:flutter/widgets.dart';
 import 'package:tactical_engine/tactical_engine.dart';
 
@@ -6,45 +7,57 @@ import 'theme.dart';
 import 'ui/cv.dart';
 
 /// A character's sheet as its pack lays it out: each section's fields,
-/// numbers and trackers with − and +, computed fields worked out live.
-/// [onSet] changes one stored value; null shows the sheet read-only.
+/// numbers and trackers with − and +, computed fields worked out live, and
+/// items as cards. [onChanged] takes the changed character; null shows the
+/// sheet read-only.
 class SheetView extends StatelessWidget {
   const SheetView({
     super.key,
-    required this.sheet,
-    required this.values,
-    this.onSet,
+    required this.pack,
+    required this.character,
+    this.onChanged,
     this.trackersOnly = false,
   });
+
+  /// Its system: the sheet, and the compendium items come from.
+  final SystemPack pack;
+
+  /// Cleaned against [pack] (see `cleaned`).
+  final Character character;
+  final ValueChanged<Character>? onChanged;
 
   /// Only the trackers, in one column: a token card's.
   final bool trackersOnly;
 
-  final SheetDef sheet;
+  SheetDef get _sheet => pack.sheet!;
 
-  /// The character's stored values, cleaned against [sheet].
-  final Map<String, Object> values;
-  final void Function(String name, Object value)? onSet;
+  void Function(Object)? _setter(String name) => switch (onChanged) {
+        final changed? => (v) =>
+            changed(character.copyWith(values: {...character.values, name: v})),
+        null => null,
+      };
 
   @override
   Widget build(BuildContext context) {
-    final read = SheetValues(sheet, values);
+    final read = SheetValues(_sheet, character.values, items: [
+      for (final i in character.items) (kind: i.kind, values: i.values),
+    ]);
     if (trackersOnly) {
       return Column(crossAxisAlignment: CrossAxisAlignment.stretch, spacing: 6, children: [
-        for (final f in sheet.fields)
+        for (final f in _sheet.fields)
           if (f.type == FieldType.tracker)
             CvTooltip(
                 key: ValueKey(f.name),
                 message: f.text,
                 side: AxisDirection.up,
-                child: _field(f, read)),
+                child: _field(f, read, _setter(f.name))),
       ]);
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: 24,
       children: [
-        for (final s in sheet.sections)
+        for (final s in _sheet.sections)
           Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             spacing: 10,
@@ -57,12 +70,16 @@ class SheetView extends StatelessWidget {
                   for (final f in s.fields)
                     SizedBox(
                       key: ValueKey(f.name),
-                      width: f.type == FieldType.text ? double.infinity : 260,
-                      child: CvTooltip(
-                        message: f.text,
-                        side: AxisDirection.up,
-                        child: _field(f, read),
-                      ),
+                      width: f.type == FieldType.text || f.type == FieldType.items
+                          ? double.infinity
+                          : 260,
+                      child: f.type == FieldType.items
+                          ? _items(f)
+                          : CvTooltip(
+                              message: f.text,
+                              side: AxisDirection.up,
+                              child: _field(f, read, _setter(f.name)),
+                            ),
                     ),
                 ],
               ),
@@ -72,59 +89,166 @@ class SheetView extends StatelessWidget {
     );
   }
 
-  Widget _field(FieldDef f, SheetValues read) {
-    final set = onSet == null ? null : (Object v) => onSet!(f.name, v);
-    return switch (f.type) {
-      FieldType.number => _Stepper(
-        label: f.label,
-        value: read.number(f.name).toInt(),
-        min: f.least ?? -SheetDef.maxValue,
-        max: f.most ?? SheetDef.maxValue,
-        onSet: set,
-      ),
-      FieldType.tracker => _Stepper(
-        label: f.max == null
-            ? f.label
-            : '${f.label} / ${read['${f.name}.max']}',
-        value: read.number(f.name).toInt(),
-        min: read.number('${f.name}.min').toInt(),
-        max: read.number('${f.name}.max').toInt(),
-        onSet: set,
-      ),
-      FieldType.computed => ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: CvSizes.hit),
-        child: Row(
-          children: [
-            Expanded(child: Text(f.label, style: CvTypography.bodySm)),
-            Text(
-              formatValue(read[f.name]),
-              style: CvTypography.weight(
-                CvTypography.body,
-                600,
-              ).copyWith(fontFamily: CvTypography.mono),
-            ),
-          ],
+  /// An items field: the character's items of its kind as cards, and the
+  /// kind's entries to add.
+  Widget _items(FieldDef f) {
+    final kind = f.kind!;
+    final def = pack.compendium!.kinds[kind]!;
+    final changed = onChanged;
+    void setItems(List<Item> items) => changed!(character.copyWith(items: items));
+    final mine = [for (final i in character.items) if (i.kind == kind) i];
+    final entries = pack.compendium!.of(kind).toList();
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, spacing: 8, children: [
+      Text(f.label, style: CvTypography.label.copyWith(color: CvColors.textSecondary)),
+      for (final item in mine)
+        _ItemCard(
+          key: ValueKey(item.id),
+          item: item,
+          kind: def,
+          field: _field,
+          onChanged: changed == null
+              ? null
+              : (i) => setItems([for (final o in character.items) o.id == i.id ? i : o]),
+          onRemove: changed == null
+              ? null
+              : () => setItems([for (final o in character.items) if (o.id != item.id) o]),
         ),
+      if (mine.isEmpty && changed == null)
+        Text('None', style: CvTypography.bodySm.copyWith(color: CvColors.textSecondary)),
+      if (changed != null &&
+          entries.isNotEmpty &&
+          character.items.length < Character.maxItems)
+        Align(
+          alignment: Alignment.centerLeft,
+          child: SizedBox(
+          width: 260,
+          child: CvDropdown<Entry?>(
+            entries: [for (final e in entries) CvMenuItem(e, e.name)],
+            value: null,
+            placeholder: 'Add ${f.label.toLowerCase()}…',
+            onChanged: (e) {
+              if (e == null) return;
+              setItems([
+                ...character.items,
+                Item(
+                  id: newId(),
+                  kind: kind,
+                  name: e.name,
+                  values: pack.compendium!.start(e),
+                  card: e.card,
+                ),
+              ]);
+            },
+          ),
+          ),
+        ),
+    ]);
+  }
+
+  static Widget _field(FieldDef f, SheetValues read, void Function(Object)? set) =>
+      switch (f.type) {
+        FieldType.number => _Stepper(
+            label: f.label,
+            value: read.number(f.name).toInt(),
+            min: f.least ?? -SheetDef.maxValue,
+            max: f.most ?? SheetDef.maxValue,
+            onSet: set,
+          ),
+        FieldType.tracker => _Stepper(
+            label: f.max == null ? f.label : '${f.label} / ${read['${f.name}.max']}',
+            value: read.number(f.name).toInt(),
+            min: read.number('${f.name}.min').toInt(),
+            max: read.number('${f.name}.max').toInt(),
+            onSet: set,
+          ),
+        FieldType.computed => ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: CvSizes.hit),
+            child: Row(children: [
+              Expanded(child: Text(f.label, style: CvTypography.bodySm)),
+              Text(formatValue(read[f.name]),
+                  style: CvTypography.weight(CvTypography.body, 600)
+                      .copyWith(fontFamily: CvTypography.mono)),
+            ]),
+          ),
+        FieldType.text || FieldType.choice when set == null =>
+          _Text(label: f.label, value: read[f.name] as String, onChanged: null),
+        FieldType.text => _Text(label: f.label, value: read[f.name] as String, onChanged: set),
+        FieldType.choice => CvDropdown<String>(
+            label: f.label,
+            value: read[f.name] as String,
+            entries: [for (final o in f.options) CvMenuItem(o, o)],
+            onChanged: set!,
+          ),
+        FieldType.checkbox => CvSwitch(
+            label: Text(f.label),
+            value: read[f.name] as bool,
+            onChanged: set,
+          ),
+        FieldType.items => const SizedBox.shrink(),
+      };
+}
+
+/// One item: its name, its kind's fields (its trackers changed by the
+/// owner, the rest read), its card, and taking it off.
+class _ItemCard extends StatelessWidget {
+  const _ItemCard({
+    super.key,
+    required this.item,
+    required this.kind,
+    required this.field,
+    required this.onChanged,
+    required this.onRemove,
+  });
+
+  final Item item;
+  final SheetDef kind;
+  final Widget Function(FieldDef, SheetValues, void Function(Object)?) field;
+  final ValueChanged<Item>? onChanged;
+  final VoidCallback? onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final read = SheetValues(kind, item.values);
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: CvColors.bgSunken,
+        borderRadius: BorderRadius.circular(CvRadii.md),
+        border: Border.all(color: CvColors.borderSubtle),
       ),
-      FieldType.text => _Text(
-        label: f.label,
-        value: read[f.name] as String,
-        onChanged: set,
-      ),
-      FieldType.choice when set == null => _Text(
-          label: f.label, value: read[f.name] as String, onChanged: null),
-      FieldType.choice => CvDropdown<String>(
-        label: f.label,
-        value: read[f.name] as String,
-        entries: [for (final o in f.options) CvMenuItem(o, o)],
-        onChanged: set ?? (_) {},
-      ),
-      FieldType.checkbox => CvSwitch(
-        label: Text(f.label),
-        value: read[f.name] as bool,
-        onChanged: set,
-      ),
-    };
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, spacing: 8, children: [
+        Row(children: [
+          Expanded(
+              child: Text(item.name, style: CvTypography.weight(CvTypography.body, 600))),
+          if (onRemove case final remove?)
+            CvToolButton(
+              icon: Lucide.trash2,
+              label: 'Remove ${item.name}',
+              danger: true,
+              tooltipSide: AxisDirection.left,
+              onPressed: remove,
+            ),
+        ]),
+        Wrap(spacing: 16, runSpacing: 6, children: [
+          for (final f in kind.fields)
+            SizedBox(
+              key: ValueKey(f.name),
+              width: 240,
+              child: field(
+                f,
+                read,
+                f.type == FieldType.tracker && onChanged != null
+                    ? (v) => onChanged!(item.withValues({...item.values, f.name: v}))
+                    : null,
+              ),
+            ),
+        ]),
+        for (final c in item.card) ...[
+          CvOverline(c.title),
+          if (c.text.isNotEmpty) Text(c.text, style: CvTypography.bodySm),
+        ],
+      ]),
+    );
   }
 }
 

@@ -142,4 +142,19 @@ void main() {
     expect(checkError('has(level)'), '"has" needs a text, not a number');
     expect(Formula.parse('level > 3').check(types), FormulaType.boolean);
   });
+
+  test('count and sum read items by their kind', () {
+    final f = Formula.parse('8 - sum("Armor", "apReduction") - count("Heavy")');
+    expect(f.items, {(kind: 'Armor', field: 'apReduction'), (kind: 'Heavy', field: null)});
+    expect(f.check(types), FormulaType.number);
+    num items(String kind, String? field) => switch ((kind, field)) {
+          ('Armor', 'apReduction') => 2,
+          ('Heavy', null) => 1,
+          _ => 0,
+        };
+    expect(f.eval((n) => values[n]!, items: items), 5);
+    expect(f.eval((n) => values[n]!), 8, reason: 'no items given: none');
+    expect(parseError('count(class)'), contains('names in quotes'));
+    expect(parseError('sum("Armor")'), '"sum" takes 2 arguments');
+  });
 }

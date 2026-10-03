@@ -627,9 +627,12 @@ final class Character extends Entity {
     required this.system,
     required this.name,
     Map<String, Object> values = const {},
-  }) : values = Map.unmodifiable(values);
+    List<Item> items = const [],
+  })  : values = Map.unmodifiable(values),
+        items = List.unmodifiable(items);
 
   static const maxName = 60;
+  static const maxItems = 100;
 
   final CharacterId id;
   final PlayerId owner;
@@ -641,16 +644,24 @@ final class Character extends Entity {
   /// Its sheet: numbers, texts and booleans by field name.
   final Map<String, Object> values;
 
-  Character copyWith({String? name, Map<String, Object>? values}) => Character(
+  /// Its copies of compendium entries.
+  final List<Item> items;
+
+  Character copyWith({String? name, Map<String, Object>? values, List<Item>? items}) =>
+      Character(
         id: id,
         owner: owner,
         system: system,
         name: name ?? this.name,
         values: values ?? this.values,
+        items: items ?? this.items,
       );
 
   /// The sheet, as the `characters` table's `sheet` column holds it.
-  Json get sheet => {'values': values};
+  Json get sheet => {
+        'values': values,
+        if (items.isNotEmpty) 'items': [for (final i in items) i.toJson()],
+      };
 
   @override
   EntityKind get kind => EntityKind.character;
@@ -671,10 +682,66 @@ final class Character extends Entity {
         owner: PlayerId(json['owner'] as String),
         system: json['system'] as String,
         name: json['name'] as String,
-        values: {
-          for (final MapEntry(:key, :value)
-              in ((json['sheet'] as Map?)?['values'] as Map? ?? const {}).entries)
-            if (value is num || value is bool || value is String) key as String: value as Object,
-        },
+        values: _values((json['sheet'] as Map?)?['values']),
+        items: [
+          for (final i in (json['sheet'] as Map?)?['items'] as List? ?? const [])
+            Item.fromJson(i as Json),
+        ],
+      );
+}
+
+/// Numbers, booleans and texts by name; anything else is dropped.
+Map<String, Object> _values(Object? json) => {
+      for (final MapEntry(:key, :value) in (json as Map? ?? const {}).entries)
+        if (value is num || value is bool || value is String) key as String: value as Object,
+    };
+
+/// A character's copy of a compendium entry: its kind, name, values (its
+/// own trackers' too) and card. Core doesn't read the kind; the app does.
+final class Item {
+  Item({
+    required this.id,
+    required this.kind,
+    required this.name,
+    Map<String, Object> values = const {},
+    List<({String title, String text, String? image})> card = const [],
+  })  : values = Map.unmodifiable(values),
+        card = List.unmodifiable(card);
+
+  /// Unique among its character's items.
+  final String id;
+  final String kind;
+  final String name;
+  final Map<String, Object> values;
+  final List<({String title, String text, String? image})> card;
+
+  Item withValues(Map<String, Object> values) =>
+      Item(id: id, kind: kind, name: name, values: values, card: card);
+
+  Json toJson() => {
+        'id': id,
+        'kind': kind,
+        'name': name,
+        if (values.isNotEmpty) 'values': values,
+        if (card.isNotEmpty)
+          'card': [
+            for (final c in card)
+              {'title': c.title, 'text': c.text, if (c.image != null) 'image': c.image},
+          ],
+      };
+
+  factory Item.fromJson(Json json) => Item(
+        id: json['id'] as String,
+        kind: json['kind'] as String,
+        name: json['name'] as String,
+        values: _values(json['values']),
+        card: [
+          for (final c in json['card'] as List? ?? const [])
+            (
+              title: (c as Json)['title'] as String,
+              text: c['text'] as String,
+              image: c['image'] as String?,
+            ),
+        ],
       );
 }

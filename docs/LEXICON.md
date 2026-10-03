@@ -143,10 +143,11 @@ Otherwise it's a field of some entity.
 | **Playing a character** | `Token.character`, `LinkCharacter` | A token linked to a character: its card shows the character's trackers and opens its sheet. |
 | **Sheet** | `SheetDef`, `SheetValues` | What a pack says a character holds: sections of sheet fields. A character's sheet is its values by field name, cleaned against the pack's sheet whenever read; `SheetValues` works out what formulas see. |
 | **Sheet field** | `FieldDef`, `FieldType` | One entry of a sheet: a number, text, choice, checkbox, computed field (a formula) or tracker (a number whose bounds are formulas, as AP at most `8 - armor`). Its name is what formulas read (`DEX.mod`); its label what people see. A tracker's bounds read as `AP.min` and `AP.max`. Not the same as an entity's **field**. |
-| **Formula** | `Formula` | An expression in a pack, read at install, never compiled into the app: `END + WIL + threatLevel`, `d20 + DEX.mod`. Numbers, booleans and text; names dotted or not; `if … then … else`; `min`, `max`, `floor`, `ceil`, `round`, `abs`, `has`. No loops or side effects; dice from the caller's roller. Level 2 of the tiered scripting. |
-| **Compendium** | — (planned) | A pack's entries, grouped in kinds. |
-| **Entry** | `Entry` (planned) | One thing in a compendium, such as a weapon or a talent, with the fields, trackers and card its kind declares. Pack tokens become entries of a Threat kind. |
-| **Item** | — (planned) | A character's own copy of an entry, shown as a card with its own tracker values (a rifle with 4 of 6 shots). |
+| **Formula** | `Formula` | An expression in a pack, read at install, never compiled into the app: `END + WIL + threatLevel`, `d20 + DEX.mod`. Numbers, booleans and text; names dotted or not; `if … then … else`; `min`, `max`, `floor`, `ceil`, `round`, `abs`, `has`, and `count` and `sum` over items. No loops or side effects; dice from the caller's roller. Level 2 of the tiered scripting. |
+| **Compendium** | `Compendium` | A pack's entries, grouped in kinds. |
+| **Entry kind** | `Compendium.kinds` | What a kind of entry holds, declared like a sheet's fields: a weapon's `capacity` and its `ammo` tracker. |
+| **Entry** | `Entry` | One thing in a compendium, such as a weapon or a talent: its kind, name, values and card. |
+| **Item** | `Item`, `FieldType.items` | A character's own copy of an entry, shown as a card with its own tracker values (a rifle with 4 of 6 shots). A sheet's items field lists one kind's; formulas read them with `count` and `sum`. |
 | **Action** | `ActionDef` (planned) | A button on a sheet or item card: a cost, a roll and outcome bands. It logs the band and its text and changes nothing on the target; the target's owner applies the damage. |
 | **Advancement** | — (planned) | A pack's graph of nodes a character unlocks: each with a cost, requirements and what it grants. D&D's levels are a chain; Solaris' Constellation a graph. |
 

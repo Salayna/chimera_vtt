@@ -242,7 +242,7 @@ Outcome _usePack(Scene scene, String id, Json? data) {
 }
 
 /// How much of a character the room carries: its JSON, values included.
-const maxCharacterBytes = 64 * 1024;
+const maxCharacterBytes = 128 * 1024;
 
 /// Only a character's owner writes it, and only for the scene's system:
 /// the GM reads characters, never changes them.
@@ -256,6 +256,8 @@ Outcome _updateCharacter(Scene scene, Actor actor, Character character) {
     return name.isEmpty ||
             name.length > Character.maxName ||
             character.system != scene.settings.pack ||
+            character.items.length > Character.maxItems ||
+            character.items.map((i) => i.id).toSet().length != character.items.length ||
             jsonEncode(character.toJson()).length > maxCharacterBytes
         ? const Refused(Refusal.invalid)
         : Accepted([Upsert(character)]);

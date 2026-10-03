@@ -243,11 +243,10 @@ class SheetPanel extends StatelessWidget {
                     child: SingleChildScrollView(
                       padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
                       child: SheetView(
-                        sheet: sheet,
-                        values: sheet.clean(c.values),
-                        onSet: c.owner == self
-                            ? (name, value) => send(UpdateCharacter(
-                                c.copyWith(values: {...c.values, name: value})))
+                        pack: packOf(scene),
+                        character: cleaned(c, packOf(scene)),
+                        onChanged: c.owner == self
+                            ? (changed) => send(UpdateCharacter(changed))
                             : null,
                       ),
                     ),

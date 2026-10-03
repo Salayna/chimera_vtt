@@ -16,6 +16,10 @@ enum FieldType {
   /// A number the player changes in play, such as AP or HP, whose bounds
   /// are formulas: AP at most `8 - armor.penalty`.
   tracker,
+
+  /// The character's items of one compendium [FieldDef.kind], as cards.
+  /// Formulas read them with `count` and `sum`, not by the field's name.
+  items,
 }
 
 /// One field of a pack's sheet. Its [name] is what formulas read, so it's a
@@ -31,6 +35,7 @@ final class FieldDef {
     this.value,
     this.options = const [],
     this.formula,
+    this.kind,
   }) : label = label ?? name;
 
   final String name;
@@ -60,6 +65,9 @@ final class FieldDef {
   /// A computed field's formula.
   final Formula? formula;
 
+  /// An items field's compendium kind.
+  final String? kind;
+
   Json toJson() => {
         'name': name,
         if (label != name) 'label': label,
@@ -70,6 +78,7 @@ final class FieldDef {
         if (value case final v?) 'value': v is Formula ? _formulaJson(v) : v,
         if (options.isNotEmpty) 'options': options,
         if (formula != null) 'formula': formula!.text,
+        if (kind != null) 'kind': kind,
       };
 
   factory FieldDef.fromJson(Json json) {
@@ -119,6 +128,7 @@ final class FieldDef {
           ? _parse(json['formula'] ?? (throw FormatException('$name: a computed field needs a formula')),
               '$name formula')
           : null,
+      kind: type == FieldType.items ? _text(json['kind'], '$name kind', 30) : null,
     );
   }
 }
@@ -140,7 +150,9 @@ typedef SheetSection = ({String title, List<FieldDef> fields});
 /// What a pack says a character holds: sections of fields, computed fields
 /// and trackers. A character's sheet is its values, by field name.
 final class SheetDef {
-  SheetDef(this.sections) {
+  /// [kinds] are the compendium's, by name: what items fields hold and
+  /// `count` and `sum` read.
+  SheetDef(this.sections, {this.kinds = const {}}) {
     final seen = <String>{};
     for (final f in fields) {
       for (final n in [
@@ -151,11 +163,19 @@ final class SheetDef {
       }
     }
     for (final f in fields) {
-      _typeOf(f.name, {});
+      if (f.type == FieldType.items) {
+        if (!kinds.containsKey(f.kind)) {
+          throw FormatException('${f.name}: no compendium kind "${f.kind}"');
+        }
+      } else {
+        _typeOf(f.name, {});
+      }
     }
   }
 
   static const maxFields = 200;
+
+  final Map<String, SheetDef> kinds;
 
   final List<SheetSection> sections;
 
@@ -166,7 +186,8 @@ final class SheetDef {
   /// Every name a formula can read on this sheet, with its type: each field,
   /// and each tracker's `.min` and `.max`.
   late final Map<String, FormulaType> types = {
-    for (final f in fields) ...{
+    for (final f in fields)
+      if (f.type != FieldType.items) ...{
       f.name: _typeOf(f.name, {}),
       if (f.type == FieldType.tracker) ...{
         '${f.name}.min': FormulaType.number,
@@ -188,6 +209,13 @@ final class SheetDef {
       FormulaType? check(Formula? f, String what, [FormulaType? want]) {
         if (f == null) return null;
         if (f.hasDice) throw FormatException('$what rolls dice: a sheet can\'t');
+        for (final (:kind, :field) in f.items) {
+          final k = kinds[kind] ??
+              (throw FormatException('$what: no compendium kind "$kind"'));
+          if (field != null && k.types[field] != FormulaType.number) {
+            throw FormatException('$what: "$kind" has no number "$field"');
+          }
+        }
         final reads = {
           for (final n in f.names)
             if (_split(n).$1 != null) n: _typeOf(n, path),
@@ -215,6 +243,8 @@ final class SheetDef {
         FieldType.number => number,
         FieldType.checkbox => FormulaType.boolean,
         FieldType.text || FieldType.choice => FormulaType.text,
+        FieldType.items => throw FormatException(
+            '"$name" is a list of items: read it with count or sum'),
       };
       return _types[name] = type;
     } finally {
@@ -244,15 +274,15 @@ final class SheetDef {
         : (null, null);
   }
 
-  /// A new character's values: each field's start.
-  Map<String, Object> start() {
-    final empty = <String, Object>{};
+  /// A new character's values: each field's start, after [given] (an
+  /// item's entry's values, which its trackers may start from).
+  Map<String, Object> start([Map<String, Object> given = const {}]) {
+    final read = SheetValues(this, given);
     return {
       for (final f in fields)
-        if (f.type != FieldType.computed)
-          f.name: f.type == FieldType.tracker
-              ? SheetValues(this, empty)._start(f)
-              : _default(f),
+        if (f.type != FieldType.computed && f.type != FieldType.items)
+          f.name: given[f.name] ??
+              (f.type == FieldType.tracker ? read._start(f) : _default(f)),
     };
   }
 
@@ -261,7 +291,7 @@ final class SheetDef {
         FieldType.text => f.value ?? '',
         FieldType.choice => f.value ?? f.options.first,
         FieldType.checkbox => f.value ?? false,
-        FieldType.computed || FieldType.tracker => 0,
+        FieldType.computed || FieldType.tracker || FieldType.items => 0,
       };
 
   /// [values] kept to what this sheet holds: unknown and mistyped values
@@ -301,7 +331,7 @@ final class SheetDef {
         ],
       };
 
-  factory SheetDef.fromJson(Json json) {
+  factory SheetDef.fromJson(Json json, {Map<String, SheetDef> kinds = const {}}) {
     final sections = [
       for (final s in _list(json['sections'], 'sheet sections', 20))
         (
@@ -315,7 +345,7 @@ final class SheetDef {
     if (sections.fold(0, (n, s) => n + s.fields.length) > maxFields) {
       throw const FormatException('A sheet has at most $maxFields fields');
     }
-    return SheetDef(sections);
+    return SheetDef(sections, kinds: kinds);
   }
 }
 
@@ -323,10 +353,14 @@ final class SheetDef {
 /// values first, each field's start otherwise; computed fields and tracker
 /// bounds are worked out when read, trackers kept within their bounds.
 final class SheetValues {
-  SheetValues(this.sheet, this.stored, {this.has});
+  SheetValues(this.sheet, this.stored, {this.has, this.items = const []});
 
   final SheetDef sheet;
   final Map<String, Object> stored;
+
+  /// The character's items: each one's kind and values, for `count` and
+  /// `sum`.
+  final List<({String kind, Map<String, Object> values})> items;
 
   /// Whether the character has a condition, for `has(…)`.
   final bool Function(String tag)? has;
@@ -357,8 +391,16 @@ final class SheetValues {
   }
 
   Object _run(Formula f) {
-    final v = f.eval((n) => this[n], has: has);
+    final v = f.eval((n) => this[n], has: has, items: _items);
     return v is double && !v.isFinite ? 0 : v;
+  }
+
+  num _items(String kind, String? field) {
+    final of = items.where((i) => i.kind == kind);
+    if (field == null) return of.length;
+    final def = sheet.kinds[kind];
+    if (def == null) return 0;
+    return of.fold<num>(0, (sum, i) => sum + SheetValues(def, i.values).number(field));
   }
 
   /// A tracker's value on a new character.
@@ -370,4 +412,87 @@ final class SheetValues {
   num number(String name) => this[name] as num;
 
   static int _whole(num n) => n.round().clamp(-SheetDef.maxValue, SheetDef.maxValue);
+}
+
+/// One thing in a compendium, such as a weapon or a talent: values for its
+/// kind's fields, and a card. A character's item is a copy of one.
+final class Entry {
+  const Entry(this.kind, this.name, {this.values = const {}, this.card = const []});
+
+  final String kind;
+  final String name;
+  final Map<String, Object> values;
+  final List<CardSection> card;
+
+  Json toJson() => {
+        'kind': kind,
+        'name': name,
+        if (values.isNotEmpty) 'values': values,
+        if (card.isNotEmpty) 'card': _cardJson(card),
+      };
+}
+
+/// A pack's entries, grouped in kinds. Each kind declares its fields like a
+/// sheet's: data (a weapon's AP cost) and trackers (its ammo, at most its
+/// `capacity`). Kinds can't read items.
+final class Compendium {
+  Compendium(this.kinds, List<Entry> entries)
+      : entries = {for (final e in entries) e.name: e};
+
+  static const maxKinds = 20;
+  static const maxEntries = 1000;
+
+  /// Each kind's fields, by its name.
+  final Map<String, SheetDef> kinds;
+
+  /// By name.
+  final Map<String, Entry> entries;
+
+  Iterable<Entry> of(String kind) => entries.values.where((e) => e.kind == kind);
+
+  /// The values of a new item copied from [entry]: its own, and its kind's
+  /// starts for the rest (a rifle's ammo full).
+  Map<String, Object> start(Entry entry) => kinds[entry.kind]!.start(entry.values);
+
+  Json toJson() => {
+        'kinds': [
+          for (final MapEntry(key: name, value: sheet) in kinds.entries)
+            {
+              'name': name,
+              'fields': [for (final f in sheet.fields) f.toJson()],
+            },
+        ],
+        'entries': [for (final e in entries.values) e.toJson()],
+      };
+
+  factory Compendium.fromJson(Json json) {
+    final kinds = <String, SheetDef>{};
+    for (final k in _list(json['kinds'], 'compendium kinds', maxKinds)) {
+      final name = _text((k as Json)['name'], 'kind name', 30);
+      if (kinds.containsKey(name)) throw FormatException('Two kinds are called "$name"');
+      kinds[name] = SheetDef.fromJson({
+        'sections': [
+          {'title': name, 'fields': k['fields'] ?? const []},
+        ],
+      });
+    }
+    final entries = <Entry>[];
+    final names = <String>{};
+    for (final e in _list(json['entries'], 'compendium entries', maxEntries)) {
+      final name = _text((e as Json)['name'], 'entry name', 60);
+      if (!names.add(name)) throw FormatException('Two entries are called "$name"');
+      final kind = _text(e['kind'], '$name kind', 30);
+      final sheet = kinds[kind] ?? (throw FormatException('$name: no kind "$kind"'));
+      final values = <String, Object>{
+        for (final MapEntry(:key, :value) in (e['values'] as Map? ?? const {}).entries)
+          key as String: value as Object,
+      };
+      final clean = sheet.clean(values);
+      for (final key in values.keys) {
+        if (clean[key] != values[key]) throw FormatException('$name: not a value for "$key"');
+      }
+      entries.add(Entry(kind, name, values: clean, card: _cardFromJson(e['card'], 10)));
+    }
+    return Compendium(kinds, entries);
+  }
 }

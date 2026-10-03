@@ -4,7 +4,7 @@ import 'events.dart';
 
 /// Bumped on any incompatible message change. Clients on another version
 /// can't decode messages and report [ProtocolMismatch].
-const protocolVersion = 6; // 6: characters in the room, tokens playing them.
+const protocolVersion = 7; // 7: characters carry items.
 
 final class ProtocolMismatch implements Exception {
   const ProtocolMismatch(this.version);

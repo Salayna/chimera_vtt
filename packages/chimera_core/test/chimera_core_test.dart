@@ -498,6 +498,12 @@ void main() {
     expect(why(scene, alice, UpdateCharacter(ayla.copyWith(name: ' '))), Refusal.invalid);
     final other = Character(id: ayla.id, owner: alice.id, system: 'dnd5e', name: 'Ayla');
     expect(why(scene, alice, UpdateCharacter(other)), Refusal.invalid);
+    final rifle = Item(id: 'i', kind: 'Weapon', name: 'Rifle', values: const {'ammo': 4});
+    expect(why(scene, alice, UpdateCharacter(ayla.copyWith(items: [rifle, rifle]))),
+        Refusal.invalid, reason: 'two items with one id');
+    final armed = run(scene, alice, UpdateCharacter(ayla.copyWith(items: [rifle])));
+    expect(Character.fromJson(armed.characters[ayla.id]!.toJson()).items.single.values,
+        {'ammo': 4});
 
     const link = LinkCharacter(TokenId('a'), CharacterId('ayla'));
     final linked = run(inRoom, alice, link);

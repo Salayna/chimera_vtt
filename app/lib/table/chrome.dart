@@ -10,9 +10,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import 'package:tactical_engine/tactical_engine.dart'
-    show SheetDef, SystemPack, TagDef, TrackerDef, builtInPacks;
+    show SystemPack, TagDef, TrackerDef, builtInPacks;
 
 import '../members.dart';
+import '../characters.dart' show cleaned;
 import '../sheet_view.dart';
 import '../theme.dart';
 import '../ui/cv.dart';
@@ -1184,7 +1185,7 @@ class _TokenCard extends StatelessWidget {
                   if (_character case final c?)
                     _CharacterTrackers(
                       character: c,
-                      sheet: pack.sheet!,
+                      pack: pack,
                       send: c.owner == self ? send : null,
                       onOpenSheet: onOpenSheet,
                     )
@@ -1442,13 +1443,13 @@ class _NameFieldState extends State<_NameField> {
 class _CharacterTrackers extends StatelessWidget {
   const _CharacterTrackers({
     required this.character,
-    required this.sheet,
+    required this.pack,
     required this.send,
     required this.onOpenSheet,
   });
 
   final Character character;
-  final SheetDef sheet;
+  final SystemPack pack;
   final Outcome Function(Command)? send;
   final ValueChanged<CharacterId>? onOpenSheet;
 
@@ -1474,12 +1475,11 @@ class _CharacterTrackers extends StatelessWidget {
               ),
           ]),
           SheetView(
-            sheet: sheet,
-            values: sheet.clean(character.values),
+            pack: pack,
+            character: cleaned(character, pack),
             trackersOnly: true,
-            onSet: switch (send) {
-              final send? => (name, value) => send(UpdateCharacter(
-                  character.copyWith(values: {...character.values, name: value}))),
+            onChanged: switch (send) {
+              final send? => (c) => send(UpdateCharacter(c)),
               null => null,
             },
           ),

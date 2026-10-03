@@ -12,9 +12,12 @@ enum FormulaType { number, boolean, text }
 /// in `class == "Fighter"`). Names, dotted or not (`DEX.mod`), are whatever
 /// the caller defines. Dividing by zero gives 0, so a formula never fails at
 /// the table.
-// ponytail: count and sum over a character's items come with items (brick 4).
+///
+/// `count("Weapon")` is how many items of a compendium kind the character
+/// has, and `sum("Armor", "apReduction")` adds up a field of them. Their
+/// names are text literals, so a pack is checked when it's read.
 final class Formula {
-  Formula._(this.text, this._root, this.names, this.hasDice);
+  Formula._(this.text, this._root, this.names, this.hasDice, this.items);
 
   static const maxLength = 500;
   static const maxDepth = 32;
@@ -31,6 +34,8 @@ final class Formula {
     'round': (1, 1),
     'abs': (1, 1),
     'has': (1, 1),
+    'count': (1, 1),
+    'sum': (2, 2),
   };
 
   static const _keywords = {
@@ -75,6 +80,10 @@ final class Formula {
   /// Whether it rolls dice. A computed field's formula must not.
   final bool hasDice;
 
+  /// The items it reads with `count` and `sum`: a kind, and the field
+  /// summed (null for a count).
+  final Set<({String kind, String? field})> items;
+
   /// Throws a [FormatException] pointing at the problem unless [text] is a
   /// whole, valid formula within the limits.
   factory Formula.parse(String text) {
@@ -111,7 +120,7 @@ final class Formula {
     final parser = _Parser(text, tokens);
     final root = parser.expression();
     if (parser.peek != null) parser.fail('Unexpected "${parser.peek!.text}"');
-    return Formula._(text, root, parser.names, parser.hasDice);
+    return Formula._(text, root, parser.names, parser.hasDice, parser.items);
   }
 
   static int _lead(String s, int at) {
@@ -128,13 +137,20 @@ final class Formula {
 
   /// The formula's value: a `num`, `bool` or `String`. [value] gives each
   /// name's value, of the type [check] was given; [has] says whether the
-  /// character has a tag (false when omitted); [die] rolls one die of the
-  /// given sides, and is needed only when [hasDice].
+  /// character has a tag (false when omitted); [items] counts a kind's
+  /// items, or sums a field over them (0 when omitted); [die] rolls one die
+  /// of the given sides, and is needed only when [hasDice].
   Object eval(
     Object Function(String name) value, {
     bool Function(String tag)? has,
+    num Function(String kind, String? field)? items,
     int Function(int sides)? die,
-  }) => _root.eval((value: value, has: has ?? (_) => false, die: die));
+  }) => _root.eval((
+        value: value,
+        has: has ?? (_) => false,
+        items: items ?? (_, _) => 0,
+        die: die,
+      ));
 
   @override
   String toString() => text;
@@ -147,6 +163,7 @@ typedef _Token = ({_Kind kind, String text, int at});
 typedef _Env = ({
   Object Function(String) value,
   bool Function(String) has,
+  num Function(String, String?) items,
   int Function(int)? die,
 });
 
@@ -158,6 +175,7 @@ final class _Parser {
   final String source;
   final List<_Token> tokens;
   final names = <String>{};
+  final items = <({String kind, String? field})>{};
   var hasDice = false;
   var _i = 0;
   var _depth = 0;
@@ -341,6 +359,17 @@ final class _Parser {
                 : '"${t.text}" takes $least to $most arguments',
             t.at,
           );
+        }
+        if (t.text == 'count' || t.text == 'sum') {
+          final names = [
+            for (final a in args)
+              if (a case _Literal(:final String value)) value,
+          ];
+          if (names.length != args.length) {
+            fail('"${t.text}" takes names in quotes: ${t.text == 'count' ? 'count("Weapon")' : 'sum("Armor", "apReduction")'}',
+                t.at);
+          }
+          items.add((kind: names.first, field: names.length > 1 ? names[1] : null));
         }
         return _Call(t.at, t.text, args);
       case _Kind.name:
@@ -547,6 +576,7 @@ final class _Call extends _Node {
       _want(f, args.single, FormulaType.text, types, '"has"');
       return FormulaType.boolean;
     }
+    if (function == 'count' || function == 'sum') return FormulaType.number;
     for (final a in args) {
       _want(f, a, FormulaType.number, types, '"$function"');
     }
@@ -556,6 +586,10 @@ final class _Call extends _Node {
   @override
   Object eval(_Env env) {
     if (function == 'has') return env.has(args.single.eval(env) as String);
+    if (function == 'count' || function == 'sum') {
+      final [kind, ...field] = [for (final a in args) a.eval(env) as String];
+      return env.items(kind, field.firstOrNull);
+    }
     final values = [for (final a in args) a.eval(env) as num];
     return switch (function) {
       'min' => values.reduce((a, b) => a < b ? a : b),

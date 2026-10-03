@@ -29,15 +29,20 @@ void main() {
     tester.view.physicalSize = const Size(1440, 1200);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    var values = dnd.sheet!.start();
+    var c = Character(
+        id: const CharacterId('c'),
+        owner: const PlayerId('me'),
+        system: 'dnd5e',
+        name: 'Ayla',
+        values: dnd.sheet!.start());
     await tester.pumpWidget(cvApp(
       title: 'test',
       home: StatefulBuilder(
         builder: (context, setState) => SingleChildScrollView(
           child: SheetView(
-            sheet: dnd.sheet!,
-            values: values,
-            onSet: (name, value) => setState(() => values = {...values, name: value}),
+            pack: dnd,
+            character: c,
+            onChanged: (changed) => setState(() => c = changed),
           ),
         ),
       ),
@@ -49,7 +54,7 @@ void main() {
       await tester.tap(button('Dexterity +1'));
       await tester.pump();
     }
-    expect(values['DEX'], 14);
+    expect(c.values['DEX'], 14);
     // Dexterity modifier, worked out from DEX.
     expect(
         find.descendant(
@@ -57,9 +62,79 @@ void main() {
         findsOneWidget);
     await tester.tap(button('Hit points / 8 +1'));
     await tester.pump();
-    expect(values['HP'], 8, reason: 'kept at its max');
+    expect(c.values['HP'], 8, reason: 'kept at its max');
     await tester.tap(button('Hit point maximum +1'));
     await tester.pump();
     expect(find.text('Hit points / 9'), findsOneWidget);
+  });
+
+  testWidgets('items come from the compendium, with their own trackers', (tester) async {
+    tester.view.physicalSize = const Size(1440, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final pack = SystemPack.fromJson({
+      'id': 'x',
+      'name': 'X',
+      'unit': 'sector',
+      'compendium': {
+        'kinds': [
+          {
+            'name': 'Weapon',
+            'fields': [
+              {'name': 'capacity', 'label': 'Capacity'},
+              {'name': 'ammo', 'label': 'Ammo', 'type': 'tracker', 'max': 'capacity', 'value': 'ammo.max'},
+            ],
+          },
+        ],
+        'entries': [
+          {
+            'kind': 'Weapon',
+            'name': 'P9 Pistol',
+            'values': {'capacity': 5},
+            'card': [{'title': 'Precision Shot', 'text': '2 AP, 1d20'}],
+          },
+        ],
+      },
+      'sheet': {
+        'sections': [
+          {
+            'title': 'Gear',
+            'fields': [
+              {'name': 'guns', 'label': 'Guns', 'type': 'computed', 'formula': 'count("Weapon")'},
+              {'name': 'weapons', 'label': 'Weapons', 'type': 'items', 'kind': 'Weapon'},
+            ],
+          },
+        ],
+      },
+    });
+    var c = Character(
+        id: const CharacterId('c'), owner: const PlayerId('me'), system: 'x', name: 'Ayla');
+    await tester.pumpWidget(cvApp(
+      title: 'test',
+      home: StatefulBuilder(
+        builder: (context, setState) => SingleChildScrollView(
+          child: SheetView(
+            pack: pack,
+            character: c,
+            onChanged: (changed) => setState(() => c = changed),
+          ),
+        ),
+      ),
+    ));
+    await tester.tap(find.text('Add weapons…'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('P9 Pistol').last);
+    await tester.pumpAndSettle();
+    expect(c.items.single.values, {'capacity': 5, 'ammo': 5});
+    expect(find.text('Ammo / 5'), findsOneWidget);
+    expect(find.text('2 AP, 1d20'), findsOneWidget);
+    await tester.tap(find.byWidgetPredicate((w) => w is CvToolButton && w.label == 'Ammo / 5 −1'));
+    await tester.pump();
+    expect(c.items.single.values['ammo'], 4);
+    expect(find.byWidgetPredicate((w) => w is CvToolButton && w.label == 'Capacity +1'), findsNothing,
+        reason: "an item's data is its entry's");
+    await tester.tap(find.byWidgetPredicate((w) => w is CvToolButton && w.label == 'Remove P9 Pistol'));
+    await tester.pump();
+    expect(c.items, isEmpty);
   });
 }
