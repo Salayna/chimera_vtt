@@ -23,6 +23,7 @@ import 'library.dart';
 import 'members.dart';
 import 'packs.dart';
 import 'table/chrome.dart';
+import 'table/grid_align.dart';
 import 'table/initiative.dart';
 import 'table/log_panel.dart';
 import 'table/pack_tokens.dart';
@@ -1127,6 +1128,13 @@ class _GmRoomState extends State<GmRoom> {
             onSetImage: (id) => _openTokens(forToken: id),
             fullPack: _fullPack,
             loadImage: widget.assets.image,
+          ),
+        ),
+        Positioned.fill(
+          child: GridAlignLayer(
+            controller: _controller,
+            onDone: (grid) => host.execute(UpdateSettings(
+                host.store.scene.settings.copyWith(grid: grid))),
           ),
         ),
         Positioned(

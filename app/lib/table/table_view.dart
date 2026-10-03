@@ -10,10 +10,11 @@ import 'package:flutter/widgets.dart';
 
 import '../theme.dart';
 import 'fog_mask.dart';
+import 'grid_align.dart';
 import 'layers.dart';
 
 /// Move, ruler and ping are everyone's; the rest are the GM's.
-enum Tool { move, ruler, ping, fogBrush, fogRect, fogErase, gridFit, region }
+enum Tool { move, ruler, ping, fogBrush, fogRect, fogErase, region }
 
 /// The view's fast-changing state, outside the widget tree so it can change
 /// every frame without rebuilds. Owned by whoever creates it. Notifies when
@@ -29,8 +30,12 @@ class TableController extends ChangeNotifier {
   /// The fog op a click would erase, under the pointer.
   final fogHover = ValueNotifier<FogOpId?>(null);
 
-  /// The grid fitted to the box being drawn with [Tool.gridFit].
+  /// The grid being aligned, drawn instead of the scene's until Done.
   final gridFit = ValueNotifier<Grid?>(null);
+
+  /// The GM aligning the grid to the map, Owlbear Rodeo's way; null when
+  /// not aligning. See `grid_align.dart`.
+  final align = ValueNotifier<GridAlign?>(null);
   final selected = ValueNotifier<TokenId?>(null);
 
   /// The region being drawn with [Tool.region], corner to corner.
@@ -77,12 +82,15 @@ class TableController extends ChangeNotifier {
   FogMode _fogMode = FogMode.reveal;
   set fogMode(FogMode value) => _set(() => _fogMode = value);
 
-  /// The GM's grid panel is open. Closing it puts away the fit tool.
+  /// The GM's grid panel is open. Closing it cancels an alignment.
   bool get gridOptions => _gridOptions;
   bool _gridOptions = false;
   void toggleGridOptions() => _set(() {
         _gridOptions = !_gridOptions;
-        if (!_gridOptions && _tool == Tool.gridFit) _tool = Tool.move;
+        if (!_gridOptions) {
+          align.value = null;
+          gridFit.value = null;
+        }
       });
 
   double get brushRadius => _brushRadius;
@@ -157,6 +165,7 @@ class TableController extends ChangeNotifier {
     fogCursor.dispose();
     fogHover.dispose();
     gridFit.dispose();
+    align.dispose();
     selected.dispose();
     regionDraft.dispose();
     selectedRegion.dispose();
@@ -248,7 +257,6 @@ class _TableViewState extends State<TableView>
   /// The mode of the fog being drawn: the panel's, or its opposite with
   /// Shift held at the press.
   FogMode _fogDrawMode = FogMode.cover;
-  Offset? _fitStart;
   Offset? _regionStart;
   List<Point> _strokePoints = [];
   double _lastPanZoomScale = 1;
@@ -546,8 +554,6 @@ class _TableViewState extends State<TableView>
       _c.fogHover.value = _fogOpAt(p)?.id;
     } else if (tool == Tool.region) {
       _regionStart = p;
-    } else {
-      _fitStart = p;
     }
   }
 
@@ -564,9 +570,6 @@ class _TableViewState extends State<TableView>
     } else if (_panning) {
       _c.view.value = Matrix4.translationValues(e.delta.dx, e.delta.dy, 0)
         ..multiply(_c.view.value);
-    } else if (_fitStart case final start?) {
-      _c.gridFit.value =
-          Grid.fitted((x: start.dx, y: start.dy), (x: p.dx, y: p.dy));
     } else if (_regionStart case final start? when _moved) {
       _c.regionDraft.value = _cellBox(start, p);
     } else if (_fogStart != null) {
@@ -647,14 +650,9 @@ class _TableViewState extends State<TableView>
       } else if (!_moved) {
         _c.selectedRegion.value = _regionAt(start)?.id;
       }
-    } else if (_c.gridFit.value case final grid? when send && grid.valid) {
-      widget.send(UpdateSettings(_scene.settings.copyWith(grid: grid)));
-      _c.tool = Tool.move;
     }
     _c.fogPreview.value = null;
-    _c.gridFit.value = null;
     _c.ruler.value = null;
-    _fitStart = null;
     _regionStart = null;
     _c.regionDraft.value = null;
     _panning = false;

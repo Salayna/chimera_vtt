@@ -17,6 +17,7 @@ import '../theme.dart';
 import '../ui/cv.dart';
 import 'pack_tokens.dart';
 import 'rules.dart';
+import 'grid_align.dart';
 import 'table_view.dart';
 
 /// The floating chrome around a table (layout A in the design system):
@@ -468,7 +469,7 @@ class TextKeysOnly extends StatelessWidget {
 
 /// The grid's cell size, while the GM's grid panel is open. Applies each
 /// valid value as it's typed, so the GM sees the grid move over the map.
-/// Fit draws one cell over the map instead ([Tool.gridFit]).
+/// Align grid sets it on the map instead, in three steps ([GridAlignLayer]).
 class GridOptions extends StatefulWidget {
   const GridOptions(
       {super.key,
@@ -548,7 +549,6 @@ class _GridOptionsState extends State<GridOptions> {
 
   Widget _panel() {
     final c = widget.controller;
-    final fitting = c.tool == Tool.gridFit;
     return CvPanel(
           width: 220,
           padding: const EdgeInsets.all(CvSpacing.s5),
@@ -570,9 +570,8 @@ class _GridOptionsState extends State<GridOptions> {
               ),
               if (_error == null)
                 Text(
-                    fitting
-                        ? 'Drag a box over one square of the map. Zoom in first to be exact.'
-                        : 'Match one square of the map image, or fit it on the map.',
+                    'Match one square of the map image, or align the grid '
+                    'on the map.',
                     style: CvTypography.caption
                         .copyWith(color: CvColors.textSecondary)),
               CvSwitch(
@@ -600,13 +599,23 @@ class _GridOptionsState extends State<GridOptions> {
                       ? widget.onInstallPack?.call()
                       : onPack(id),
                 ),
-              CvButton(
-                label: fitting ? 'Cancel fit' : 'Fit on map',
-                icon: fitting ? Lucide.x : Lucide.squareDashed,
-                small: true,
-                block: true,
-                variant: fitting ? CvButtonVariant.ghost : CvButtonVariant.secondary,
-                onPressed: () => c.tool = fitting ? Tool.move : Tool.gridFit,
+              ValueListenableBuilder(
+                valueListenable: c.align,
+                builder: (context, aligning, _) => CvButton(
+                  label: 'Align grid',
+                  icon: Lucide.grid3x3,
+                  small: true,
+                  block: true,
+                  onPressed: aligning != null
+                      ? null
+                      : () {
+                          final a = startAlign(widget.grid, c.viewCenter);
+                          c
+                            ..tool = Tool.move
+                            ..align.value = a
+                            ..gridFit.value = Grid.through(a.anchor, a.size);
+                        },
+                ),
               ),
             ],
           ),
@@ -1275,6 +1284,8 @@ class TableShortcuts extends StatelessWidget {
         const SingleActivator(LogicalKeyboardKey.escape): () {
           c.selected.value = null;
           c.tool = Tool.move;
+          c.align.value = null;
+          c.gridFit.value = null;
         },
         const CharacterActivator('v'): () => c.tool = Tool.move,
         const CharacterActivator('l'): () => c.tool = Tool.ruler,

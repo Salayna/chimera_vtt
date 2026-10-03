@@ -34,6 +34,7 @@ One word, one meaning. When code, docs and conversation disagree, this file wins
 | **Under fog** | — | Inside a fogged area. The entity is still sent to players and only hidden when drawn ("trust the table"). |
 | **Grid** | `Grid` | Cell size and offset used to snap and measure. A field of the scene settings, not an entity. |
 | **Cell** | — | One square of the grid. |
+| **Grid alignment** | `GridAlign`, `GridAlignLayer` | Setting the grid on a map as Owlbear Rodeo does: drag an anchor onto a corner of the map's grid (offset), a second one to the opposite corner of that square (size), then any far corner onto the map's line (refine), with a magnifier while dragging. Done saves the grid as one undoable change. |
 | **Snap** | `Grid.snap` | Moving a dropped token onto the grid: its edges onto grid lines, or the middle of a cell for tokens smaller than one. On by default; the GM can turn it off, and holding Alt places one token freely. |
 | **Room** | — | A live session that players can join. Today it holds one scene; with campaigns, it's a campaign's session, showing whichever scene the GM has live. |
 | **Room code** | `newRoomCode` | The short, human-typable code players enter to join a room: 6 characters, without look-alikes (0/O, 1/I/L). The Realtime channel is `room:<code>`. It's not an id. |

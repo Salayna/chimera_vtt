@@ -47,16 +47,9 @@ final class Grid {
   static const minCellSize = 16.0;
   static const maxCellSize = 1024.0;
 
-  /// The grid with one cell over the box from [a] to [b]: the box's mean
-  /// side, in whole pixels, with lines through its top-left corner.
-  // ponytail: one cell drawn by hand is off by a pixel or so, which adds up
-  // across a big map. Fit over several cells if that shows.
-  factory Grid.fitted(Point a, Point b) {
-    final size = (((a.x - b.x).abs() + (a.y - b.y).abs()) / 2).roundToDouble();
-    if (size == 0) return const Grid(cellSize: 0);
-    double origin(double u, double v) => (u < v ? u : v).round() % size;
-    return Grid(cellSize: size, offset: (x: origin(a.x, b.x), y: origin(a.y, b.y)));
-  }
+  /// The grid with cells of [size] whose lines cross at [anchor].
+  factory Grid.through(Point anchor, double size) =>
+      Grid(cellSize: size, offset: (x: anchor.x % size, y: anchor.y % size));
 
   bool get valid => cellSize >= minCellSize && cellSize <= maxCellSize;
 
