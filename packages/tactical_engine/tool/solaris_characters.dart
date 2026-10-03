@@ -5,7 +5,12 @@
 /// repository. Run it on the threats tool's output:
 ///
 ///     dart run tool/solaris_characters.dart <vault>/Solaris\ Arcanum \
-///         ../../packs/solaris-arcanum.local.json ../../packs/solaris-arcanum.local.json
+///         ../../packs/solaris-arcanum.local.json ../../packs/solaris-arcanum.local.json \
+///         [../../packs/solaris-constellation.local.json]
+///
+/// The last file is the Constellation as the character sheet draws it,
+/// copied by hand (the notes don't hold it); without it, each unique
+/// Constellation talent is a star beside the origin.
 library;
 
 import 'dart:convert';
@@ -14,8 +19,9 @@ import 'dart:io';
 import 'package:tactical_engine/tactical_engine.dart';
 
 void main(List<String> args) {
-  if (args.length != 3) {
-    stderr.writeln('Usage: solaris_characters.dart <notes dir> <pack.json> <out.json>');
+  if (args.length != 3 && args.length != 4) {
+    stderr.writeln(
+        'Usage: solaris_characters.dart <notes dir> <pack.json> <out.json> [constellation.json]');
     exit(64);
   }
   String read(String path) => File('${args[0]}/$path').readAsStringSync();
@@ -49,10 +55,17 @@ void main(List<String> args) {
     // A new build is a new version, so rooms playing the last one take it.
     'version': (input['version'] as int? ?? 1) + 1,
     'compendium': {'kinds': kinds, 'entries': entries.values.toList()},
-    'advancement': constellation([
-      for (final t in talents)
-        if (t['constellation'] == true) t['name'] as String,
-    ], classes.archetypes),
+    'advancement': [
+      threatLevels,
+      archetypeTrack(classes.archetypes),
+      if (args.length == 4)
+        jsonDecode(File(args[3]).readAsStringSync()) as Json
+      else
+        constellation([
+          for (final t in talents)
+            if (t['constellation'] == true) t['name'] as String,
+        ]),
+    ],
     'sheet': sheet,
   };
   for (final e in entries.values) {
@@ -436,137 +449,274 @@ const _stats = [
   ('CHA', 'Charisma'),
 ];
 
-const _skills = [
-  ('athletics', 'Athletics', 'STR'),
-  ('intimidation', 'Intimidation', 'max(STR, CHA)'),
-  ('evasion', 'Evasion', 'FIN'),
-  ('piloting', 'Piloting', 'FIN'),
-  ('sleightOfHand', 'Sleight of Hand', 'FIN'),
-  ('stealth', 'Stealth', 'FIN'),
-  ('traversal', 'Traversal', 'FIN'),
-  ('painTolerance', 'Pain Tolerance', 'END'),
-  ('arcaneResistance', 'Arcane Resistance', 'WIL'),
-  ('composure', 'Composure', 'WIL'),
-  ('awareness', 'Awareness', 'INT'),
-  ('commonKnowledge', 'Common Knowledge', 'INT'),
-  ('cyberwarfare', 'Cyberwarfare', 'INT'),
-  ('engineering', 'Engineering', 'INT'),
-  ('medicine', 'Medicine', 'INT'),
-  ('naturalSciences', 'Natural Sciences', 'INT'),
-  ('navigation', 'Navigation', 'INT'),
-  ('psychAnalysis', 'Psychological Analysis', 'INT'),
-  ('socialSciences', 'Social Sciences and Humanities', 'INT'),
-  ('tacticalAssessment', 'Tactical Assessment', 'INT'),
-  ('deception', 'Deception', 'CHA'),
-  ('persuasion', 'Persuasion', 'CHA'),
-];
+/// Each core stat's skills, as the character sheet lists them.
+const _skills = {
+  'STR': [('athletics', 'Athletics'), ('intimidationSTR', 'Intimidation')],
+  'FIN': [
+    ('evasion', 'Evasion'),
+    ('stealth', 'Stealth'),
+    ('traversal', 'Traversal'),
+    ('piloting', 'Piloting'),
+    ('sleightOfHand', 'Sleight of Hand'),
+  ],
+  'END': [('interfacing', 'Human-Machine Interfacing'), ('painTolerance', 'Pain Tolerance')],
+  'WIL': [
+    ('arcaneResistance', 'Arcane Resistance'),
+    ('psionicStudies', 'Psionic Studies'),
+    ('composure', 'Composure'),
+  ],
+  'CHA': [
+    ('deception', 'Deception'),
+    ('intimidationCHA', 'Intimidation'),
+    ('theurgy', 'Esoterism (Theurgy)'),
+    ('etiquette', 'Etiquette'),
+    ('persuasion', 'Persuasion'),
+  ],
+  'INT': [
+    ('awareness', 'Awareness'),
+    ('cyberwarfare', 'Cyberwarfare'),
+    ('ritualMagic', 'Esoterism (Ritual Magic)'),
+    ('naturalSciences', 'Natural Sciences'),
+    ('psychAnalysis', 'Psychological Analysis'),
+    ('tacticalAssessment', 'Tactical Assessment'),
+    ('commonKnowledge', 'Common Knowledge'),
+    ('engineering', 'Engineering'),
+    ('medicine', 'Medicine'),
+    ('navigation', 'Navigation'),
+    ('socialSciences', 'Social Sciences and Humanities'),
+  ],
+};
 
 const _wounds = [
-  ('PsW', 'Psychic wounds'),
-  ('ReW', 'Respiratory wounds'),
-  ('NvW', 'Nervous wounds'),
-  ('CvW', 'Cardiovascular wounds'),
-  ('MsW.leftArm', 'Left arm (MsW)'),
-  ('MsW.rightArm', 'Right arm (MsW)'),
-  ('MsW.leftLeg', 'Left leg (MsW)'),
-  ('MsW.rightLeg', 'Right leg (MsW)'),
+  ('PsW', 'Psychic', 'Shaken (1), Shaken (2), Delirious, Mental Collapse'),
+  ('ReW', 'Respiratory', 'Shallow Breathing, Shallow Breathing (2), Lungs Collapsed, Suffocating'),
+  ('NvW', 'Nervous', 'Disrupted, System Shock, Paralyzed, Nerves Collapse'),
+  ('CvW', 'Cardiovascular', 'Bleeding (2), Bleeding (4), Bleeding (10), Cardiac Rupture'),
+  ('MsW.leftArm', 'Left arm', 'Crippled (1), Crippled (2), Broken, Torn Out'),
+  ('MsW.rightArm', 'Right arm', 'Crippled (1), Crippled (2), Broken, Torn Out'),
+  ('MsW.leftLeg', 'Left leg', 'Crippled (1), Crippled (2), Broken, Torn Out'),
+  ('MsW.rightLeg', 'Right leg', 'Crippled (1), Crippled (2), Broken, Torn Out'),
 ];
 
-/// The character sheet: the core stats and what follows from them, AP and
-/// Stress, armor and wounds, skills, gear and story.
+/// The character sheet, as the Solaris Arcanum sheet lays it out: who the
+/// character is, core abilities and skills, combat, loadout, talents and
+/// story, with the Threat Level, archetypes and Constellation as tabs of
+/// their own.
 final sheet = {
   'layout': 'tabs',
   'sections': [
     {
-      'title': 'Core',
+      'title': 'Character',
       'fields': [
-        for (final (name, label) in _stats) {'name': name, 'label': label, 'min': 0, 'max': 10, 'value': 3},
-        {'name': 'class', 'label': 'Class', 'type': 'choice', 'options': ['Aether', 'Bastion', 'Specter', 'Synth', 'Vitalist']},
+        {'name': 'class', 'label': 'Starting class', 'type': 'choice', 'options': ['Aether', 'Bastion', 'Specter', 'Synth', 'Vitalist']},
         {'name': 'threatLevel', 'label': 'Threat Level (Alpha 1 to Delta 4)', 'min': 1, 'max': 4, 'value': 1},
-        {'name': 'rank', 'label': 'Rank', 'min': 1, 'value': 1},
-        {'name': 'CP', 'label': 'CP', 'min': 0, 'value': 1},
-        {'name': 'arcaneStat', 'label': 'Arcane stat', 'type': 'choice', 'options': ['WIL', 'INT', 'CHA']},
-        {'name': 'rangedMod', 'label': 'Ranged modifier', 'type': 'computed', 'formula': 'FIN + threatLevel'},
-        {'name': 'meleeMod', 'label': 'Melee modifier', 'type': 'computed', 'formula': 'STR + threatLevel'},
-        {
-          'name': 'arcaneMod',
-          'label': 'Arcane modifier',
-          'type': 'computed',
-          'formula': 'threatLevel + (if arcaneStat == "WIL" then WIL else if arcaneStat == "INT" then INT else CHA)',
-        },
-        {'name': 'physical', 'label': 'Physical Prowess', 'type': 'computed', 'formula': 'ceil((STR + FIN + END) / 3)'},
-        {'name': 'mental', 'label': 'Mental Prowess', 'type': 'computed', 'formula': 'ceil((INT + WIL + CHA) / 3)'},
+        {'name': 'rank', 'label': 'Rank', 'min': 0, 'max': 6},
+        {'name': 'CP', 'label': 'CP', 'min': 0},
+        {'name': 'archetypePicks', 'label': 'Archetype levels to take', 'min': 0, 'text': 'Given by the Threat Level rewards and the Constellation.'},
+        {'name': 'classPicks', 'label': 'Classes beyond the first', 'min': 0, 'text': 'Given by the Beta and Delta rewards.'},
+        {'name': 'background', 'label': 'Background', 'type': 'text'},
+        {'name': 'classes', 'label': 'Classes', 'type': 'items', 'kind': 'Class'},
+        {'name': 'archetypes', 'label': 'Archetypes', 'type': 'items', 'kind': 'Archetype'},
+      ],
+    },
+    {
+      'title': 'Core abilities',
+      'fields': [
+        for (final (stat, label) in _stats) ...[
+          {'name': stat, 'label': label, 'min': 0, 'max': 10, 'value': 3},
+          for (final (name, skill) in _skills[stat]!) ...[
+            {'name': '$name.bonus', 'label': '$skill bonus', 'min': -10, 'max': 20},
+            {'name': name, 'label': skill, 'type': 'computed', 'formula': '$stat + $name.bonus'},
+          ],
+        ],
+        {'name': 'masteries', 'label': 'Masteries', 'type': 'text'},
       ],
     },
     {
       'title': 'Combat',
       'fields': [
-        {'name': 'form', 'label': 'Combat Form', 'type': 'choice', 'options': ['Steady', 'Rush', 'Poise']},
+        {'name': 'arcaneStat', 'label': 'Arcane stat', 'type': 'choice', 'options': ['WIL', 'INT', 'CHA']},
+        {'name': 'meleeMod', 'label': 'Melee', 'type': 'computed', 'formula': 'STR + threatLevel + meleeBonus'},
+        {'name': 'rangedMod', 'label': 'Ranged', 'type': 'computed', 'formula': 'FIN + threatLevel + rangedBonus'},
+        {
+          'name': 'arcaneMod',
+          'label': 'Arcane',
+          'type': 'computed',
+          'formula': 'threatLevel + castingBonus + (if arcaneStat == "WIL" then WIL else if arcaneStat == "INT" then INT else CHA)',
+        },
+        {'name': 'physical', 'label': 'Physical Prowess', 'type': 'computed', 'formula': 'ceil((STR + FIN + END) / 3)'},
+        {'name': 'mental', 'label': 'Mental Prowess', 'type': 'computed', 'formula': 'ceil((INT + WIL + CHA) / 3)'},
+        {'name': 'form', 'label': 'Combat Form', 'type': 'choice', 'options': ['Steady', 'Poise', 'Rush'], 'text': 'Poise +2 AP, Rush -2 AP.'},
         {
           'name': 'AP',
           'type': 'tracker',
-          'max': '8 - sum("Armor", "apReduction") - sum("Weapon", "heavy") - 2 * min(ReW, 2) '
-              '- (if ReW >= 3 then 4 else 0) + (if form == "Poise" then 2 else if form == "Rush" then -2 else 0)',
+          'max': '8 + apBonus - sum("Armor", "apReduction") - sum("Weapon", "heavy") - min(ReW, 2) '
+              '- (if ReW >= 3 then 2 else 0) + (if form == "Poise" then 2 else if form == "Rush" then -2 else 0)',
           'value': 'AP.max',
         },
-        {'name': 'stressThreshold', 'label': 'Stress Threshold', 'type': 'computed', 'formula': 'max(5, END + WIL + threatLevel)'},
+        {'name': 'stressThreshold', 'label': 'Stress Threshold', 'type': 'computed', 'formula': 'max(5, END + WIL + threatLevel) + stressBonus'},
         {'name': 'Stress', 'type': 'tracker', 'max': 'stressThreshold'},
-        {'name': 'AG', 'label': 'Armor Grade', 'type': 'tracker', 'max': 'sum("Armor", "grade")', 'value': 'AG.max'},
-        {'name': 'tempAG', 'label': 'Temporary Armor Grade', 'type': 'tracker', 'max': 10},
-        for (final (name, label) in _wounds) {'name': name, 'label': label, 'type': 'tracker', 'max': 4},
+        {'name': 'AG', 'label': 'Armor Grade', 'type': 'tracker', 'max': 'sum("Armor", "grade") + agBonus', 'value': 'AG.max'},
+        {'name': 'tempAG', 'label': 'Temporary Armor', 'type': 'tracker', 'max': 10},
+        for (final (name, label, stages) in _wounds) {'name': name, 'label': label, 'type': 'tracker', 'max': 4, 'text': stages},
+        {'name': 'overloaded', 'label': 'Overloaded', 'type': 'checkbox'},
+        {'name': 'profile', 'label': 'Psyche profile', 'type': 'text'},
+        {'name': 'defenses', 'label': 'Immunities, resistances, vulnerabilities, tags', 'type': 'text'},
+        // What the Constellation raised, kept apart from the stats.
+        for (final (name, label) in [
+          ('meleeBonus', 'Melee from the Constellation'),
+          ('rangedBonus', 'Ranged from the Constellation'),
+          ('castingBonus', 'Casting from the Constellation'),
+          ('stressBonus', 'Stress from the Constellation'),
+          ('agBonus', 'Armor Grade from the Constellation'),
+          ('apBonus', 'AP from the Constellation'),
+          ('overloadBonus', 'Overload checks from the Constellation'),
+        ])
+          {'name': name, 'label': label, 'min': 0, 'max': 20},
       ],
     },
     {
-      'title': 'Skills',
+      'title': 'Loadout',
       'fields': [
-        for (final (name, label, stat) in _skills) ...[
-          {'name': '$name.bonus', 'label': '$label bonus', 'min': -10, 'max': 20},
-          {'name': name, 'label': label, 'type': 'computed', 'formula': '$stat + $name.bonus'},
-        ],
-      ],
-    },
-    {
-      'title': 'Gear',
-      'fields': [
+        {'name': 'maxCarry', 'label': 'Max carry capacity', 'type': 'computed', 'formula': 'sum("Armor", "carry")'},
         {'name': 'weapons', 'label': 'Weapons', 'type': 'items', 'kind': 'Weapon'},
         {'name': 'explosives', 'label': 'Explosives', 'type': 'items', 'kind': 'Explosive'},
         {'name': 'armor', 'label': 'Armor', 'type': 'items', 'kind': 'Armor'},
         {'name': 'items', 'label': 'Items', 'type': 'items', 'kind': 'Item'},
+        {'name': 'wielding', 'label': 'Wielding', 'type': 'text'},
+        {'name': 'quickAccess', 'label': 'Quick access', 'type': 'text'},
+        {'name': 'backpack', 'label': 'Backpack', 'type': 'text'},
+      ],
+    },
+    {
+      'title': 'Talents & flaws',
+      'fields': [
+        {'name': 'talents', 'label': 'Talents', 'type': 'items', 'kind': 'Talent'},
+        {'name': 'flaws', 'label': 'Flaws', 'type': 'items', 'kind': 'Flaw'},
       ],
     },
     {
       'title': 'Story',
       'fields': [
-        {'name': 'talents', 'label': 'Talents', 'type': 'items', 'kind': 'Talent'},
-        {'name': 'flaws', 'label': 'Flaws', 'type': 'items', 'kind': 'Flaw'},
-        {'name': 'classAbilities', 'label': 'Class', 'type': 'items', 'kind': 'Class'},
-        {'name': 'archetypes', 'label': 'Archetypes', 'type': 'items', 'kind': 'Archetype'},
-        {'name': 'background', 'label': 'Background', 'type': 'text'},
-        {'name': 'profile', 'label': 'Psychological Profile', 'type': 'text'},
-        {'name': 'notes', 'label': 'Notes', 'type': 'text'},
+        for (final (name, label) in [
+          ('looks', 'Physical looks'),
+          ('contracts', 'Contract history'),
+          ('coatOfArms', 'Coat of arms'),
+          ('details', 'Character details (affiliations, personal history, etc.)'),
+          ('equipment', 'Equipment list'),
+          ('otherDetails', 'Other details (proxies, spells & vector microorganisms)'),
+        ])
+          {'name': name, 'label': label, 'type': 'text'},
       ],
     },
   ],
   'actions': [
-    {'name': 'Dodge', 'cost': [{'tracker': 'AP', 'amount': 2}], 'text': "Removes the attacker's highest die."},
-    {'name': 'Parry', 'cost': [{'tracker': 'AP', 'amount': 2}], 'dice': 'd20', 'mod': 'meleeMod'},
     {'name': 'Move', 'cost': [{'tracker': 'AP', 'amount': 1}], 'text': 'One Sector.'},
-    {'name': 'Overload check', 'dice': 'd20', 'mod': 'WIL'},
+    {'name': 'Enter Stealth', 'cost': [{'tracker': 'AP', 'amount': 1}]},
+    {'name': 'Command Proxies', 'cost': [{'tracker': 'AP', 'amount': 2}]},
+    {'name': 'Dodge', 'cost': [{'tracker': 'AP', 'amount': 2}], 'text': "Reaction: removes the attacker's highest die."},
+    {'name': 'Fight Back', 'cost': [{'tracker': 'AP', 'amount': 1}], 'text': "Reaction: plus the weapon profile's AP."},
+    {'name': 'Parry', 'cost': [{'tracker': 'AP', 'amount': 2}], 'dice': 'd20', 'mod': 'meleeMod', 'text': 'Reaction: blocks the attack if higher.'},
+    {'name': 'Overload check', 'dice': 'd20', 'mod': 'WIL + overloadBonus'},
   ],
 };
 
-/// The Constellation, as far as the notes give it: its origin and its
-/// unique talents, each a star giving its talent for 1 CP. The book draws
-/// where each star sits and which touch; the notes don't have it, so every
-/// star starts beside the origin, for the GM to place in the editor.
-///
-/// Below them, one under another, each class's archetypes: the class's own node, free and
-/// open to that class alone, giving its core abilities; from it each
-/// archetype's first level, at most 3 archetypes, then its next levels in
-/// order, each an Individual Constellation Star's 5 CP and giving that
-/// level's abilities. (Levels the Threat Level rewards give free: add the
-/// CP first.)
-Json constellation(List<String> talents, [Map<String, Map<String, int>> archetypes = const {}]) => {
+/// The Threat Level's ranks in order, each giving its CP (Alpha 1, Beta 2,
+/// Gamma 3, Delta 10), the first of each level raising the Threat Level,
+/// and each level's first rank its reward: archetype levels to take, or a
+/// new class with its archetype.
+final threatLevels = {
+  'name': 'Threat Level',
+  'field': 'CP',
+  'nodes': [
+    for (final (t, (level, ranks, cp)) in const [
+      ('Alpha', 6, 1),
+      ('Beta', 6, 2),
+      ('Gamma', 4, 3),
+      ('Delta', 2, 10),
+    ].indexed) ...[
+      for (var r = 1; r <= ranks; r++)
+        {
+          'name': '$level $r',
+          'cost': 0,
+          if (t > 0 || r > 1) 'requires': [r == 1 ? '${const ['Alpha', 'Beta', 'Gamma'][t - 1]} ${const [6, 6, 4][t - 1]}' : '$level ${r - 1}'],
+          'adds': {
+            'CP': cp,
+            // Rank 1 of a new level: the level goes up, the rank starts again.
+            'rank': r > 1 ? 1 : (t == 0 ? 1 : 1 - const [6, 6, 4][t - 1]),
+            if (r == 1 && t > 0) 'threatLevel': 1,
+          },
+          'x': r - 1,
+          'y': t * 2,
+          'text': '+$cp CP',
+        },
+      for (final (i, (reward, adds)) in switch (level) {
+        'Alpha' => [('An archetype in your starting class at Level 1', {'archetypePicks': 1})],
+        'Beta' => [
+            ('Archetype Level +1', {'archetypePicks': 1}),
+            ('A New Class and Archetype at Level 1', {'classPicks': 1, 'archetypePicks': 1}),
+          ],
+        'Gamma' => [('Level +1 to any of your Archetypes', {'archetypePicks': 1})],
+        _ => [
+            ('A new Archetype within one of your classes at Level 2', {'archetypePicks': 2}),
+            ('A New Class and Archetype at Level 1', {'classPicks': 1, 'archetypePicks': 1}),
+          ],
+      }.indexed)
+        {
+          'name': '$level: $reward',
+          'cost': 0,
+          'group': '$level reward',
+          'requires': ['$level 1'],
+          'condition': 'count("$level reward") < 1',
+          'adds': adds,
+          'x': i * 3,
+          'y': t * 2 + 1,
+          'text': 'At Threat Level $level Rank 1.',
+        },
+    ],
+  ],
+};
+
+/// Each class's archetypes, spending archetype levels to take: the class
+/// (free: your starting class, or one a reward allowed), each archetype's
+/// first level from its class (at most 3 archetypes), then its next
+/// levels in order. One class under another.
+Json archetypeTrack(Map<String, Map<String, int>> archetypes) => {
+      'name': 'Archetypes',
+      'field': 'archetypePicks',
+      'nodes': [
+        for (final (c, MapEntry(key: className, value: types)) in archetypes.entries.indexed) ...[
+          {
+            'name': className,
+            'cost': 0,
+            'group': 'Class',
+            'condition': 'class == "$className" or count("Class") <= classPicks',
+            'items': ['$className core'],
+            'x': 0,
+            'y': c * 6,
+            'text': 'Your starting class, or a new one a Threat Level reward gave.',
+          },
+          for (final (a, MapEntry(key: type, value: levels)) in types.entries.indexed)
+            for (var level = 1; level <= levels; level++)
+              {
+                'name': '$type $level',
+                if (level == 1) 'group': 'Archetype',
+                'cost': 1,
+                'requires': [level == 1 ? className : '$type ${level - 1}'],
+                if (level == 1) 'condition': 'count("Archetype") < 3',
+                'items': ['$type, Level $level'],
+                'x': a - (types.length - 1) / 2,
+                'y': c * 6 + level,
+                'text': level == 1 ? 'The $type archetype.' : '$type level $level.',
+              },
+        ],
+      ],
+    };
+
+/// A stand-in Constellation, when its copy from the character sheet isn't
+/// given: each unique Constellation talent a star beside the origin, for 1
+/// CP, giving its talent.
+Json constellation(List<String> talents) => {
       'name': 'Constellation',
       'field': 'CP',
       'nodes': [
@@ -580,29 +730,5 @@ Json constellation(List<String> talents, [Map<String, Map<String, int>> archetyp
             'y': i ~/ 5 + 1,
             'text': 'Gives the talent $t.',
           },
-        for (final (c, MapEntry(key: className, value: types)) in archetypes.entries.indexed) ...[
-          {
-            'name': className,
-            'cost': 0,
-            'condition': 'class == "$className"',
-            'items': ['$className core'],
-            'x': 0,
-            'y': 5 + c * 6,
-            'text': 'The $className class and its core abilities.',
-          },
-          for (final (a, MapEntry(key: type, value: levels)) in types.entries.indexed)
-            for (var level = 1; level <= levels; level++)
-              {
-                'name': '$type $level',
-                'group': level == 1 ? 'Archetype' : null,
-                'cost': 5,
-                'requires': [level == 1 ? className : '$type ${level - 1}'],
-                if (level == 1) 'condition': 'count("Archetype") < 3',
-                'items': ['$type, Level $level'],
-                'x': a - (types.length - 1) / 2,
-                'y': 5 + c * 6 + level,
-                'text': level == 1 ? 'The $type archetype.' : '$type level $level.',
-              }..removeWhere((_, v) => v == null),
-        ],
       ],
     };

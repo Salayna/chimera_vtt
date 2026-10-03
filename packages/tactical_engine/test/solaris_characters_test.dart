@@ -92,7 +92,7 @@ void main() {
     expect(pack.advancements.single.nodes['Test Star']!.items, ['Test Star']);
   });
 
-  test('classes and archetypes become entries and Constellation nodes', () {
+  test('classes and archetypes become entries and an archetype track', () {
     // Made-up files in the shape of chapter 4's.
     final found = classesFromMarkdown([
       '## Bastions\n\nLore.',
@@ -114,13 +114,13 @@ void main() {
       'name': 'Solaris Arcanum',
       'unit': 'sector',
       'compendium': {'kinds': kinds, 'entries': found.entries},
-      'advancement': constellation(const [], found.archetypes),
+      'advancement': [threatLevels, archetypeTrack(found.archetypes), constellation(const [])],
       'sheet': sheet,
     });
-    final nodes = pack.advancements.single.nodes;
-    expect(nodes['Bastion']!.condition!.text, 'class == "Bastion"');
+    final nodes = pack.advancements[1].nodes;
+    expect(nodes['Bastion']!.condition!.text, 'class == "Bastion" or count("Class") <= classPicks');
     expect(nodes['Tester 1']!.requires, ['Bastion']);
-    expect((nodes['Tester 1']!.group, nodes['Tester 1']!.cost), ('Archetype', 5));
+    expect((nodes['Tester 1']!.group, nodes['Tester 1']!.cost), ('Archetype', 1));
     expect(nodes['Tester 2']!.requires, ['Tester 1']);
     expect(nodes['Tester 3']!.items, ['Tester, Level 3']);
     expect(nodes.containsKey('Tester 4'), isFalse, reason: 'only the levels the notes have');
