@@ -436,7 +436,7 @@ Phases 1–4 alone make a usable VTT, and cinematic mode and the Solaris pack fo
 | 3 | Players act | Own tokens, dice, pings, conditions | |
 | 4 | Tactical rules | Conditions, sectors, range bands, initiative, tactical engine | A usable VTT |
 | 5 | Cinematic mode | Scenes, parallax, particles, music, ambience, handouts | |
-| 6 | Solaris pack | Tags, trackers, threat cards, Atlas and Fantasy Statblocks importers | |
+| 6 | System modules and the Solaris pack | Installable system packs, trackers, Atlas preset import, the Solaris module, threat cards, Fantasy Statblocks import | |
 | 7 | Hardening | Request checks, rate limits, private channels with row-level security, hosting, phone layout | |
 
 Phase 1 status 2026-10-03: map, grid, tokens, fog and save came with the POC. Undo was the last piece: the GM's own changes (not players' moves) can be undone and redone, up to 100 steps, with ⌘Z / ⇧⌘Z (Ctrl on other systems) or the rail's buttons, and players see the result like any other change. Loading a scene clears the history. Undo restores whole entities, so undoing a GM edit to a token also reverts a player's move of it made since.
@@ -461,6 +461,15 @@ Phase 4 status 2026-10-03: tactical rules, through the tactical engine.
 - **Initiative:** the GM rolls the pack's formula for everyone on the map, steps through turns and rounds, takes tokens out, rolls again or ends the fight. A player ends their own token's turn. Hidden tokens stay out of the players' order.
 
 Limits: regions are rectangles; freeform zones need polygons. Move cost counts the destination's terrain, not the path. Occupant limits and entry checks are shown, not enforced. Initiative values can't be edited by hand, rolls don't go to the log, and tokens added mid-fight join only on a new roll. Protocol is version 3.
+
+Phase 6 status 2026-10-03: game systems are modules, as asked: a system is added by installing a pack, not by changing the app.
+- **Pack files:** a versioned, bounded JSON format ([PACKS.md](PACKS.md)) for units, range bands, conditions and region tags with their effects, initiative and trackers. Bad files are refused with the reason.
+- **Installing:** the hub's Systems page lists the built-in and installed systems and installs a pack file or an Atlas VTT preset (its conditions and sector tags, units and bands). Installed packs live in Postgres (`packs`, owner-only); installing the same id again updates it. The Grid panel's System menu offers them and installs too.
+- **Scenes carry their pack:** a scene played with an installed pack holds its file (`ScenePack`), so players and scene files get the system with nothing installed. Built-in packs aren't carried.
+- **Trackers:** numbers a pack keeps on tokens (HP, Stress), stepped or typed on the token card within their bounds, and shown on the token's label. Players track their own.
+- **Solaris:** `packs/solaris-arcanum.json` is a starter module with sectors, the range bands and the sector tags this plan names. The rest of Appendix C, rules text, trackers and initiative need the book.
+
+Not yet: threat cards, Fantasy Statblocks and `.atlasmap` scene import, pack-defined sheet fields, and editing a pack inside the app (a pack is edited as a file and installed again). Protocol is version 4.
 
 ---
 
@@ -515,7 +524,7 @@ A review of `~/Documents/dev/chimera_vtt` as created (Flutter 3.47.4, Dart SDK `
 - [x] App at the repository root or in `app/`: in `app/`, as a monorepo (2026-09-29)
 - [ ] How strict the lints are
 - [ ] Where the web build is hosted (it may need COOP/COEP headers for skwasm)
-- [ ] Import scope: Atlas `.atlasmap` scenes, Fantasy Statblocks notes, or both
+- [ ] Import scope: Atlas presets are in (as packs, 2026-10-03); Atlas `.atlasmap` scenes and Fantasy Statblocks notes still open
 - [ ] Hex grids in scope, or square only at first
 - [ ] Patch size: whole entities (simple) or only changed fields (smaller drags)? Whole entities for now; revisit if H6 fails.
 - [ ] Fog history grows with every stroke: when is it compacted into one mask image for new players?

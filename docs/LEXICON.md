@@ -45,7 +45,7 @@ One word, one meaning. When code, docs and conversation disagree, this file wins
 | Term | Code | Meaning |
 | --- | --- | --- |
 | **Entity** | `Entity` (sealed) | A piece of scene state with its own identity that changes independently. It's the unit of sync, visibility, permission and persistence. It has an id, a kind and a schema version. See [Entity or field?](#entity-or-field). |
-| **Kind** | `EntityKind` | Which type of entity: `settings`, `token`, `fogOp`, `region`, `initiative`. Sent on the wire so a bare id can be resolved. |
+| **Kind** | `EntityKind` | Which type of entity: `settings`, `token`, `fogOp`, `region`, `initiative`, `pack`. Sent on the wire so a bare id can be resolved. |
 | **Field** | — | A value inside an entity with no identity of its own, for example a token's position or the grid. |
 | **Id** | `TokenId`, `FogOpId`… | An entity's identity. It never changes and is never reused. Typed per kind with extension types. |
 | **Scene settings** | `SceneSettings` | The single-instance entity holding the map asset, map size, grid, whether grid lines show, default fog, and the scene's system pack (`pack`, an id such as `dnd5e`). It has no id: its kind identifies it, and it can't be deleted. |
@@ -55,7 +55,7 @@ One word, one meaning. When code, docs and conversation disagree, this file wins
 | **Point** | `Point` | A position in world coordinates (map pixels), as a Dart record `({double x, double y})`. JSON: `[x, y]`. |
 | **Token size** | `Token.size` | Width and height in world units, like positions, so it works on gridless maps. |
 | **Actor** | `Actor` (sealed) | Who issues a command: `Gm` or `Player(PlayerId)`. These are the same `Gm` and `Player` as under [At the table](#at-the-table). Permissions follow the actor's role, not their id. |
-| **Command** | `Command` (sealed) | A request to change the scene: `UpdateSettings`, `PlaceToken`, `UpdateToken`, `MoveToken`, `AssignOwner`, `SetTokenHidden`, `RemoveToken`, `AddFogOp`, `RemoveFogOp`, `SetCondition`, `RemoveCondition`, `PlaceRegion`, `UpdateRegion`, `RemoveRegion`, `SetInitiative`, `EndInitiative`, `EndTurn`, and the event-only `RollDice`, `Say`, `Ping`. Principle 2: nothing changes state except a command. Players may send `MoveToken`, `SetCondition` and `RemoveCondition` for their own tokens, `EndTurn` on their own token's turn, and `RollDice`, `Say` and `Ping`. |
+| **Command** | `Command` (sealed) | A request to change the scene: `UpdateSettings`, `PlaceToken`, `UpdateToken`, `MoveToken`, `AssignOwner`, `SetTokenHidden`, `RemoveToken`, `AddFogOp`, `RemoveFogOp`, `SetCondition`, `RemoveCondition`, `PlaceRegion`, `UpdateRegion`, `RemoveRegion`, `SetInitiative`, `EndInitiative`, `EndTurn`, `UsePack`, `SetTracker`, and the event-only `RollDice`, `Say`, `Ping`. Principle 2: nothing changes state except a command. Players may send `MoveToken`, `SetCondition`, `RemoveCondition` and `SetTracker` for their own tokens, `EndTurn` on their own token's turn, and `RollDice`, `Say` and `Ping`. |
 | **New id** | `newId` | A random 128-bit hex id, minted by the GM session before the command, so the reducer stays pure. |
 | **Reducer** | `reduce` | The pure function `(scene, actor, command) → accepted patches or refusal`. It changes no state itself. |
 | **Outcome** | `Outcome` (sealed) | What the reducer returns: `Accepted(patches)` or `Refused(refusal)`. |
@@ -115,7 +115,10 @@ Otherwise it's a field of some entity.
 | Term | Code | Meaning |
 | --- | --- | --- |
 | **Tactical engine** | `tactical_engine` | The pure-Dart rules package: topology, regions, measurement, sight and tag effects. It knows no game system. |
-| **System pack** | `SystemPack` | A data file defining a game system: conditions, tags, range bands, trackers, sheet fields. A scene names the one it's played with. |
+| **System pack** | `SystemPack` | A module defining a game system: its units, range bands, conditions and region tags with their effects, initiative and trackers. A JSON file in the format of [PACKS.md](PACKS.md). A scene names the one it's played with. |
+| **Installed pack** | `InstalledPacks`, `packs` | A pack a GM added from a file (a pack file or an Atlas preset) to their account, for all their campaigns. Listed on the hub's Systems page and in the Grid panel's System menu. |
+| **Scene pack** | `ScenePack`, `UsePack` | The single-instance entity carrying the module file of the installed pack a scene is played with, so players and scene files get it without installing anything. Absent for a built-in pack. |
+| **Tracker** | `TrackerDef`, `Token.trackers`, `SetTracker` | A number a pack keeps on every token, such as HP or Stress, with optional bounds. Players change their own tokens'. |
 | **Built-in pack** | `builtInPacks`, `packFor` | A pack that ships with the app: `generic` (cells, free-text conditions) and `dnd5e` (feet, the SRD conditions and terrain). An unknown id plays as Generic. |
 | **Topology** | `Topology` (sealed) | How space is divided: `SquareGrid` or `Gridless` today; hex grids and freeform zones later. The pack picks the kind, the scene supplies the scale. |
 | **Step** | `Topology.steps` | The topology's unit of distance: one cell, or one cell size on a gridless map. A pack converts steps to its own unit with `unitsPerStep`. |
