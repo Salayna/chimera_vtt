@@ -173,4 +173,60 @@ void main() {
     expect(tester.getTopLeft(find.text('ATTACKS')).dx, x);
     expect(tester.getTopLeft(find.text('CHARACTER')).dx, greaterThan(x));
   });
+
+  testWidgets('a value reads as text until clicked, and sections fold',
+      (tester) async {
+    tester.view.physicalSize = const Size(1440, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    var c = Character(
+        id: const CharacterId('c'),
+        owner: const PlayerId('me'),
+        system: 'dnd5e',
+        name: 'Ayla',
+        values: dnd.sheet!.start());
+    await tester.pumpWidget(cvApp(
+      title: 'test',
+      home: StatefulBuilder(
+        builder: (context, setState) => SingleChildScrollView(
+          child: SheetView(
+            pack: dnd,
+            character: c,
+            onChanged: (changed) => setState(() => c = changed),
+          ),
+        ),
+      ),
+    ));
+    final start = c.values['STR'];
+    final strength = find.bySemanticsLabel(RegExp('^Edit Strength'));
+    expect(strength, findsOneWidget);
+    expect(find.byType(EditableText), findsNothing, reason: 'all read');
+
+    await tester.tap(strength);
+    await tester.pumpAndSettle();
+    expect(find.byType(EditableText), findsOneWidget);
+    await tester.enterText(find.byType(EditableText), '17');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    expect(c.values['STR'], 17);
+    expect(find.byType(EditableText), findsNothing, reason: 'read again');
+
+    // Typed, then left without Enter: kept.
+    await tester.tap(find.bySemanticsLabel(RegExp('^Edit Dexterity')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(EditableText), '12');
+    await tester.tap(strength);
+    await tester.pumpAndSettle();
+    expect(c.values['DEX'], 12);
+    expect(start, isNot(17));
+
+    final abilities = find.bySemanticsLabel(RegExp('^Hide Abilities'));
+    expect(abilities, findsOneWidget);
+    await tester.tap(abilities);
+    await tester.pumpAndSettle();
+    expect(find.bySemanticsLabel(RegExp('^Edit Strength')), findsNothing);
+    await tester.tap(find.bySemanticsLabel(RegExp('^Show Abilities')));
+    await tester.pumpAndSettle();
+    expect(find.bySemanticsLabel(RegExp('^Edit Strength')), findsOneWidget);
+  });
 }

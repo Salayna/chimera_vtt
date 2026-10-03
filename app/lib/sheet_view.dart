@@ -114,7 +114,8 @@ class SheetView extends StatelessWidget {
                 ],
               );
             }),
-            _Blocks(rest),
+            // The long parts, a tab each, beside one another.
+            if (rest.length > 1) _Tabs(rest) else _Blocks(rest),
           ],
         ),
       SheetLayout.list => _Blocks([...sections, ...rest]),
@@ -319,25 +320,105 @@ class _ItemCard extends StatelessWidget {
 
 typedef _Block = ({String title, Widget child});
 
-/// Titled blocks of a sheet, one under another.
-class _Blocks extends StatelessWidget {
+/// Titled blocks of a sheet, one under another. A block's title folds it
+/// away, and opens it again.
+class _Blocks extends StatefulWidget {
   const _Blocks(this.blocks);
 
   final List<_Block> blocks;
+
+  @override
+  State<_Blocks> createState() => _BlocksState();
+}
+
+class _BlocksState extends State<_Blocks> {
+  final _folded = <String>{};
 
   @override
   Widget build(BuildContext context) => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         spacing: 24,
         children: [
-          for (final b in blocks)
+          for (final b in widget.blocks)
             Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               spacing: 10,
-              children: [CvOverline(b.title), b.child],
+              children: [
+                CvPressable(
+                  onTap: () => setState(() => _folded.contains(b.title)
+                      ? _folded.remove(b.title)
+                      : _folded.add(b.title)),
+                  label: _folded.contains(b.title)
+                      ? 'Show ${b.title}'
+                      : 'Hide ${b.title}',
+                  pressScale: 1,
+                  builder: (s) => Row(spacing: 6, children: [
+                    AnimatedRotation(
+                      turns: _folded.contains(b.title) ? -0.25 : 0,
+                      duration: CvMotion.fast,
+                      curve: CvMotion.standard,
+                      child: CvIcon(Lucide.chevronDown,
+                          size: CvSizes.iconSm,
+                          color: s.hover
+                              ? CvColors.textPrimary
+                              : CvColors.textSecondary),
+                    ),
+                    CvOverline(b.title),
+                  ]),
+                ),
+                if (!_folded.contains(b.title)) b.child,
+              ],
             ),
         ],
       );
+}
+
+/// A value to read that becomes its input when clicked: [read] shows it,
+/// [edit] takes the keys until they go elsewhere, then [onDone].
+class _ClickToEdit extends StatefulWidget {
+  const _ClickToEdit(
+      {required this.label,
+      required this.read,
+      required this.edit,
+      this.onDone});
+
+  final String label;
+  final Widget read;
+  final Widget edit;
+  final VoidCallback? onDone;
+
+  @override
+  State<_ClickToEdit> createState() => _ClickToEditState();
+}
+
+class _ClickToEditState extends State<_ClickToEdit> {
+  bool _editing = false;
+
+  @override
+  Widget build(BuildContext context) => _editing
+      ? Focus(
+          canRequestFocus: false,
+          skipTraversal: true,
+          onFocusChange: (focused) {
+            if (focused) return;
+            setState(() => _editing = false);
+            widget.onDone?.call();
+          },
+          child: widget.edit,
+        )
+      : CvPressable(
+          onTap: () => setState(() => _editing = true),
+          label: 'Edit ${widget.label}',
+          radius: CvRadii.sm,
+          pressScale: 1,
+          builder: (s) => Container(
+            decoration: BoxDecoration(
+              color: s.hover ? CvColors.surfaceHover : const Color(0x00000000),
+              borderRadius: BorderRadius.circular(CvRadii.sm),
+            ),
+            child: widget.read,
+          ),
+        );
 }
 
 /// Titled blocks of a sheet, one tab each.
@@ -428,6 +509,20 @@ class _StepperState extends State<_Stepper> {
   Widget build(BuildContext context) {
     final w = widget;
     final editable = w.onSet != null;
+    Widget value(TextAlign align) => ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: CvSizes.control),
+          child: Align(
+            alignment: align == TextAlign.end
+                ? Alignment.centerRight
+                : Alignment.center,
+            child: Text(
+              '${w.value}',
+              textAlign: align,
+              style: CvTypography.weight(CvTypography.body, 600)
+                  .copyWith(fontFamily: CvTypography.mono),
+            ),
+          ),
+        );
     return Row(
       spacing: 4,
       children: [
@@ -449,21 +544,22 @@ class _StepperState extends State<_Stepper> {
         SizedBox(
           width: 64,
           child: editable
-              ? TextKeysOnly(
-                  child: CvTextInput(
-                    controller: _text,
-                    maxLength: 6,
-                    onSubmitted: (v) => _set(int.tryParse(v.trim()) ?? w.value),
+              ? _ClickToEdit(
+                  label: w.label,
+                  read: value(TextAlign.center),
+                  // Typed, then left: kept, as Enter keeps it.
+                  onDone: () => _set(int.tryParse(_text.text.trim()) ?? w.value),
+                  edit: TextKeysOnly(
+                    child: CvTextInput(
+                      controller: _text,
+                      maxLength: 6,
+                      autofocus: true,
+                      onSubmitted: (v) =>
+                          _set(int.tryParse(v.trim()) ?? w.value),
+                    ),
                   ),
                 )
-              : Text(
-                  '${w.value}',
-                  textAlign: TextAlign.end,
-                  style: CvTypography.weight(
-                    CvTypography.body,
-                    600,
-                  ).copyWith(fontFamily: CvTypography.mono),
-                ),
+              : value(TextAlign.end),
         ),
         if (editable)
           CvToolButton(
@@ -509,28 +605,46 @@ class _TextState extends State<_Text> {
   }
 
   @override
-  Widget build(BuildContext context) => widget.onChanged == null
-      ? Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          spacing: 4,
-          children: [
-            Text(
-              widget.label,
-              style: CvTypography.label.copyWith(color: CvColors.textSecondary),
-            ),
-            Text(
-              widget.value.isEmpty ? '–' : widget.value,
-              style: CvTypography.body,
-            ),
-          ],
-        )
-      : TextKeysOnly(
-          child: CvTextInput(
-            controller: _text,
-            label: widget.label,
-            maxLength: 2000,
-            multiline: true,
-            onChanged: widget.onChanged,
+  Widget build(BuildContext context) {
+    final editable = widget.onChanged != null;
+    final read = Padding(
+      padding: EdgeInsets.all(editable ? 6 : 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        spacing: 4,
+        children: [
+          Text(
+            widget.label,
+            style: CvTypography.label.copyWith(color: CvColors.textSecondary),
           ),
-        );
+          Text(
+            widget.value.isNotEmpty
+                ? widget.value
+                : editable
+                    ? 'Add ${widget.label.toLowerCase()}…'
+                    : '–',
+            style: CvTypography.body.copyWith(
+                color: widget.value.isEmpty && editable
+                    ? CvColors.slate400
+                    : null),
+          ),
+        ],
+      ),
+    );
+    if (!editable) return read;
+    return _ClickToEdit(
+      label: widget.label,
+      read: SizedBox(width: double.infinity, child: read),
+      edit: TextKeysOnly(
+        child: CvTextInput(
+          controller: _text,
+          label: widget.label,
+          maxLength: 2000,
+          multiline: true,
+          autofocus: true,
+          onChanged: widget.onChanged,
+        ),
+      ),
+    );
+  }
 }
