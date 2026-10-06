@@ -26,9 +26,9 @@ import 'packs.dart';
 import 'table/chrome.dart';
 import 'table/getting_started.dart';
 import 'table/grid_align.dart';
-import 'table/initiative.dart';
 import 'table/log_panel.dart';
 import 'table/pack_tokens.dart';
+import 'table/party_panel.dart';
 import 'table/palette.dart';
 import 'table/room_characters.dart';
 import 'table/rules.dart';
@@ -36,8 +36,10 @@ import 'table/table_view.dart';
 import 'theme.dart';
 import 'ui/cv.dart';
 
-/// Where the table's chrome starts, right of the journal.
+/// Where the table's chrome starts, right of the journal, and stops, left of
+/// the sidebar.
 const _beside = CvSizes.insetScreen + LogPanel.width + CvSpacing.s4;
+const _besideRight = CvSizes.insetScreen + PartyPanel.width + CvSpacing.s4;
 
 /// The room this client is in, saved so a refresh lands back in it. A GM's
 /// room is a campaign's.
@@ -486,8 +488,6 @@ class _GmRoomState extends State<GmRoom> {
   /// The live scene, which autosave writes to.
   String? _sceneId;
   List<SceneEntry> _sceneList = [];
-  bool _scenesOpen = false;
-  bool _membersOpen = false;
   StreamSubscription<Set<String>>? _peers;
   StreamSubscription<TableEvent>? _pings;
   VoidCallback? _stopRulers;
@@ -504,8 +504,6 @@ class _GmRoomState extends State<GmRoom> {
 
   /// Opening a panel by the rail closes the others: one at a time.
   void _closePanels() {
-    _scenesOpen = false;
-    _membersOpen = false;
     _libraryOpen = null;
     _tokenImageFor = null;
     if (_controller.gridOptions) _controller.toggleGridOptions();
@@ -518,8 +516,6 @@ class _GmRoomState extends State<GmRoom> {
     final open = _controller.gridOptions;
     if (open && !_gridWasOpen) {
       setState(() {
-        _scenesOpen = false;
-        _membersOpen = false;
         _libraryOpen = null;
         _tokenImageFor = null;
       });
@@ -872,28 +868,13 @@ class _GmRoomState extends State<GmRoom> {
 
   void _toggleLibrary(LibraryKind kind) => setState(() {
         final open = _libraryOpen != kind;
-        // The scene library opens from the scenes panel, beside it.
-        final scenes = _scenesOpen && kind == LibraryKind.scene;
         _closePanels();
-        _scenesOpen = scenes;
         if (open) _libraryOpen = kind;
       });
 
   void _closeLibrary() => setState(() {
         _libraryOpen = null;
         _tokenImageFor = null;
-      });
-
-  void _toggleScenes() => setState(() {
-        final open = !_scenesOpen;
-        _closePanels();
-        _scenesOpen = open;
-      });
-
-  void _toggleMembers() => setState(() {
-        final open = !_membersOpen;
-        _closePanels();
-        _membersOpen = open;
       });
 
   /// The command palette is open.
@@ -916,8 +897,6 @@ class _GmRoomState extends State<GmRoom> {
         (group: 'Table', label: 'Add token', icon: Lucide.circlePlus, shortcut: 'T', run: _openTokens),
         (group: 'Table', label: 'Change map', icon: Lucide.imageUp, shortcut: 'M', run: () => _toggleLibrary(LibraryKind.map)),
         (group: 'Table', label: 'Grid', icon: Lucide.grid3x3, shortcut: 'G', run: _controller.toggleGridOptions),
-        (group: 'Table', label: 'Scenes', icon: Lucide.layers, shortcut: null, run: _toggleScenes),
-        (group: 'Table', label: 'Players', icon: Lucide.userRound, shortcut: null, run: _toggleMembers),
         (group: 'Table', label: 'Undo', icon: Lucide.undo2, shortcut: '${modKey}Z', run: host.undo),
         (group: 'Table', label: 'Redo', icon: Lucide.redo2, shortcut: '$modKey⇧Z', run: host.redo),
         (group: 'Table', label: 'Export scene', icon: Lucide.download, shortcut: 'E', run: _export),
@@ -1415,10 +1394,7 @@ class _GmRoomState extends State<GmRoom> {
         Positioned(
           left: _beside,
           top: pad,
-          child: Row(spacing: CvSpacing.s4, children: [
-            CvRoomCodeChip(code: widget.code),
-            SaveStatus(saved: _saved),
-          ]),
+          child: SaveStatus(saved: _saved),
         ),
         Positioned(
           left: _beside,
@@ -1433,26 +1409,47 @@ class _GmRoomState extends State<GmRoom> {
                 _prefs.setStringList('started:${widget.campaign}', done),
             onMap: () => _toggleLibrary(LibraryKind.map),
             onToken: _openTokens,
-            onInvite: () {
-              if (!_membersOpen) _toggleMembers();
-            },
           ),
         ),
         Positioned(
           right: pad,
-          top: pad + CvSizes.hit + CvSpacing.s4,
-          child: InitiativeBar(
-              store: host.store,
-              controller: _controller,
-              send: host.execute,
-              gm: true,
-              self: widget.me,
-              fullPack: _fullPack),
-        ),
-        Positioned(
-          right: pad,
           top: pad,
-          child: PresenceBar(session: host, onLeave: widget.onLeave),
+          bottom: pad,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            spacing: CvSpacing.s4,
+            children: [
+              PartyPanel(
+                session: host,
+                store: host.store,
+                controller: _controller,
+                send: host.execute,
+                gm: true,
+                self: widget.me,
+                code: widget.code,
+                onLeave: widget.onLeave,
+                onRemove: _removeMember,
+                fullPack: _fullPack,
+              ),
+              Flexible(
+                child: SingleChildScrollView(
+                  child: ScenesPanel(
+                    scenes: _sceneList,
+                    live: _sceneId,
+                    onSwitch: _switchScene,
+                    onNew: _newScene,
+                    onRename: _renameScene,
+                    onDelete: _deleteScene,
+                    onSaveToLibrary: _saveSceneToLibrary,
+                    onExport: _export,
+                    onImport: _import,
+                    onFromLibrary: () => _toggleLibrary(LibraryKind.scene),
+                    fromLibraryOpen: _libraryOpen == LibraryKind.scene,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
         Positioned(
           left: _beside,
@@ -1463,10 +1460,6 @@ class _GmRoomState extends State<GmRoom> {
               controller: _controller,
               onSetMap: () => _toggleLibrary(LibraryKind.map),
               mapsOpen: _libraryOpen == LibraryKind.map,
-              scenesOpen: _scenesOpen,
-              onScenes: _toggleScenes,
-              membersOpen: _membersOpen,
-              onMembers: _toggleMembers,
             ),
           ),
         ),
@@ -1486,21 +1479,6 @@ class _GmRoomState extends State<GmRoom> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   spacing: CvSpacing.s4,
                   children: [
-                    if (_membersOpen) MembersPanel(onRemove: _removeMember),
-                    if (_scenesOpen)
-                      ScenesPanel(
-                        scenes: _sceneList,
-                        live: _sceneId,
-                        onSwitch: _switchScene,
-                        onNew: _newScene,
-                        onRename: _renameScene,
-                        onDelete: _deleteScene,
-                        onSaveToLibrary: _saveSceneToLibrary,
-                        onExport: _export,
-                        onImport: _import,
-                        onFromLibrary: () => _toggleLibrary(LibraryKind.scene),
-                        fromLibraryOpen: _libraryOpen == LibraryKind.scene,
-                      ),
                     GridOptions(
                         controller: _controller,
                         grid: grid,
@@ -1519,7 +1497,7 @@ class _GmRoomState extends State<GmRoom> {
         ),
         Positioned(
           left: _beside,
-          right: pad,
+          right: _besideRight,
           top: pad + CvSizes.hit + CvSpacing.s4,
           bottom: pad,
           child: BottomRow(
@@ -1551,14 +1529,7 @@ class _GmRoomState extends State<GmRoom> {
                     onSearch: () => setState(() => _palette = true)),
               ],
             ),
-            side: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              spacing: CvSpacing.s4,
-              children: [
-                ZoomCluster(controller: _controller, snap: true),
-              ],
-            ),
+            side: ZoomCluster(controller: _controller, snap: true),
           ),
         ),
         // Maps and scenes pop up over the table: picking closes them.
@@ -1837,11 +1808,6 @@ class _PlayerRoomState extends State<PlayerRoom> {
         Positioned(
           left: _beside,
           top: pad,
-          child: CvRoomCodeChip(code: widget.code),
-        ),
-        Positioned(
-          left: _beside,
-          top: pad + CvSizes.hit + CvSpacing.s4,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             spacing: CvSpacing.s4,
@@ -1861,36 +1827,28 @@ class _PlayerRoomState extends State<PlayerRoom> {
         ),
         Positioned(
           right: pad,
-          top: pad + CvSizes.hit + CvSpacing.s4,
-          child: InitiativeBar(
-              store: store,
-              controller: _controller,
-              send: session.request,
-              gm: false,
-              self: widget.me),
-        ),
-        Positioned(
-          right: pad,
           top: pad,
-          child: PresenceBar(session: session, onLeave: widget.onLeave),
+          child: PartyPanel(
+            session: session,
+            store: store,
+            controller: _controller,
+            send: session.request,
+            gm: false,
+            self: widget.me,
+            code: widget.code,
+            onLeave: widget.onLeave,
+          ),
         ),
         Positioned(
           left: _beside,
-          right: pad,
+          right: _besideRight,
           top: pad + CvSizes.hit + CvSpacing.s4,
           bottom: pad,
           child: BottomRow(
             dock: ToolDock(
                 controller: _controller,
                 onSearch: () => setState(() => _palette = true)),
-            side: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              spacing: CvSpacing.s4,
-              children: [
-                ZoomCluster(controller: _controller),
-              ],
-            ),
+            side: ZoomCluster(controller: _controller),
           ),
         ),
         if (_palette)

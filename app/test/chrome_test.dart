@@ -133,7 +133,7 @@ void main() {
     await tester.tap(find.text('Reveal'));
     expect(controller.fogMode, FogMode.reveal);
 
-    await tester.tap(find.text('Snap'));
+    await tester.tap(find.bySemanticsLabel(RegExp('^Snap to grid')));
     expect(controller.snap, isFalse);
   });
 
@@ -150,8 +150,8 @@ void main() {
         Positioned(
           left: 16,
           right: 16,
+          top: 16,
           bottom: 16,
-          height: 52,
           child: BottomRow(
             dock: ToolDock(controller: controller, gm: true),
             side: ZoomCluster(controller: controller, snap: true),
@@ -167,7 +167,7 @@ void main() {
 
   testWidgets('with no room beside it, the zoom sits on top of the dock',
       (tester) async {
-    tester.view.physicalSize = const Size(560, 600);
+    tester.view.physicalSize = const Size(440, 600);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     final controller = TableController();

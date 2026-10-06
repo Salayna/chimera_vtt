@@ -108,25 +108,16 @@ VoidCallback shareRulers(
 /// The command key, as the platform writes it: ⌘ or Ctrl.
 String get modKey => defaultTargetPlatform == TargetPlatform.macOS ? '⌘' : 'Ctrl ';
 
-/// The GM's panels, a rail on the left edge: scenes, players, the map and
-/// its grid. The tools themselves, tokens included, are in the [ToolDock].
+/// The GM's panels, a rail beside the journal: the map and its grid. The tools themselves, tokens included, are in the [ToolDock].
 class GmRail extends StatelessWidget {
   const GmRail({
     super.key,
     required this.controller,
     this.onSetMap,
-    this.onScenes,
-    this.scenesOpen = false,
-    this.onMembers,
-    this.membersOpen = false,
     this.mapsOpen = false,
   });
 
   final TableController controller;
-  final VoidCallback? onScenes;
-  final bool scenesOpen;
-  final VoidCallback? onMembers;
-  final bool membersOpen;
   final bool mapsOpen;
   final VoidCallback? onSetMap;
 
@@ -134,20 +125,6 @@ class GmRail extends StatelessWidget {
   Widget build(BuildContext context) => ListenableBuilder(
         listenable: controller,
         builder: (context, _) => CvToolbar(children: [
-          if (onScenes != null) ...[
-            CvToolButton(
-                icon: Lucide.layers,
-                label: 'Scenes',
-                active: scenesOpen,
-                onPressed: onScenes),
-            if (onMembers != null)
-              CvToolButton(
-                  icon: Lucide.userRound,
-                  label: 'Players',
-                  active: membersOpen,
-                  onPressed: onMembers),
-            const CvToolbarSeparator(),
-          ],
           CvToolButton(
               icon: Lucide.imageUp,
               label: 'Change map',
@@ -698,68 +675,67 @@ class ZoomCluster extends StatelessWidget {
   final bool snap;
 
   @override
-  Widget build(BuildContext context) => CvToolbar(axis: Axis.horizontal, children: [
+  Widget build(BuildContext context) => CvToolbar(children: [
         if (snap) ...[
           ListenableBuilder(
             listenable: controller,
-            builder: (context, _) => CvTooltip(
-              message: 'Snap to grid · hold ⌥ to place freely',
+            builder: (context, _) => CvToolButton(
+              icon: Lucide.magnet,
+              label: 'Snap to grid · hold ⌥ to place freely',
               shortcut: 'S',
-              side: AxisDirection.up,
-              child: CvToggleButton(
-                icon: Lucide.magnet,
-                label: 'Snap',
-                bordered: false,
-                pressed: controller.snap,
-                onChanged: (v) => controller.snap = v,
-              ),
+              active: controller.snap,
+              tooltipSide: AxisDirection.left,
+              onPressed: () => controller.snap = !controller.snap,
             ),
           ),
           const CvToolbarSeparator(),
         ],
         CvToolButton(
-            icon: Lucide.zoomOut,
-            label: 'Zoom out',
-            shortcut: '−',
-            tooltipSide: AxisDirection.up,
-            onPressed: () => controller.zoomBy(1 / 1.25)),
+            icon: Lucide.zoomIn,
+            label: 'Zoom in',
+            shortcut: '+',
+            tooltipSide: AxisDirection.left,
+            onPressed: () => controller.zoomBy(1.25)),
         ValueListenableBuilder(
           valueListenable: controller.view,
           builder: (context, _, _) => CvTooltip(
             message: 'Reset zoom to 100%',
-            side: AxisDirection.up,
+            side: AxisDirection.left,
             child: CvPressable(
               onTap: () => controller.zoomBy(1 / controller.zoom),
               label: 'Reset zoom to 100%',
               builder: (s) => Container(
-                width: 56,
+                width: CvSizes.hit,
                 height: CvSizes.hit,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
                   color: s.hover ? CvColors.surfaceHover : const Color(0x00000000),
                   borderRadius: BorderRadius.circular(CvRadii.md),
                 ),
-                child: Text('${(controller.zoom * 100).round()}%',
-                    style: CvTypography.caption.copyWith(
-                        fontFamily: CvTypography.mono,
-                        color: s.hover
-                            ? CvColors.textPrimary
-                            : CvColors.textSecondary)),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text('${(controller.zoom * 100).round()}%',
+                      style: CvTypography.caption.copyWith(
+                          fontFamily: CvTypography.mono,
+                          color: s.hover
+                              ? CvColors.textPrimary
+                              : CvColors.textSecondary)),
+                ),
               ),
             ),
           ),
         ),
         CvToolButton(
-            icon: Lucide.zoomIn,
-            label: 'Zoom in',
-            shortcut: '+',
-            tooltipSide: AxisDirection.up,
-            onPressed: () => controller.zoomBy(1.25)),
+            icon: Lucide.zoomOut,
+            label: 'Zoom out',
+            shortcut: '−',
+            tooltipSide: AxisDirection.left,
+            onPressed: () => controller.zoomBy(1 / 1.25)),
         CvToolButton(
             icon: Lucide.scan,
             label: 'Fit map',
             shortcut: '0',
-            tooltipSide: AxisDirection.up,
+            tooltipSide: AxisDirection.left,
             onPressed: controller.fit),
       ]);
 }

@@ -35,7 +35,7 @@ void main() {
   testWidgets('steps tick themselves, and stay ticked', (tester) async {
     final (store, saved) = await pump(tester);
     expect(find.text('GETTING STARTED · 0/4'), findsOneWidget);
-    expect(find.text('Send them the room code ABC234.'), findsOneWidget);
+    expect(find.text('Send them the room code ABC234, at the foot of the party panel.'), findsOneWidget);
 
     store.execute(const Gm(),
         const PlaceToken(Token(id: id, position: (x: 64, y: 64), size: 128)));

@@ -9,8 +9,8 @@ import '../ui/cv.dart';
 import 'rules.dart';
 import 'table_view.dart';
 
-/// The turn order, as a list down the right: the round, the order and
-/// whose turn it is.
+/// The turn order, the party panel's Initiative tab: the round, the order
+/// and whose turn it is.
 /// The GM starts it, steps through it and ends it; a player places their own
 /// token (its form, or its roll) and ends its turn. Clicking an entry finds
 /// its token.
@@ -30,8 +30,6 @@ class InitiativeBar extends StatelessWidget {
   final Outcome Function(Command) send;
   final bool gm;
   final PlayerId self;
-
-  static const width = 240.0;
 
   /// The scene's pack with its tokens, for the forms they fight in.
   final SystemPack Function(Scene scene)? fullPack;
@@ -74,14 +72,19 @@ class InitiativeBar extends StatelessWidget {
       final scene = snapshot.requireData;
       final initiative = scene.initiative;
       if (initiative == null) {
-        if (!gm || scene.tokens.isEmpty) return const SizedBox.shrink();
-        return CvButton(
-          label: packOf(scene).forms.isEmpty
-              ? 'Roll initiative'
-              : 'Start the fight',
-          icon: Lucide.circleDashed,
-          onPressed: () =>
-              send(SetInitiative(roll(scene, math.Random.secure(), fullPack?.call(scene)))),
+        return Padding(
+          padding: const EdgeInsets.all(CvSpacing.s5),
+          child: gm && scene.tokens.isNotEmpty
+              ? CvButton(
+                  label: packOf(scene).forms.isEmpty
+                      ? 'Roll initiative'
+                      : 'Start the fight',
+                  icon: Lucide.circleDashed,
+                  onPressed: () =>
+                      send(SetInitiative(roll(scene, math.Random.secure(), fullPack?.call(scene)))),
+                )
+              : Text(gm ? 'Place tokens to start a fight.' : 'No fight yet: the GM starts one.',
+                  style: CvTypography.caption.copyWith(color: CvColors.textSecondary)),
         );
       }
       final current = scene.tokens[initiative.current];
@@ -113,9 +116,7 @@ class InitiativeBar extends StatelessWidget {
           };
 
       final mine = current != null && current.owner == self;
-      return CvPanel(
-        width: InitiativeBar.width,
-        child: Column(
+      return Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -143,10 +144,10 @@ class InitiativeBar extends StatelessWidget {
               ]),
             ),
             Container(height: 1, color: CvColors.borderSubtle),
-            // ponytail: a fixed cap keeps it clear of the log below; size it
-            // to the space between them if fights get bigger.
+            // ponytail: a fixed cap keeps the scenes below in view; size it
+            // to the sidebar if fights get bigger.
             ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 360),
+              constraints: const BoxConstraints(maxHeight: 300),
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(CvSpacing.s3),
                 child: Column(
@@ -189,7 +190,6 @@ class InitiativeBar extends StatelessWidget {
               ),
             ],
           ],
-        ),
       );
     },
   );

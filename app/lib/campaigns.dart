@@ -12,6 +12,7 @@ import 'members.dart' show Member, memberColor;
 import 'packs.dart' show InstalledPacks;
 import 'room.dart' show newRoomCode;
 import 'table/chrome.dart' show TextKeysOnly;
+import 'table/party_panel.dart' show PartyPanel;
 import 'theme.dart';
 import 'ui/cv.dart';
 import 'ui/hub.dart';
@@ -890,7 +891,7 @@ class _CardMenuState extends State<_CardMenu> {
       );
 }
 
-/// The campaign's scenes, beside the GM's rail: the live one is what the
+/// The campaign's scenes, in the GM's right sidebar: the live one is what the
 /// table sees. Pick another to show it, name the live one, add or delete.
 class ScenesPanel extends StatelessWidget {
   const ScenesPanel({
@@ -927,7 +928,7 @@ class ScenesPanel extends StatelessWidget {
     final current = scenes.where((s) => s.id == live).firstOrNull;
     return CvPopIn(
       child: CvPanel(
-        width: 260,
+        width: PartyPanel.width,
         padding: const EdgeInsets.all(CvSpacing.s5),
         child: Column(
           mainAxisSize: MainAxisSize.min,

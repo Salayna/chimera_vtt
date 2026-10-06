@@ -30,7 +30,6 @@ class GettingStarted extends StatefulWidget {
     required this.save,
     this.onMap,
     this.onToken,
-    this.onInvite,
   });
 
   final SceneStore store;
@@ -41,7 +40,6 @@ class GettingStarted extends StatefulWidget {
   final void Function(List<String> done) save;
   final VoidCallback? onMap;
   final VoidCallback? onToken;
-  final VoidCallback? onInvite;
 
   @override
   State<GettingStarted> createState() => _GettingStartedState();
@@ -119,10 +117,10 @@ class _GettingStartedState extends State<GettingStarted> {
                     ('token', 'Place a token', 'Its image, or one of the '
                         "system's.", widget.onToken),
                     ('player', 'Invite a player',
-                        'Send them the room code ${widget.code}.',
-                        widget.onInvite),
+                        'Send them the room code ${widget.code}, at the foot of the party panel.',
+                        null),
                     ('initiative', 'Roll initiative',
-                        'From the bar at the top, once tokens are out.', null),
+                        'From the Initiative tab, once tokens are out.', null),
                   ])
                     _step(label, hint, done: done.contains(id), onTap: onTap),
                 ],
