@@ -36,6 +36,9 @@ import 'table/table_view.dart';
 import 'theme.dart';
 import 'ui/cv.dart';
 
+/// Where the table's chrome starts, right of the journal.
+const _beside = CvSizes.insetScreen + LogPanel.width + CvSpacing.s4;
+
 /// The room this client is in, saved so a refresh lands back in it. A GM's
 /// room is a campaign's.
 typedef SavedRoom = ({String code, bool gm, String? campaign});
@@ -942,11 +945,10 @@ class _GmRoomState extends State<GmRoom> {
               ],
             ),
           );
-    // Beside the log if it fits there, else across the table.
-    final across = MediaQuery.sizeOf(context).width - 2 * CvSizes.insetScreen;
-    final beside = across - LogPanel.width - CvSpacing.s4;
+    // Across the table beside the journal.
+    final across = MediaQuery.sizeOf(context).width - _beside - CvSizes.insetScreen;
     return SizedBox(
-      width: min(720, beside >= 560 ? beside : across),
+      width: min(720, across),
       child: toggle != null && _stripPack
           ? PackTokensPanel(
               pack: pack!,
@@ -1404,13 +1406,22 @@ class _GmRoomState extends State<GmRoom> {
         Positioned(
           left: pad,
           top: pad,
+          bottom: pad,
+          child: Align(
+            alignment: Alignment.topLeft,
+            child: LogPanel(session: host, send: host.execute, gm: true),
+          ),
+        ),
+        Positioned(
+          left: _beside,
+          top: pad,
           child: Row(spacing: CvSpacing.s4, children: [
             CvRoomCodeChip(code: widget.code),
             SaveStatus(saved: _saved),
           ]),
         ),
         Positioned(
-          left: pad,
+          left: _beside,
           bottom: pad,
           child: GettingStarted(
             store: host.store,
@@ -1444,7 +1455,7 @@ class _GmRoomState extends State<GmRoom> {
           child: PresenceBar(session: host, onLeave: widget.onLeave),
         ),
         Positioned(
-          left: pad,
+          left: _beside,
           top: 0,
           bottom: 0,
           child: Center(
@@ -1460,7 +1471,7 @@ class _GmRoomState extends State<GmRoom> {
           ),
         ),
         Positioned(
-          left: pad + CvSizes.rail + CvSpacing.s4,
+          left: _beside + CvSizes.rail + CvSpacing.s4,
           top: 0,
           bottom: 0,
           child: Center(
@@ -1507,7 +1518,7 @@ class _GmRoomState extends State<GmRoom> {
           ),
         ),
         Positioned(
-          left: pad,
+          left: _beside,
           right: pad,
           top: pad + CvSizes.hit + CvSpacing.s4,
           bottom: pad,
@@ -1545,7 +1556,6 @@ class _GmRoomState extends State<GmRoom> {
               crossAxisAlignment: CrossAxisAlignment.end,
               spacing: CvSpacing.s4,
               children: [
-                LogPanel(session: host, send: host.execute, gm: true),
                 ZoomCluster(controller: _controller, snap: true),
               ],
             ),
@@ -1818,11 +1828,19 @@ class _PlayerRoomState extends State<PlayerRoom> {
         Positioned(
           left: pad,
           top: pad,
+          bottom: pad,
+          child: Align(
+            alignment: Alignment.topLeft,
+            child: LogPanel(session: session, send: session.request),
+          ),
+        ),
+        Positioned(
+          left: _beside,
+          top: pad,
           child: CvRoomCodeChip(code: widget.code),
         ),
-
         Positioned(
-          left: pad,
+          left: _beside,
           top: pad + CvSizes.hit + CvSpacing.s4,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1857,7 +1875,7 @@ class _PlayerRoomState extends State<PlayerRoom> {
           child: PresenceBar(session: session, onLeave: widget.onLeave),
         ),
         Positioned(
-          left: pad,
+          left: _beside,
           right: pad,
           top: pad + CvSizes.hit + CvSpacing.s4,
           bottom: pad,
@@ -1870,7 +1888,6 @@ class _PlayerRoomState extends State<PlayerRoom> {
               crossAxisAlignment: CrossAxisAlignment.end,
               spacing: CvSpacing.s4,
               children: [
-                LogPanel(session: session, send: session.request),
                 ZoomCluster(controller: _controller),
               ],
             ),

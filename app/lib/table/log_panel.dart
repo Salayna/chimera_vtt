@@ -18,8 +18,9 @@ Command? commandFor(String line, {bool secret = false}) {
   return Say(text, secret: secret);
 }
 
-/// The room's log, which is also its chat: rolls, messages and condition
-/// changes, newest at the bottom, with dice buttons and a line to type in.
+/// The room's journal down the left, which is also its chat: rolls,
+/// messages and condition changes, newest at the bottom, with a line to type
+/// in and dice to roll.
 class LogPanel extends StatefulWidget {
   const LogPanel(
       {super.key, required this.session, required this.send, this.gm = false});
@@ -31,7 +32,7 @@ class LogPanel extends StatefulWidget {
   /// whispers to the GM.
   final bool gm;
 
-  static const width = 320.0;
+  static const width = 300.0;
 
   @override
   State<LogPanel> createState() => _LogPanelState();
@@ -42,6 +43,7 @@ class _LogPanelState extends State<LogPanel> {
   String? _error;
   bool _open = true;
   bool _secret = false;
+  bool _dice = false;
 
   @override
   void dispose() {
@@ -69,25 +71,24 @@ class _LogPanelState extends State<LogPanel> {
   Widget build(BuildContext context) => CvPanel(
         width: LogPanel.width,
         child: Column(
-          mainAxisSize: MainAxisSize.min,
+          mainAxisSize: _open ? MainAxisSize.max : MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 2, 2, 2),
               child: Row(children: [
-                const Expanded(child: CvOverline('Log')),
+                const Expanded(child: CvOverline('Journal')),
                 CvToolButton(
-                  icon: _open ? Lucide.chevronDown : Lucide.chevronUp,
-                  label: _open ? 'Hide the log' : 'Show the log',
-                  tooltipSide: AxisDirection.left,
+                  icon: _open ? Lucide.chevronUp : Lucide.chevronDown,
+                  label: _open ? 'Hide the journal' : 'Show the journal',
+                  tooltipSide: AxisDirection.right,
                   onPressed: () => setState(() => _open = !_open),
                 ),
               ]),
             ),
             if (_open) ...[
               Container(height: 1, color: CvColors.borderSubtle),
-              SizedBox(
-                height: 240,
+              Expanded(
                 child: StreamBuilder(
                   stream: widget.session.log,
                   initialData: widget.session.currentLog,
@@ -110,7 +111,7 @@ class _LogPanelState extends State<LogPanel> {
                     return ListView.builder(
                       reverse: true,
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: CvSpacing.s4),
+                          horizontal: 10, vertical: CvSpacing.s4),
                       itemCount: log.length,
                       itemBuilder: (context, i) =>
                           _Entry(log[log.length - 1 - i]),
@@ -125,18 +126,11 @@ class _LogPanelState extends State<LogPanel> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   spacing: CvSpacing.s4,
                   children: [
-                    Row(children: [
-                      for (final sides in [4, 6, 8, 10, 12, 20])
-                        Expanded(
-                          child: CvButton(
-                            label: 'd$sides',
-                            small: true,
-                            variant: CvButtonVariant.ghost,
-                            onPressed: () => widget
-                                .send(RollDice('d$sides', secret: _secret)),
-                          ),
-                        ),
-                    ]),
+                    if (_dice)
+                      _DicePicker(onRoll: (formula) {
+                        widget.send(RollDice(formula, secret: _secret));
+                        setState(() => _dice = false);
+                      }),
                     CvSwitch(
                         value: _secret,
                         onChanged: (v) => setState(() => _secret = v),
@@ -151,22 +145,136 @@ class _LogPanelState extends State<LogPanel> {
                           ),
                         ]),
                       ),
-                    TextKeysOnly(
-                      child: CvTextInput(
-                        controller: _text,
-                        placeholder: _secret && !widget.gm
-                            ? 'Whisper to the GM, or /r d20'
-                            : 'Say something, or /r 2d6+3',
-                        maxLength: Say.maxLength,
-                        error: _error,
-                        keepFocus: true,
-                        onSubmitted: _submit,
-                      ),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      spacing: 4,
+                      children: [
+                        Expanded(
+                          child: TextKeysOnly(
+                            child: CvTextInput(
+                              controller: _text,
+                              placeholder: _secret && !widget.gm
+                                  ? 'Whisper to the GM, or /r d20'
+                                  : 'Say something, or /r 2d6+3',
+                              maxLength: Say.maxLength,
+                              error: _error,
+                              keepFocus: true,
+                              onSubmitted: _submit,
+                            ),
+                          ),
+                        ),
+                        CvToolButton(
+                          icon: Lucide.dices,
+                          label: 'Roll dice',
+                          active: _dice,
+                          tooltipSide: AxisDirection.up,
+                          onPressed: () => setState(() => _dice = !_dice),
+                        ),
+                      ],
                     ),
                   ],
                 ),
               ),
             ],
+          ],
+        ),
+      );
+}
+
+/// Dice to roll at a click: how many, which, and a modifier.
+class _DicePicker extends StatefulWidget {
+  const _DicePicker({required this.onRoll});
+
+  /// With the formula, as typed after /r: `2d6+1`.
+  final void Function(String formula) onRoll;
+
+  @override
+  State<_DicePicker> createState() => _DicePickerState();
+}
+
+class _DicePickerState extends State<_DicePicker> {
+  static const sides = [4, 6, 8, 10, 12, 20, 100];
+  int _count = 1;
+  int _modifier = 0;
+
+  String get _bonus => switch (_modifier) {
+        0 => '',
+        > 0 => '+$_modifier',
+        _ => '$_modifier',
+      };
+
+  Widget _stepper(String label, int value, int min, int max, void Function(int) set) =>
+      Expanded(
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border.all(color: CvColors.borderSubtle),
+            borderRadius: BorderRadius.circular(CvRadii.md),
+          ),
+          child: Row(children: [
+            CvToolButton(
+              icon: Lucide.minus,
+              label: 'Less: ${label.toLowerCase()}',
+              tooltipSide: AxisDirection.up,
+              onPressed: value > min ? () => setState(() => set(value - 1)) : null,
+            ),
+            Expanded(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Column(children: [
+                  Text(label == 'Modifier' && value > 0 ? '+$value' : '$value',
+                      style: CvTypography.label.copyWith(fontFamily: CvTypography.mono)),
+                  Text(label,
+                      style: CvTypography.caption.copyWith(color: CvColors.textSecondary)),
+                ]),
+              ),
+            ),
+            CvToolButton(
+              icon: Lucide.plus,
+              label: 'More: ${label.toLowerCase()}',
+              tooltipSide: AxisDirection.up,
+              onPressed: value < max ? () => setState(() => set(value + 1)) : null,
+            ),
+          ]),
+        ),
+      );
+
+  @override
+  Widget build(BuildContext context) => CvPopIn(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          spacing: CvSpacing.s4,
+          children: [
+            for (final row in [sides.take(4), sides.skip(4)])
+              Row(spacing: 6, children: [
+                for (final n in row)
+                  Expanded(
+                    child: CvPressable(
+                      label: 'd$n',
+                      radius: CvRadii.md,
+                      onTap: () => widget.onRoll('${_count}d$n$_bonus'),
+                      builder: (s) => Container(
+                        height: CvSizes.controlSm,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: s.hover ? CvColors.surfaceHover : null,
+                          border: Border.all(color: CvColors.borderSubtle),
+                          borderRadius: BorderRadius.circular(CvRadii.md),
+                        ),
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text('d$n',
+                              style: CvTypography.label.copyWith(
+                                  color: n == 20 ? CvColors.amber300 : CvColors.textPrimary)),
+                        ),
+                      ),
+                    ),
+                  ),
+                if (row.length < 4) const Spacer(),
+              ]),
+            Row(spacing: CvSpacing.s4, children: [
+              _stepper('Dice', _count, 1, 10, (v) => _count = v),
+              _stepper('Modifier', _modifier, -10, 20, (v) => _modifier = v),
+            ]),
           ],
         ),
       );
@@ -191,32 +299,59 @@ class _Entry extends StatelessWidget {
     final stamp = '${time.hour.toString().padLeft(2, '0')}:'
         '${time.minute.toString().padLeft(2, '0')}';
     final Widget body = switch (e) {
-      Roll(:final formula, :final faces, :final total, :final secret, :final blind) => Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          spacing: CvSpacing.s5,
-          children: [
-            Expanded(
-              child: Text.rich(TextSpan(children: [
-                who,
-                TextSpan(
-                    text: ' rolled $formula'
-                        '${secret ? e.gm ? ' in secret' : ' for the GM' : ''}\n',
-                    style: quiet),
-                TextSpan(
-                    text: blind
-                        ? 'The GM sees the result'
-                        : _faces(formula, faces),
-                    style: CvTypography.caption.copyWith(
-                        fontFamily: CvTypography.mono,
-                        color: CvColors.textSecondary)),
-              ])),
-            ),
-            if (!blind)
+      Roll(:final formula, :final faces, :final total, :final secret, :final blind) =>
+        Container(
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+          decoration: BoxDecoration(
+            color: CvColors.slate850,
+            border: Border.all(color: CvColors.borderSubtle),
+            borderRadius: BorderRadius.circular(CvRadii.md),
+          ),
+          child: Column(spacing: CvSpacing.s4, children: [
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Expanded(
+                child: Text.rich(TextSpan(children: [
+                  who,
+                  if (secret)
+                    TextSpan(text: e.gm ? ' in secret' : ' for the GM', style: quiet),
+                ])),
+              ),
+              Text(stamp,
+                  style: CvTypography.caption.copyWith(color: CvColors.textDisabled)),
+            ]),
+            if (blind)
+              Text('The GM sees the result', style: quiet)
+            else ...[
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                alignment: WrapAlignment.center,
+                children: [
+                  for (final face in faces.expand((f) => f))
+                    Container(
+                      width: 30,
+                      height: 30,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: CvColors.slate950,
+                        border: Border.all(color: CvColors.borderStrong),
+                      ),
+                      child: Text('$face',
+                          style: CvTypography.label
+                              .copyWith(fontFamily: CvTypography.mono)),
+                    ),
+                ],
+              ),
               Text('$total',
-                semanticsLabel: 'total $total',
-                style: CvTypography.title.copyWith(
-                    fontFamily: CvTypography.mono, color: CvColors.textPrimary)),
-          ],
+                  semanticsLabel: 'total $total',
+                  style: CvTypography.titleLg.copyWith(
+                      fontFamily: CvTypography.mono, color: CvColors.textPrimary)),
+            ],
+            Text(formula,
+                style: CvTypography.caption.copyWith(
+                    fontFamily: CvTypography.mono, color: CvColors.textSecondary)),
+          ]),
         ),
       Chat(:final text, :final secret) => Text.rich(TextSpan(children: [
           who,
@@ -273,15 +408,18 @@ class _Entry extends StatelessWidget {
     };
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: CvSpacing.s3),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        spacing: CvSpacing.s4,
-        children: [
-          Expanded(child: body),
-          Text(stamp,
-              style: CvTypography.caption.copyWith(color: CvColors.textDisabled)),
-        ],
-      ),
+      // A roll's card holds its own time.
+      child: e is Roll
+          ? body
+          : Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              spacing: CvSpacing.s4,
+              children: [
+                Expanded(child: body),
+                Text(stamp,
+                    style: CvTypography.caption.copyWith(color: CvColors.textDisabled)),
+              ],
+            ),
     );
   }
 
