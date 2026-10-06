@@ -445,6 +445,36 @@ void main() {
     expect((rolled.formula, rolled.secret, rolled.blind), ('1d20 + 2', true, true));
   });
 
+  test("a player's roll for their place is the GM's to roll, and places them",
+      () async {
+    final table = Table(Scene(
+      settings: settings,
+      tokens: {
+        for (final t in [token('a', owner: alice), token('g')]) t.id: t,
+      },
+      initiative: Initiative(
+          round: 1,
+          current: const TokenId('g'),
+          entries: [(token: const TokenId('g'), value: 10), (token: const TokenId('a'), value: null)],
+          formula: 'd20'),
+    ));
+    await table.join();
+    final alices = table.clients[alice]!;
+    expect(alices.request(const SetPlace(TokenId('a'))), isA<Accepted>());
+    table.hub.flush();
+    await Future<void>.delayed(Duration.zero);
+
+    final roll = table.host.currentLog.single as Roll;
+    expect((roll.by, roll.formula), (alice, '1d20'));
+    final order = table.host.store.scene.initiative!;
+    expect(order.entries.firstWhere((e) => e.token == const TokenId('a')).value, roll.total);
+    expect(order.current, const TokenId('g'));
+    expect(Initiative.ordered(order.entries).map((e) => e.token), order.entries.map((e) => e.token));
+    table.expectConverged();
+    // Once.
+    expect(alices.request(const SetPlace(TokenId('a'))), isA<Refused>());
+  });
+
   test('loading a scene reaches every player', () async {
     final table = Table(Scene(settings: settings));
     await table.join();

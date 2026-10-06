@@ -225,8 +225,13 @@ final class HostSession extends Session {
     final before = store.scene;
     final outcome = store.execute(actor, command);
     switch (outcome) {
-      case Accepted(:final patches):
+      case Accepted(:var patches):
         final event = _eventFor(from ?? self, before, command);
+        // An accepted roll for a place: the roll places the token.
+        if ((command, event) case (SetPlace(:final token, value: null), Roll(:final total))) {
+          patches = (store.execute(const Gm(), SetPlace(token, total.clamp(-maxPlace, maxPlace)))
+              as Accepted).patches;
+        }
         _broadcast(before, patches,
             requestId: requestId,
             events: [if (event != null && !event.secret) event]);
@@ -271,6 +276,16 @@ final class HostSession extends Session {
             total: dice.total(faces),
             gm: gm,
             secret: secret);
+      case SetPlace(:final token, value: null):
+        final formula = DiceFormula.tryParse(before.initiative!.formula!)!; // Checked.
+        final faces = formula.roll(_random);
+        return Roll(by, at,
+            formula: '$formula',
+            faces: faces,
+            total: formula.total(faces),
+            gm: gm,
+            // Players don't know a hidden token exists.
+            secret: before.tokens[token]!.hidden);
       case Say(:final text, :final secret):
         return Chat(by, at, text.trim(), gm: gm, secret: secret);
       case Ping(at: final point):

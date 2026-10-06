@@ -376,6 +376,52 @@ void main() {
       expect(reduce(scene, gm, SetInitiative(unsorted)), isA<Refused>());
     });
 
+    test('players place their own token: one of the places, any time', () {
+      final forms = Initiative(
+          round: 1,
+          current: const TokenId('b'),
+          entries: Initiative.ordered([
+            (token: const TokenId('a'), value: 5),
+            (token: const TokenId('b'), value: 7),
+          ]),
+          places: const [6, 5, 4]);
+      final scene = sceneWith([token('a', owner: alice.id), token('b')])
+          .applyPatches([Upsert(forms)]);
+      Initiative? placed(Actor actor, Command command) => switch (reduce(scene, actor, command)) {
+            Accepted(:final patches) => scene.applyPatches(patches).initiative,
+            Refused() => null,
+          };
+      // During someone else's turn: the order re-sorts, the turn stays.
+      final rush = placed(alice, const SetPlace(TokenId('a'), 6))!;
+      expect(rush.entries.map((e) => (e.token.value, e.value)), [('b', 7), ('a', 6)]);
+      expect(rush.current, const TokenId('b'));
+      expect(placed(alice, const SetPlace(TokenId('a'), 7)), isNull); // Not a place.
+      expect(placed(alice, const SetPlace(TokenId('b'), 6)), isNull); // Not theirs.
+      expect(placed(alice, const SetPlace(TokenId('a'))), isNull); // Nothing to roll.
+      expect(placed(gm, const SetPlace(TokenId('b'), 3))!.entries.first.token,
+          const TokenId('a')); // The GM places anyone anywhere.
+      expect(Command.fromJson(const SetPlace(TokenId('a'), 6).toJson()).toJson(),
+          const SetPlace(TokenId('a'), 6).toJson());
+    });
+
+    test('a waiting token rolls once, its owner asking; the GM any time', () {
+      final rolls = Initiative(
+          round: 1,
+          entries: [(token: const TokenId('b'), value: 12), (token: const TokenId('a'), value: null)],
+          formula: 'd20');
+      final scene = sceneWith([token('a', owner: alice.id), token('b')])
+          .applyPatches([Upsert(rolls)]);
+      // Accepted with nothing changed: the GM's session rolls and places it.
+      expect(reduce(scene, alice, const SetPlace(TokenId('a'))),
+          isA<Accepted>().having((a) => a.patches, 'patches', isEmpty));
+      expect(reduce(scene, alice, const SetPlace(TokenId('a'), 20)), isA<Refused>());
+      final rolled = scene.applyPatches(
+          (reduce(scene, gm, const SetPlace(TokenId('a'), 15)) as Accepted).patches);
+      expect(reduce(rolled, alice, const SetPlace(TokenId('a'))), isA<Refused>());
+      expect(reduce(rolled, gm, const SetPlace(TokenId('b'))), isA<Accepted>());
+      expect(Entity.fromJson(rolls.toJson()).toJson(), rolls.toJson());
+    });
+
     test('players never see a hidden token in the order, nor its turn', () {
       final scene = sceneWith([token('a'), token('b', hidden: true), token('c')])
           .applyPatches([Upsert(order('b'))]);

@@ -1428,18 +1428,15 @@ class _GmRoomState extends State<GmRoom> {
           ),
         ),
         Positioned(
-          left: 0,
-          right: 0,
-          top: pad,
-          child: Center(
-            child: InitiativeBar(
-                store: host.store,
-                controller: _controller,
-                send: host.execute,
-                gm: true,
-                self: widget.me,
-                fullPack: _fullPack),
-          ),
+          right: pad,
+          top: pad + CvSizes.hit + CvSpacing.s4,
+          child: InitiativeBar(
+              store: host.store,
+              controller: _controller,
+              send: host.execute,
+              gm: true,
+              self: widget.me,
+              fullPack: _fullPack),
         ),
         Positioned(
           right: pad,
@@ -1845,17 +1842,14 @@ class _PlayerRoomState extends State<PlayerRoom> {
           ),
         ),
         Positioned(
-          left: 0,
-          right: 0,
-          top: pad,
-          child: Center(
-            child: InitiativeBar(
-                store: store,
-                controller: _controller,
-                send: session.request,
-                gm: false,
-                self: widget.me),
-          ),
+          right: pad,
+          top: pad + CvSizes.hit + CvSpacing.s4,
+          child: InitiativeBar(
+              store: store,
+              controller: _controller,
+              send: session.request,
+              gm: false,
+              self: widget.me),
         ),
         Positioned(
           right: pad,

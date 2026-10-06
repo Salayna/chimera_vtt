@@ -522,14 +522,23 @@ final class Region extends Entity {
       );
 }
 
-/// One token's place in the turn order.
-typedef InitiativeEntry = ({TokenId token, int value});
+/// One token in the turn order, at its place: a value, higher first, that a
+/// pack's form names or its roll gives. Null while the token waits for its
+/// owner's roll.
+typedef InitiativeEntry = ({TokenId token, int? value});
 
 /// The turn order while a fight is on: a single-instance entity, absent
-/// when there is none. [entries] go from highest to lowest value.
+/// when there is none. [entries] go from highest place to lowest, waiting
+/// ones last.
 final class Initiative extends Entity {
-  Initiative({required this.round, this.current, required List<InitiativeEntry> entries})
-      : entries = List.unmodifiable(entries);
+  Initiative(
+      {required this.round,
+      this.current,
+      required List<InitiativeEntry> entries,
+      List<int> places = const [],
+      this.formula})
+      : entries = List.unmodifiable(entries),
+        places = List.unmodifiable(places);
 
   /// Starts at 1.
   final int round;
@@ -538,34 +547,53 @@ final class Initiative extends Entity {
   final TokenId? current;
   final List<InitiativeEntry> entries;
 
-  /// [entries] ordered from highest to lowest value, ties in their order.
+  /// How players place their own tokens, from the pack when the fight
+  /// starts: choosing one of these, its players' forms...
+  final List<int> places;
+
+  /// ...or rolling this, which the GM's session does for them.
+  final String? formula;
+
+  /// [entries] ordered from highest place to lowest, ties in their order,
+  /// waiting ones last.
   static List<InitiativeEntry> ordered(Iterable<InitiativeEntry> entries) =>
-      [...entries]..sort((a, b) => b.value.compareTo(a.value));
+      [...entries]..sort((a, b) => (b.value ?? -1000).compareTo(a.value ?? -1000));
+
+  /// The same fight with other turns or entries.
+  Initiative copyWith({int? round, TokenId? current, List<InitiativeEntry>? entries}) =>
+      Initiative(
+          round: round ?? this.round,
+          current: current ?? this.current,
+          entries: entries ?? this.entries,
+          places: places,
+          formula: formula);
+
+  /// With [token] at [value], re-sorted; the turn stays where it is.
+  Initiative place(TokenId token, int value) => copyWith(entries: ordered([
+        for (final e in entries) e.token == token ? (token: token, value: value) : e,
+      ]));
 
   /// The next turn: the entry after [current], or the first of a new round
   /// after the last.
   Initiative next() {
     if (entries.isEmpty) return this;
     final i = entries.indexWhere((e) => e.token == current);
-    if (current == null || i == -1) {
-      return Initiative(round: round, current: entries.first.token, entries: entries);
-    }
+    if (current == null || i == -1) return copyWith(current: entries.first.token);
     return i + 1 < entries.length
-        ? Initiative(round: round, current: entries[i + 1].token, entries: entries)
-        : Initiative(round: round + 1, current: entries.first.token, entries: entries);
+        ? copyWith(current: entries[i + 1].token)
+        : copyWith(round: round + 1, current: entries.first.token);
   }
 
   /// Without [token], whose turn passes to the next entry if it was theirs.
   Initiative without(TokenId token) {
     final rest = [for (final e in entries) if (e.token != token) e];
-    if (current != token) {
-      return Initiative(round: round, current: current, entries: rest);
-    }
+    if (current != token) return copyWith(entries: rest);
     final i = entries.indexWhere((e) => e.token == token);
     final after = [...entries.skip(i + 1), ...entries.take(i)]
         .where((e) => e.token != token)
         .firstOrNull;
-    return Initiative(round: round, current: after?.token, entries: rest);
+    return Initiative(
+        round: round, current: after?.token, entries: rest, places: places, formula: formula);
   }
 
   @override
@@ -576,8 +604,10 @@ final class Initiative extends Entity {
         'round': round,
         if (current != null) 'current': current!.value,
         'entries': [
-          for (final e in entries) {'token': e.token.value, 'value': e.value},
+          for (final e in entries) {'token': e.token.value, if (e.value != null) 'value': e.value},
         ],
+        if (places.isNotEmpty) 'places': places,
+        if (formula != null) 'formula': formula,
       };
 
   factory Initiative._fromJson(Json json) => Initiative(
@@ -587,9 +617,11 @@ final class Initiative extends Entity {
           for (final e in json['entries'] as List)
             (
               token: TokenId((e as Json)['token'] as String),
-              value: e['value'] as int,
+              value: e['value'] as int?,
             ),
         ],
+        places: [for (final p in json['places'] as List? ?? const []) p as int],
+        formula: json['formula'] as String?,
       );
 }
 

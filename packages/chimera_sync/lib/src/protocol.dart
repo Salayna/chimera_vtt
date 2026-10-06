@@ -4,7 +4,7 @@ import 'events.dart';
 
 /// Bumped on any incompatible message change. Clients on another version
 /// can't decode messages and report [ProtocolMismatch].
-const protocolVersion = 9; // 9: characters take advancement nodes.
+const protocolVersion = 10; // 10: players place their own tokens in the turn order.
 
 final class ProtocolMismatch implements Exception {
   const ProtocolMismatch(this.version);

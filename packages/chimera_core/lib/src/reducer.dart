@@ -45,6 +45,7 @@ Outcome reduce(Scene scene, Actor actor, Command command) {
       command is! Say &&
       command is! Ping &&
       command is! EndTurn &&
+      command is! SetPlace &&
       command is! SetTracker &&
       command is! UpdateCharacter &&
       command is! RemoveCharacter &&
@@ -116,6 +117,7 @@ Outcome reduce(Scene scene, Actor actor, Command command) {
         ? const Refused(Refusal.notFound)
         : const Accepted([Delete(EntityKind.initiative, '')]),
     EndTurn() => _endTurn(scene, actor),
+    SetPlace(:final token, :final value) => _setPlace(scene, actor, token, value),
     UsePack(:final id, :final data) => _usePack(scene, id, data),
     SetTracker(:final id, :final name, :final value) =>
       _own(scene, actor, id, (t) => _setTracker(t, name, value)),
@@ -291,21 +293,47 @@ Outcome _validRegion(Region region) =>
         ? Accepted([Upsert(region)])
         : const Refused(Refusal.invalid);
 
+/// How far a place goes either way.
+const maxPlace = 999;
+
 /// A turn order must list tokens on the map, each once, sorted, with the
 /// current one among them.
 Outcome _initiative(Scene scene, Initiative initiative) {
   final tokens = [for (final e in initiative.entries) e.token];
-  final sorted = [
-    for (var i = 1; i < initiative.entries.length; i++)
-      initiative.entries[i - 1].value >= initiative.entries[i].value,
-  ].every((ok) => ok);
   final valid = initiative.round >= 1 &&
-      sorted &&
+      _sorted(initiative.entries) &&
       tokens.toSet().length == tokens.length &&
       tokens.every(scene.tokens.containsKey) &&
-      initiative.entries.every((e) => e.value.abs() <= 999) &&
+      initiative.entries.every((e) => (e.value ?? 0).abs() <= maxPlace) &&
+      initiative.places.length <= 20 &&
+      initiative.places.every((p) => p.abs() <= maxPlace) &&
+      (initiative.formula == null || DiceFormula.tryParse(initiative.formula!) != null) &&
       (initiative.current == null || tokens.contains(initiative.current));
   return valid ? Accepted([Upsert(initiative)]) : const Refused(Refusal.invalid);
+}
+
+bool _sorted(List<InitiativeEntry> entries) =>
+    Initiative.ordered(entries).indexed.every((e) => e.$2.value == entries[e.$1].value);
+
+/// A place set, or, with no [value], a roll asked for: accepted with
+/// nothing changed, and the GM's session places the token by its roll.
+Outcome _setPlace(Scene scene, Actor actor, TokenId id, int? value) {
+  final initiative = scene.initiative;
+  if (initiative == null) return const Refused(Refusal.notFound);
+  final entry = initiative.entries.where((e) => e.token == id).firstOrNull;
+  if (entry == null) return const Refused(Refusal.notFound);
+  return _own(scene, actor, id, (_) {
+    if (value == null) {
+      final rolls = initiative.formula != null &&
+          (actor is Gm || entry.value == null); // A player rolls once.
+      return rolls ? const Accepted([]) : null;
+    }
+    final allowed = actor is Gm ? value.abs() <= maxPlace : initiative.places.contains(value);
+    if (!allowed) return null;
+    return entry.value == value
+        ? const Accepted([])
+        : Accepted([Upsert(initiative.place(id, value))]);
+  });
 }
 
 Outcome _endTurn(Scene scene, Actor actor) {

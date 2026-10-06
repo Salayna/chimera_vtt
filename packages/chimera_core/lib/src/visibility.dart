@@ -52,6 +52,8 @@ Initiative _initiativeFor(Initiative initiative, Scene scene) {
       for (final e in initiative.entries)
         if (shown(e.token)) e,
     ],
+    places: initiative.places,
+    formula: initiative.formula,
   );
 }
 

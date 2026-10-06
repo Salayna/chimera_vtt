@@ -9,9 +9,11 @@ import '../ui/cv.dart';
 import 'rules.dart';
 import 'table_view.dart';
 
-/// The turn order across the top: whose turn, the round, and the order.
-/// The GM rolls it, steps through it and ends it; a player ends their own
-/// token's turn. Clicking an entry finds its token.
+/// The turn order, as a list down the right: the round, the order and
+/// whose turn it is.
+/// The GM starts it, steps through it and ends it; a player places their own
+/// token (its form, or its roll) and ends its turn. Clicking an entry finds
+/// its token.
 class InitiativeBar extends StatelessWidget {
   const InitiativeBar({
     super.key,
@@ -29,15 +31,17 @@ class InitiativeBar extends StatelessWidget {
   final bool gm;
   final PlayerId self;
 
+  static const width = 240.0;
+
   /// The scene's pack with its tokens, for the forms they fight in.
   final SystemPack Function(Scene scene)? fullPack;
 
   /// Everyone on the map takes a place, highest first: in their side's
-  /// starting form when the pack orders turns by forms, or by rolling its
-  /// initiative formula. The GM's client rolls, as the GM's session rolls
-  /// all dice.
+  /// starting form when the pack orders turns by forms, or by its initiative
+  /// roll. The GM's tokens are rolled here, by the GM's client; players'
+  /// wait for their owners to roll, which the GM's session does.
   /// A pack token fights in its own form, from [pack] (the GM's, with its
-  /// tokens).
+  /// tokens). Players may then take any of their side's forms, or roll once.
   static Initiative roll(Scene scene, math.Random random, [SystemPack? pack]) {
     pack ??= packOf(scene);
     final formula = DiceFormula.tryParse(pack.initiative ?? 'd20')!;
@@ -45,9 +49,11 @@ class InitiativeBar extends StatelessWidget {
           final name? => pack.forms.where((f) => f.name == name).firstOrNull?.value,
           null => null,
         };
-    int place(Token t) => pack!.forms.isEmpty
-        ? formula.total(formula.roll(random))
-        : own(t) ?? pack.startingForm(npc: t.owner == null)?.value ?? 0;
+    int? place(Token t) => pack!.forms.isNotEmpty
+        ? own(t) ?? pack.startingForm(npc: t.owner == null)?.value ?? 0
+        : t.owner == null
+            ? formula.total(formula.roll(random))
+            : null;
     final entries = Initiative.ordered([
       for (final t in scene.tokens.values) (token: t.id, value: place(t)),
     ]);
@@ -55,6 +61,8 @@ class InitiativeBar extends StatelessWidget {
       round: 1,
       current: entries.firstOrNull?.token,
       entries: entries,
+      places: [for (final f in pack.forms) if (!f.npc) f.value],
+      formula: pack.forms.isEmpty ? '$formula' : null,
     );
   }
 
@@ -92,90 +100,92 @@ class InitiativeBar extends StatelessWidget {
         ];
         if (side.isEmpty) return;
         final i = side.indexWhere((f) => f.value == value);
-        final next = side[(i + 1) % side.length];
-        send(
-          SetInitiative(
-            Initiative(
-              round: initiative.round,
-              current: initiative.current,
-              entries: Initiative.ordered([
-                for (final e in initiative.entries)
-                  e.token == t.id ? (token: e.token, value: next.value) : e,
-              ]),
-            ),
-          ),
-        );
+        send(SetPlace(t.id, side[(i + 1) % side.length].value));
       }
+
+      /// What clicking [e]'s place does, for whoever may: roll it while it
+      /// waits, or change its form.
+      VoidCallback? placing(Token t, InitiativeEntry e) => switch (e.value) {
+            _ when !gm && t.owner != self => null,
+            null when initiative.formula != null => () => send(SetPlace(t.id)),
+            final value? when forms.isNotEmpty => () => cycle(t, value),
+            _ => null,
+          };
 
       final mine = current != null && current.owner == self;
       return CvPanel(
-        padding: const EdgeInsets.all(CvSpacing.s3),
-        child: Row(
+        width: InitiativeBar.width,
+        child: Column(
           mainAxisSize: MainAxisSize.min,
-          spacing: 6,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 6),
-              child: Text(
-                'Round ${initiative.round}',
-                style: CvTypography.label.copyWith(
-                  fontFamily: CvTypography.mono,
-                  color: CvColors.textSecondary,
-                ),
-              ),
+              padding: const EdgeInsets.fromLTRB(14, 2, 2, 2),
+              child: Row(children: [
+                Expanded(child: CvOverline('Round ${initiative.round}')),
+                if (gm) ...[
+                  if (forms.isEmpty)
+                    CvToolButton(
+                      icon: Lucide.refreshCw,
+                      label: 'Roll again',
+                      tooltipSide: AxisDirection.left,
+                      onPressed: () =>
+                          send(SetInitiative(roll(scene, math.Random.secure(), fullPack?.call(scene)))),
+                    ),
+                  CvToolButton(
+                    icon: Lucide.x,
+                    label: 'End the fight',
+                    tooltipSide: AxisDirection.left,
+                    onPressed: () => send(const EndInitiative()),
+                  ),
+                ] else
+                  const SizedBox(height: CvSizes.hit),
+              ]),
             ),
-            Flexible(
+            Container(height: 1, color: CvColors.borderSubtle),
+            // ponytail: a fixed cap keeps it clear of the log below; size it
+            // to the space between them if fights get bigger.
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 360),
               child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  spacing: 4,
+                padding: const EdgeInsets.all(CvSpacing.s3),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  spacing: 2,
                   children: [
                     for (final e in initiative.entries)
                       if (scene.tokens[e.token] case final token?)
                         _Entry(
                           token: token,
-                          value: formOf(token, e.value)?.name ?? '${e.value}',
-                          onCycle: gm && forms.isNotEmpty
-                              ? () => cycle(token, e.value)
-                              : null,
+                          value: switch (e.value) {
+                            final value? => formOf(token, value)?.name ?? '$value',
+                            null when placing(token, e) != null => 'Roll',
+                            null => 'Waiting',
+                          },
+                          onPlace: placing(token, e),
                           current: e.token == initiative.current,
                           onTap: () {
                             controller.centerOn(token.position);
                             controller.selected.value = token.id;
                           },
                           onRemove: gm
-                              ? () => send(
-                                  SetInitiative(initiative.without(token.id)),
-                                )
+                              ? () => send(SetInitiative(initiative.without(token.id)))
                               : null,
                         ),
                   ],
                 ),
               ),
             ),
-            if (gm || mine)
-              CvButton(
-                label: gm ? 'Next turn' : 'End my turn',
-                variant: mine
-                    ? CvButtonVariant.player
-                    : CvButtonVariant.primary,
-                small: true,
-                onPressed: () => send(const EndTurn()),
-              ),
-            if (gm) ...[
-              if (forms.isEmpty)
-                CvToolButton(
-                  icon: Lucide.refreshCw,
-                  label: 'Roll again',
-                  tooltipSide: AxisDirection.down,
-                  onPressed: () =>
-                      send(SetInitiative(roll(scene, math.Random.secure(), fullPack?.call(scene)))),
+            if (gm || mine) ...[
+              Container(height: 1, color: CvColors.borderSubtle),
+              Padding(
+                padding: const EdgeInsets.all(CvSpacing.s4),
+                child: CvButton(
+                  label: gm ? 'Next turn' : 'End my turn',
+                  variant: mine ? CvButtonVariant.player : CvButtonVariant.primary,
+                  small: true,
+                  onPressed: () => send(const EndTurn()),
                 ),
-              CvToolButton(
-                icon: Lucide.x,
-                label: 'End the fight',
-                tooltipSide: AxisDirection.down,
-                onPressed: () => send(const EndInitiative()),
               ),
             ],
           ],
@@ -194,16 +204,16 @@ class _Entry extends StatelessWidget {
     required this.current,
     required this.onTap,
     this.onRemove,
-    this.onCycle,
+    this.onPlace,
   });
 
   final Token token;
 
-  /// The roll, or the form's name.
+  /// The roll, the form's name, or Roll (Waiting, to others) before one.
   final String value;
 
-  /// Puts the token in its side's next form.
-  final VoidCallback? onCycle;
+  /// Rolls the token's place, or puts it in its side's next form.
+  final VoidCallback? onPlace;
   final bool current;
   final VoidCallback onTap;
   final VoidCallback? onRemove;
@@ -233,7 +243,6 @@ class _Entry extends StatelessWidget {
           ),
         ),
         child: Row(
-          mainAxisSize: MainAxisSize.min,
           spacing: 8,
           children: [
             Container(
@@ -247,8 +256,7 @@ class _Entry extends StatelessWidget {
                 },
               ),
             ),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 120),
+            Expanded(
               child: Text(
                 name,
                 maxLines: 1,
@@ -258,10 +266,10 @@ class _Entry extends StatelessWidget {
                 ),
               ),
             ),
-            if (onCycle case final cycle?)
+            if (onPlace case final place?)
               CvPressable(
-                onTap: cycle,
-                label: '$name: $value, change form',
+                onTap: place,
+                label: value == 'Roll' ? '$name: roll for their place' : '$name: $value, change form',
                 radius: CvRadii.sm,
                 builder: (s) => Container(
                   padding: const EdgeInsets.symmetric(

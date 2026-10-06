@@ -44,12 +44,23 @@ Future<void> show(WidgetTester tester, SceneStore store,
 }
 
 void main() {
-  test('everyone on the map rolls, highest first', () {
+  test("the GM's tokens roll; players' wait for their owners to", () {
     final order = InitiativeBar.roll(table(), Random(1));
-    expect(order.entries.map((e) => e.token.value).toSet(), {'a', 'g'});
-    expect(order.entries.first.value, greaterThanOrEqualTo(order.entries.last.value));
-    expect(order.current, order.entries.first.token);
-    expect(order.entries.every((e) => e.value >= 1 && e.value <= 20), isTrue);
+    expect(order.entries.map((e) => e.token.value), ['g', 'a']);
+    expect(order.entries.first.value, inInclusiveRange(1, 20));
+    expect(order.entries.last.value, isNull);
+    expect(order.current, const TokenId('g'));
+    expect(order.formula, '1d20');
+    expect(order.places, isEmpty);
+  });
+
+  testWidgets('a waiting token shows Roll to its owner, Waiting to others',
+      (tester) async {
+    final store = SceneStore(table().applyPatches([Upsert(InitiativeBar.roll(table(), Random(1)))]));
+    await show(tester, store, gm: false, self: alice);
+    expect(find.text('Roll'), findsOneWidget);
+    await show(tester, store, gm: false, self: const PlayerId('bob'));
+    expect(find.text('Waiting'), findsOneWidget);
   });
 
   testWidgets('the GM rolls, steps through turns, and ends the fight',
@@ -59,7 +70,7 @@ void main() {
     await tester.tap(find.text('Roll initiative'));
     await tester.pump();
     final first = store.scene.initiative!.current;
-    expect(find.text('Round 1'), findsOneWidget);
+    expect(find.text('ROUND 1'), findsOneWidget);
     expect(find.text('Aria'), findsOneWidget);
     expect(find.text('Goblin'), findsOneWidget);
 
@@ -68,7 +79,7 @@ void main() {
     expect(store.scene.initiative!.current, isNot(first));
     await tester.tap(find.text('Next turn'));
     await tester.pump();
-    expect(find.text('Round 2'), findsOneWidget);
+    expect(find.text('ROUND 2'), findsOneWidget);
 
     await tester.tap(find.bySemanticsLabel('End the fight'));
     await tester.pump();
@@ -118,5 +129,15 @@ void main() {
     await tester.pump();
     expect(find.text('Poise'), findsOneWidget);
     expect(store.scene.initiative!.entries.map((e) => e.token.value), ['g', 'a']);
+
+    // A player changes their own token's form, mid-turn too, not the GM's.
+    await show(tester, store, gm: false, self: alice);
+    await tester.tap(find.text('Poise'));
+    await tester.pump();
+    expect(find.text('Poise'), findsNothing);
+    final npc = store.scene.initiative!;
+    await tester.tap(find.text('Steady (NPC)'));
+    await tester.pump();
+    expect(store.scene.initiative!.toJson(), npc.toJson());
   });
 }

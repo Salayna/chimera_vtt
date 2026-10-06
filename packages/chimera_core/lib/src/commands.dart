@@ -47,6 +47,7 @@ sealed class Command {
             Entity.fromJson(json['initiative'] as Json) as Initiative),
         'endInitiative' => const EndInitiative(),
         'endTurn' => const EndTurn(),
+        'setPlace' => SetPlace(TokenId(json['token'] as String), json['value'] as int?),
         'usePack' => UsePack(json['id'] as String, data: json['data'] as Json?),
         'setTracker' => SetTracker(TokenId(json['id'] as String),
             json['name'] as String, json['value'] as int?),
@@ -247,6 +248,20 @@ final class EndInitiative extends Command {
 
   @override
   Json toJson() => {'type': 'endInitiative'};
+}
+
+/// Puts [token] at [value] in the turn order, or, with none, rolls its place
+/// from [Initiative.formula] (the GM's session rolls). The GM places any
+/// token anywhere; a player places their own, choosing from
+/// [Initiative.places] at any time, or rolling once while it waits.
+final class SetPlace extends Command {
+  const SetPlace(this.token, [this.value]);
+
+  final TokenId token;
+  final int? value;
+
+  @override
+  Json toJson() => {'type': 'setPlace', 'token': token.value, if (value != null) 'value': value};
 }
 
 /// Passes the turn to the next in the order. Players may, on their own
