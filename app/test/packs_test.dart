@@ -65,17 +65,17 @@ void main() {
         home: SystemsPage(packs: InstalledPacks(client), assets: AssetStore(client))));
     expect(find.text('Generic'), findsOneWidget);
     expect(find.text('D&D 5e'), findsOneWidget);
-    expect(find.text('Install'), findsOneWidget);
-    await tester.tap(find.text('New module'));
+    expect(find.text('INSTALL'), findsOneWidget);
+    await tester.tap(find.text('NEW MODULE'));
     await tester.pump();
-    expect(find.text('Save module'), findsOneWidget);
+    expect(find.text('SAVE MODULE'), findsOneWidget);
     // Saving needs a name: the editor says so instead of closing.
-    await tester.tap(find.text('Save module'));
+    await tester.tap(find.text('SAVE MODULE'));
     await tester.pump();
     expect(find.text('Name the module.'), findsOneWidget);
-    await tester.tap(find.text('Cancel'));
+    await tester.tap(find.text('CANCEL'));
     await tester.pump();
-    expect(find.text('New module'), findsOneWidget);
+    expect(find.text('NEW MODULE'), findsOneWidget);
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 200)));
     await tester.pump();
   });

@@ -223,8 +223,8 @@ class TokenGlides extends ChangeNotifier {
 /// rebuilding any widget.
 ///
 /// Rings follow the design system: gold for the viewer's own tokens, bone
-/// for other players', dashed slate for unowned, rune cyan with a halo when
-/// selected. Hidden tokens (GM only) are faded with a dashed ring. Ring
+/// for other players', dashed slate for unowned, rune cyan with four bracket
+/// arcs when selected. A token without a picture shows its initials. Hidden tokens (GM only) are faded with a dashed ring. Ring
 /// sizes are the design's 56 px token, scaled to the token.
 class TokenPainter extends CustomPainter {
   TokenPainter({
@@ -268,6 +268,35 @@ class TokenPainter extends CustomPainter {
       if (token.name.isNotEmpty) token.name,
       if (conditions.isNotEmpty) conditions,
     ].join('\n');
+  }
+
+  final _faces = <TokenId, (String, double, TextPainter)>{};
+
+  /// Up to two letters of the name, engraved in Marcellus SC; null without
+  /// a name.
+  TextPainter? _initials(Token token, double u) {
+    final words = token.name.trim().split(RegExp(r'\s+')).where((w) => w.isNotEmpty);
+    if (words.isEmpty) return null;
+    final text = (words.length > 1
+            ? '${words.first[0]}${words.elementAt(1)[0]}'
+            : words.first.substring(0, math.min(2, words.first.length)))
+        .toUpperCase();
+    if (_faces[token.id] case (final cached, final size, final painter)
+        when cached == text && size == token.size) {
+      return painter;
+    }
+    final painter = TextPainter(
+      text: TextSpan(
+          text: text,
+          style: TextStyle(
+              fontFamily: CvTypography.displayCaps,
+              fontSize: 19 * u,
+              height: 1,
+              color: CvColors.slate950)),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    _faces[token.id] = (text, token.size, painter);
+    return painter;
   }
 
   TextPainter _label(Token token, String text, double u) {
@@ -351,6 +380,10 @@ class TokenPainter extends CustomPainter {
                 : playerColor(token.owner!))
             .withAlpha(faceAlpha);
         canvas.drawCircle(center, radius, fill);
+        if (_initials(token, u) case final initials?) {
+          initials.paint(canvas,
+              center - Offset(initials.width / 2, initials.height / 2));
+        }
       }
       canvas.restore();
 
@@ -373,10 +406,15 @@ class TokenPainter extends CustomPainter {
         canvas.drawCircle(center, ringRadius, stroke);
       }
       if (isSelected) {
+        // Four arcs at the compass points, 48° each.
         stroke
           ..color = CvColors.rune500
-          ..strokeWidth = 2 * u;
-        canvas.drawCircle(center, radius + 8 * u, stroke);
+          ..strokeWidth = 1.5 * u;
+        final halo = Rect.fromCircle(center: center, radius: radius + 11 * u);
+        for (var k = 0; k < 4; k++) {
+          canvas.drawArc(halo, (k * 90 - 24) * math.pi / 180,
+              48 * math.pi / 180, false, stroke);
+        }
       }
 
       // Name and conditions, on a dark pill under the ring.

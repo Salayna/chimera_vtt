@@ -276,9 +276,11 @@ class CvPopIn extends StatelessWidget {
       );
 }
 
-/// Floating chrome: translucent slate, hairline border, soft shadow and a
+/// Floating chrome: translucent slate, a hairline frame, soft shadow and a
 /// backdrop blur, so it reads over bright and dark maps alike. [solid] for
-/// popovers, menus and dialogs.
+/// popovers, menus and dialogs. Padded and solid panels are engraved: a
+/// second hairline runs 4 px inside the frame. [marked] puts the rune
+/// diamond at the top centre.
 class CvPanel extends StatelessWidget {
   const CvPanel({
     super.key,
@@ -287,6 +289,7 @@ class CvPanel extends StatelessWidget {
     this.radius = CvRadii.lg,
     this.raised = false,
     this.solid = false,
+    this.marked = false,
     this.width,
   });
 
@@ -295,12 +298,14 @@ class CvPanel extends StatelessWidget {
   final double radius;
   final bool raised;
   final bool solid;
+  final bool marked;
   final double? width;
 
   @override
   Widget build(BuildContext context) {
     final shape = BorderRadius.circular(radius);
-    return DecoratedBox(
+    final engraved = solid || padding != EdgeInsets.zero;
+    Widget panel = DecoratedBox(
       decoration: BoxDecoration(
         borderRadius: shape,
         boxShadow: raised ? CvElevation.shadow2 : CvElevation.shadow1,
@@ -317,14 +322,78 @@ class CvPanel extends StatelessWidget {
             decoration: BoxDecoration(
               color: solid ? CvColors.surfacePanelSolid : CvColors.surfacePanel,
               borderRadius: shape,
-              border: Border.all(color: CvColors.borderSubtle),
+              border: Border.all(color: CvColors.borderFrame),
             ),
+            foregroundDecoration: engraved ? _InnerFrame(radius) : null,
             child: DefaultTextStyle(style: CvTypography.body, child: child),
           ),
         ),
       ),
     );
+    if (marked) {
+      panel = Stack(clipBehavior: Clip.none, children: [
+        panel,
+        const Positioned(
+          left: 0,
+          right: 0,
+          top: -CvRadii.markerSize / 2 - 1,
+          child: Center(child: CvRuneMarker()),
+        ),
+      ]);
+    }
+    return panel;
   }
+}
+
+/// The engraved line 4 px inside a framed panel's border.
+class _InnerFrame extends Decoration {
+  const _InnerFrame(this.radius);
+
+  final double radius;
+
+  @override
+  BoxPainter createBoxPainter([VoidCallback? onChanged]) => _InnerFramePainter(radius);
+}
+
+class _InnerFramePainter extends BoxPainter {
+  _InnerFramePainter(this.radius);
+
+  final double radius;
+
+  @override
+  void paint(Canvas canvas, Offset offset, ImageConfiguration configuration) {
+    final size = configuration.size;
+    if (size == null) return;
+    // Inside the 1 px frame, then 4 px in.
+    const inset = 1 + CvRadii.frameInset + 0.5;
+    final rect = (offset & size).deflate(inset);
+    if (rect.isEmpty) return;
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(rect, Radius.circular(math.max(0, radius - inset))),
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1
+        ..color = CvColors.borderFrameInner,
+    );
+  }
+}
+
+/// The rune diamond: an 8 px square turned 45°, cut out of what's behind.
+class CvRuneMarker extends StatelessWidget {
+  const CvRuneMarker({super.key});
+
+  @override
+  Widget build(BuildContext context) => Transform.rotate(
+        angle: math.pi / 4,
+        child: Container(
+          width: CvRadii.markerSize,
+          height: CvRadii.markerSize,
+          decoration: const BoxDecoration(
+            color: CvColors.rune500,
+            boxShadow: [BoxShadow(color: CvColors.surfacePanelSolid, spreadRadius: 3)],
+          ),
+        ),
+      );
 }
 
 /// Small uppercase heading, the only uppercase text in the system.
@@ -373,11 +442,21 @@ class CvWordmark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Text.rich(
-        TextSpan(text: 'Chimera ', children: const [
-          TextSpan(text: 'VTT', style: TextStyle(color: CvColors.rune500)),
+        TextSpan(text: 'Chimera  ', children: [
+          TextSpan(
+              text: 'VTT',
+              style: CvTypography.weight(CvTypography.body, 800).copyWith(
+                  fontSize: size * 0.42,
+                  height: 1,
+                  letterSpacing: 0.5 * size * 0.42,
+                  color: CvColors.rune500)),
         ]),
-        style: CvTypography.weight(CvTypography.body, 700)
-            .copyWith(fontSize: size, height: 1, letterSpacing: -0.02 * size),
+        style: TextStyle(
+            fontFamily: CvTypography.displayCaps,
+            fontSize: size,
+            height: 1,
+            letterSpacing: 0.22 * size,
+            color: CvColors.bone50),
       );
 }
 
@@ -494,14 +573,16 @@ class CvToolButton extends StatelessWidget {
       onTap: onPressed,
       label: label,
       toggled: active ? true : null,
+      radius: CvRadii.pill,
       builder: (s) {
         var bg = const Color(0x00000000);
         var fg = CvColors.textSecondary;
+        final lit = active && !s.disabled;
         if (s.disabled) {
           fg = CvColors.textDisabled;
         } else if (active) {
-          bg = s.hover ? const Color(0x3D5FE0F0) : CvColors.runeTint;
-          fg = s.hover ? CvColors.rune300 : CvColors.rune400;
+          bg = s.hover ? CvColors.rune400 : CvColors.rune500;
+          fg = CvColors.textOnAccent;
         } else if (s.pressed) {
           bg = CvColors.surfacePressed;
           fg = CvColors.textPrimary;
@@ -517,11 +598,9 @@ class CvToolButton extends StatelessWidget {
           padding: inline ? const EdgeInsets.symmetric(horizontal: 12) : null,
           decoration: BoxDecoration(
             color: bg,
-            borderRadius: BorderRadius.circular(CvRadii.md),
-            border: Border.all(
-                color: active && !s.disabled
-                    ? const Color(0x735FE0F0)
-                    : const Color(0x00000000)),
+            borderRadius: BorderRadius.circular(CvRadii.pill),
+            // A rune ring 3 px out, cut from the panel behind.
+            boxShadow: lit ? _ring(CvColors.surfacePanelSolid) : null,
           ),
           child: DefaultTextStyle(
             style: CvTypography.label.copyWith(color: fg),
@@ -542,7 +621,12 @@ class CvToolButton extends StatelessWidget {
   }
 }
 
-/// A vertical rail or horizontal bar of tool buttons in a floating panel.
+/// A rune ring 3 px out from a control, over [gap].
+List<BoxShadow> _ring(Color gap) => [
+      const BoxShadow(color: CvColors.rune500, spreadRadius: 4),
+      BoxShadow(color: gap, spreadRadius: 3),
+    ];
+
 /// A row of [itemCount] items that scrolls sideways, [height] tall. A mouse
 /// wheel only scrolls up and down, so here it scrolls sideways too.
 class CvSideways extends StatefulWidget {
@@ -602,30 +686,34 @@ class CvToolbar extends StatelessWidget {
   final List<Widget> children;
   final Axis axis;
 
+  // Not engraved: a capsule's inner line would crowd its round buttons.
   @override
   Widget build(BuildContext context) => CvPanel(
-        padding: const EdgeInsets.all(CvSpacing.s3),
-        child: Flex(
+        radius: CvRadii.pill,
+        child: Padding(
+          padding: const EdgeInsets.all(CvSpacing.s3),
+          child: Flex(
           direction: axis,
           mainAxisSize: MainAxisSize.min,
-          spacing: CvSpacing.s2,
+          spacing: CvSpacing.s3,
           children: [
             for (final child in children)
               if (child is CvToolbarSeparator)
                 axis == Axis.vertical
                     ? Container(
-                        width: CvSizes.hit - 8,
+                        width: CvSizes.hit - 16,
                         height: 1,
                         margin: const EdgeInsets.symmetric(vertical: 4),
-                        color: CvColors.borderSubtle)
+                        color: CvColors.borderFrame)
                     : Container(
                         width: 1,
                         height: 24,
                         margin: const EdgeInsets.symmetric(horizontal: 2),
-                        color: CvColors.borderSubtle)
+                        color: CvColors.borderFrame)
               else
                 child,
           ],
+          ),
         ),
       );
 }
@@ -660,10 +748,11 @@ class CvToggleButton extends StatelessWidget {
         label: label,
         toggled: pressed,
         pressScale: 0.97,
+        radius: CvRadii.pill,
         builder: (s) {
           var bg = const Color(0x00000000);
           var fg = CvColors.textSecondary;
-          var border = CvColors.borderStrong;
+          var border = CvColors.borderFrame;
           if (s.disabled) {
             fg = CvColors.textDisabled;
             border = CvColors.borderSubtle;
@@ -682,7 +771,7 @@ class CvToggleButton extends StatelessWidget {
             padding: const EdgeInsets.only(left: 12, right: 14),
             decoration: BoxDecoration(
               color: bg,
-              borderRadius: BorderRadius.circular(CvRadii.md),
+              borderRadius: BorderRadius.circular(CvRadii.pill),
               border: Border.all(
                   color: bordered ? border : const Color(0x00000000)),
             ),
@@ -725,7 +814,7 @@ class CvSegmentedControl<T> extends StatelessWidget {
         padding: const EdgeInsets.all(3),
         decoration: BoxDecoration(
           color: CvColors.surfaceInput,
-          borderRadius: BorderRadius.circular(CvRadii.md),
+          borderRadius: BorderRadius.circular(CvRadii.pill),
           border: Border.all(color: CvColors.borderSubtle),
         ),
         child: Row(spacing: 2, children: [
@@ -735,7 +824,7 @@ class CvSegmentedControl<T> extends StatelessWidget {
                 onTap: () => onChanged(seg.value),
                 label: seg.label,
                 toggled: seg.value == value,
-                radius: 7,
+                radius: CvRadii.pill,
                 pressScale: 1,
                 builder: (s) {
                   final on = seg.value == value;
@@ -749,7 +838,7 @@ class CvSegmentedControl<T> extends StatelessWidget {
                               : s.hover
                                   ? CvColors.surfaceHover
                                   : const Color(0x00000000),
-                      borderRadius: BorderRadius.circular(7),
+                      borderRadius: BorderRadius.circular(CvRadii.pill),
                       border: Border.all(
                           color: on
                               ? CvColors.slate600
@@ -794,8 +883,8 @@ class CvSegmentedControl<T> extends StatelessWidget {
 
 enum CvButtonVariant { primary, player, secondary, ghost, danger, dangerGhost }
 
-/// A text action. [CvButtonVariant.primary] is rune cyan (the GM's colour),
-/// [CvButtonVariant.player] gold.
+/// A text action: an uppercase pill. [CvButtonVariant.primary] is bone with
+/// a rune ring, [CvButtonVariant.player] gold.
 class CvButton extends StatelessWidget {
   const CvButton({
     super.key,
@@ -819,19 +908,20 @@ class CvButton extends StatelessWidget {
     const clear = Color(0x00000000);
     // (rest, hover, pressed, text, border, hover border)
     final (rest, hover, press, fg, border, hoverBorder) = switch (variant) {
-      CvButtonVariant.primary => (CvColors.rune500, CvColors.rune400,
-          CvColors.rune600, CvColors.textOnAccent, clear, clear),
+      CvButtonVariant.primary => (CvColors.bone100, CvColors.bone50,
+          CvColors.slate300, CvColors.textOnAccent, clear, clear),
       CvButtonVariant.player => (CvColors.gold500, CvColors.gold400,
           CvColors.gold600, CvColors.textOnAccent, clear, clear),
-      CvButtonVariant.secondary => (CvColors.slate800, CvColors.slate750,
-          CvColors.slate700, CvColors.textPrimary, CvColors.borderStrong,
+      CvButtonVariant.secondary => (clear, CvColors.surfaceHover,
+          CvColors.surfacePressed, CvColors.textPrimary, CvColors.borderFrame,
           CvColors.slate500),
       CvButtonVariant.ghost => (clear, CvColors.surfaceHover,
           CvColors.surfacePressed, CvColors.textPrimary, clear, clear),
       CvButtonVariant.danger => (CvColors.ember500, CvColors.ember400,
           CvColors.ember600, CvColors.textOnAccent, clear, clear),
       CvButtonVariant.dangerGhost => (clear, CvColors.emberTint,
-          CvColors.emberTint, CvColors.ember500, clear, clear),
+          CvColors.emberTint, CvColors.ember500, const Color(0x66EF6F5E),
+          const Color(0x66EF6F5E)),
     };
     final ghostly = variant == CvButtonVariant.ghost ||
         variant == CvButtonVariant.dangerGhost;
@@ -839,6 +929,7 @@ class CvButton extends StatelessWidget {
       onTap: onPressed,
       label: label,
       pressScale: 0.98,
+      radius: CvRadii.pill,
       builder: (s) {
         final bg = s.disabled
             ? (ghostly ? clear : CvColors.slate800)
@@ -857,10 +948,13 @@ class CvButton extends StatelessWidget {
           curve: CvMotion.standard,
           height: small ? CvSizes.controlSm : CvSizes.control,
           width: block ? double.infinity : null,
-          padding: EdgeInsets.symmetric(horizontal: small ? 12 : 18),
+          padding: EdgeInsets.symmetric(horizontal: small ? 14 : 22),
           decoration: BoxDecoration(
             color: bg,
-            borderRadius: BorderRadius.circular(CvRadii.md),
+            borderRadius: BorderRadius.circular(CvRadii.pill),
+            boxShadow: variant == CvButtonVariant.primary && !s.disabled
+                ? _ring(CvColors.bgGround)
+                : null,
             border: Border.all(
                 color: s.disabled && !ghostly
                     ? CvColors.borderSubtle
@@ -869,9 +963,11 @@ class CvButton extends StatelessWidget {
                         : border),
           ),
           child: DefaultTextStyle(
-            style: CvTypography.weight(
-                    small ? CvTypography.label : CvTypography.body, 600)
-                .copyWith(color: color, height: 1),
+            style: CvTypography.weight(CvTypography.label, 800).copyWith(
+                fontSize: small ? 11 : 13,
+                letterSpacing: 0.1 * (small ? 11 : 13),
+                color: color,
+                height: 1),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               mainAxisAlignment: MainAxisAlignment.center,
@@ -879,7 +975,9 @@ class CvButton extends StatelessWidget {
               children: [
                 if (icon case final icon?)
                   CvIcon(icon, size: small ? CvSizes.iconSm : 18),
-                Text(label, maxLines: 1),
+                Flexible(
+                    child: Text(label.toUpperCase(),
+                        maxLines: 1, overflow: TextOverflow.ellipsis)),
               ],
             ),
           ),
@@ -1530,21 +1628,32 @@ class CvSwitch extends StatelessWidget {
               padding: const EdgeInsets.all(3),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(CvRadii.pill),
-                color: value
-                    ? (s.hover ? CvColors.rune400 : CvColors.rune500)
-                    : (s.hover ? CvColors.slate600 : CvColors.slate700),
-                border: value ? null : Border.all(color: CvColors.slate600),
+                color: value && s.hover
+                    ? CvColors.runeTint
+                    : !value && s.hover
+                        ? CvColors.surfaceHover
+                        : const Color(0x00000000),
+                border: Border.all(
+                    color: s.disabled
+                        ? CvColors.slate700
+                        : value
+                            ? CvColors.rune500
+                            : CvColors.slate500),
               ),
               child: AnimatedAlign(
                 duration: CvMotion.fast,
                 curve: CvMotion.standard,
                 alignment: value ? Alignment.centerRight : Alignment.centerLeft,
                 child: Container(
-                  width: s.pressed ? 22 : 18,
-                  height: 18,
+                  width: s.pressed ? 20 : 16,
+                  height: 16,
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(CvRadii.pill),
-                    color: value ? CvColors.slate950 : CvColors.slate300,
+                    color: s.disabled
+                        ? CvColors.slate600
+                        : value
+                            ? CvColors.rune500
+                            : CvColors.slate400,
                   ),
                 ),
               ),
@@ -1605,34 +1714,26 @@ class CvSlider extends StatelessWidget {
               child: SizedBox(
                 height: CvSizes.hit,
                 child: Stack(alignment: Alignment.centerLeft, clipBehavior: Clip.none, children: [
-                  Container(
-                    height: 4,
-                    decoration: BoxDecoration(
-                        color: CvColors.slate700,
-                        borderRadius: BorderRadius.circular(2)),
-                  ),
-                  Container(
-                    width: width * t,
-                    height: 4,
-                    decoration: BoxDecoration(
-                        color: CvColors.rune500,
-                        borderRadius: BorderRadius.circular(2)),
-                  ),
+                  Container(height: 2, color: CvColors.slate700),
+                  Container(width: width * t, height: 2, color: CvColors.rune500),
                   Positioned(
-                    left: width * t - 9,
-                    child: Container(
-                      width: 18,
-                      height: 18,
-                      decoration: const BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: CvColors.bone100,
-                        boxShadow: [
-                          BoxShadow(color: CvColors.slate950, spreadRadius: 2),
-                          BoxShadow(
-                              color: Color(0x80000000),
-                              offset: Offset(0, 2),
-                              blurRadius: 4),
-                        ],
+                    left: width * t - 7,
+                    child: Transform.rotate(
+                      angle: math.pi / 4,
+                      child: Container(
+                        width: 14,
+                        height: 14,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(2),
+                          color: CvColors.bone100,
+                          boxShadow: const [
+                            BoxShadow(color: CvColors.slate950, spreadRadius: 2),
+                            BoxShadow(
+                                color: Color(0x80000000),
+                                offset: Offset(0, 2),
+                                blurRadius: 4),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -1777,10 +1878,7 @@ class CvIconBadge extends StatelessWidget {
         width: 40,
         height: 40,
         alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: tone.tint,
-          borderRadius: BorderRadius.circular(CvRadii.md),
-        ),
+        decoration: BoxDecoration(color: tone.tint, shape: BoxShape.circle),
         child: CvIcon(icon, color: tone.color),
       );
 }
@@ -1815,14 +1913,16 @@ Future<T?> showCvDialog<T>({
         child: Container(
           width: 440,
           margin: const EdgeInsets.all(24),
-          padding: const EdgeInsets.all(CvSpacing.s8),
           decoration: BoxDecoration(
-            color: CvColors.surfacePanelSolid,
             borderRadius: BorderRadius.circular(CvRadii.xl),
-            border: Border.all(color: CvColors.borderSubtle),
             boxShadow: CvElevation.shadow3,
           ),
-          child: DefaultTextStyle(
+          child: CvPanel(
+            solid: true,
+            marked: true,
+            radius: CvRadii.xl,
+            padding: const EdgeInsets.all(CvSpacing.s8),
+            child: DefaultTextStyle(
             style: CvTypography.body.copyWith(color: CvColors.textSecondary),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -1834,7 +1934,7 @@ Future<T?> showCvDialog<T>({
                 ],
                 Semantics(
                     header: true,
-                    child: Text(title, style: CvTypography.title)),
+                    child: Text(title, style: CvTypography.titleLg)),
                 const SizedBox(height: CvSpacing.s4),
                 body,
                 const SizedBox(height: CvSpacing.s8),
@@ -1844,6 +1944,7 @@ Future<T?> showCvDialog<T>({
                   children: actions(context),
                 ),
               ],
+            ),
             ),
           ),
         ),
@@ -1918,14 +2019,14 @@ class CvToastStack extends StatelessWidget {
                   child: Container(
                     constraints: const BoxConstraints(
                         maxWidth: 440, minHeight: CvSizes.hit),
-                    padding: const EdgeInsets.fromLTRB(14, 6, 6, 6),
+                    padding: const EdgeInsets.fromLTRB(18, 6, 6, 6),
                     decoration: BoxDecoration(
                       color: CvColors.surfacePanelSolid,
-                      borderRadius: BorderRadius.circular(CvRadii.lg),
+                      borderRadius: BorderRadius.circular(CvRadii.pill),
                       border: Border.all(
                           color: t.tone == CvTone.danger
                               ? const Color(0x73EF6F5E)
-                              : CvColors.borderSubtle),
+                              : CvColors.borderFrame),
                       boxShadow: CvElevation.shadow2,
                     ),
                     child: Row(mainAxisSize: MainAxisSize.min, spacing: 10, children: [
@@ -1939,6 +2040,7 @@ class CvToastStack extends StatelessWidget {
                       CvPressable(
                         onTap: () => toasts.dismiss(t.id),
                         label: 'Dismiss',
+                        radius: CvRadii.pill,
                         builder: (s) => Container(
                           width: 36,
                           height: 36,
@@ -1947,7 +2049,7 @@ class CvToastStack extends StatelessWidget {
                             color: s.hover
                                 ? CvColors.surfaceHover
                                 : const Color(0x00000000),
-                            borderRadius: BorderRadius.circular(CvRadii.md),
+                            shape: BoxShape.circle,
                           ),
                           child: CvIcon(Lucide.x,
                               size: CvSizes.iconSm,
@@ -1997,20 +2099,24 @@ class _CvRoomCodeChipState extends State<CvRoomCodeChip> {
 
   @override
   Widget build(BuildContext context) => CvPanel(
-        padding: const EdgeInsets.only(left: 14, right: 4),
-        child: SizedBox(
+        radius: CvRadii.pill,
+        child: Container(
+          padding: const EdgeInsets.only(left: 16, right: 4),
+          height: CvSizes.hit - 2,
+          child: SizedBox(
           height: CvSizes.hit - 2,
           child: Row(mainAxisSize: MainAxisSize.min, spacing: 8, children: [
             const CvOverline('Room'),
             Semantics(
               label: 'Room code ${widget.code.split('').join(' ')}',
               excludeSemantics: true,
-              child: Text(widget.code, style: CvTypography.code),
+              child: Text(widget.code,
+                  style: CvTypography.code.copyWith(color: CvColors.bone50)),
             ),
             CvPressable(
               onTap: _copy,
               label: _copied ? 'Copied' : 'Copy room code',
-              radius: CvRadii.sm,
+              radius: CvRadii.pill,
               builder: (s) => AnimatedContainer(
                 duration: CvMotion.fast,
                 height: 36,
@@ -2022,7 +2128,7 @@ class _CvRoomCodeChipState extends State<CvRoomCodeChip> {
                       : s.hover
                           ? CvColors.surfaceHover
                           : const Color(0x00000000),
-                  borderRadius: BorderRadius.circular(CvRadii.sm),
+                  borderRadius: BorderRadius.circular(CvRadii.pill),
                 ),
                 child: DefaultTextStyle(
                   style: CvTypography.weight(CvTypography.caption, 500).copyWith(
@@ -2045,6 +2151,7 @@ class _CvRoomCodeChipState extends State<CvRoomCodeChip> {
               ),
             ),
           ]),
+          ),
         ),
       );
 }

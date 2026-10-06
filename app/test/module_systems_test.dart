@@ -91,23 +91,23 @@ void main() {
     await tester.enterText(find.byType(EditableText).first, 'Gear');
     await tester.tap(find.text('Compendium'));
     await tester.pump();
-    await tester.tap(find.text('Add a kind'));
+    await tester.tap(find.text('ADD A KIND'));
     await tester.pump();
     await tester.enterText(find.byType(EditableText).first, 'Weapon');
     await tester.pump();
-    await tester.tap(find.text('Add an entry'));
+    await tester.tap(find.text('ADD AN ENTRY'));
     await tester.pump();
     await tester.enterText(find.byType(EditableText).last, 'P9 Pistol');
     await tester.tap(find.text('Sheet'));
     await tester.pump();
-    await tester.tap(find.text('Give characters a sheet'));
+    await tester.tap(find.text('GIVE CHARACTERS A SHEET'));
     await tester.pump();
-    await tester.tap(find.text('Add a field'));
+    await tester.tap(find.text('ADD A FIELD'));
     await tester.pump();
     // Name, label, then the number's min.
     await tester.enterText(find.byType(EditableText).at(1), 'STR');
     await tester.enterText(find.byType(EditableText).at(4), '1');
-    await tester.tap(find.text('Save module'));
+    await tester.tap(find.text('SAVE MODULE'));
     await tester.pumpAndSettle();
     expect(saved!.sheet!.fields.single.least, 1);
     expect(saved!.compendium!.entries['P9 Pistol']!.kind, 'Weapon');
@@ -154,7 +154,7 @@ void main() {
       await tester.pump();
     }
     expect(find.text('2'), findsOneWidget, reason: 'the modifier of 14');
-    await tester.tap(find.text('Check'));
+    await tester.tap(find.text('CHECK'));
     await tester.pump();
     expect(find.textContaining('Check (d20+2) · '), findsOneWidget);
     expect(find.textContaining('Success'), findsOneWidget);

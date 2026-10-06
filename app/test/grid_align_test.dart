@@ -41,20 +41,20 @@ void main() {
     expect(c.gridFit.value!.toJson(), Grid.through((x: 210, y: 305), 100).toJson());
 
     // Size: the second anchor to the square's opposite corner.
-    await tester.tap(find.text('Next'));
+    await tester.tap(find.text('NEXT'));
     await tester.pump();
     await tester.dragFrom(const Offset(310, 405), const Offset(20, 20));
     await tester.pump();
     expect(c.align.value!.size, 120);
 
     // Refine: the corner 3 right, 2 down lands 30 and 20 px further.
-    await tester.tap(find.text('Next'));
+    await tester.tap(find.text('NEXT'));
     await tester.pump();
     await tester.dragFrom(const Offset(570, 545), const Offset(30, 20));
     await tester.pump();
     expect(c.align.value!.size, 130);
 
-    await tester.tap(find.text('Done'));
+    await tester.tap(find.text('DONE'));
     await tester.pump();
     expect(saved.single.cellSize, 130);
     expect(saved.single.offset, (x: 80.0, y: 45.0)); // 210 % 130, 305 % 130

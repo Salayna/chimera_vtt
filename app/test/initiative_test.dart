@@ -67,24 +67,24 @@ void main() {
       (tester) async {
     final store = SceneStore(table());
     await show(tester, store, gm: true);
-    await tester.tap(find.text('Roll initiative'));
+    await tester.tap(find.text('ROLL INITIATIVE'));
     await tester.pump();
     final first = store.scene.initiative!.current;
     expect(find.text('ROUND 1'), findsOneWidget);
     expect(find.text('Aria'), findsOneWidget);
     expect(find.text('Goblin'), findsOneWidget);
 
-    await tester.tap(find.text('Next turn'));
+    await tester.tap(find.text('NEXT TURN'));
     await tester.pump();
     expect(store.scene.initiative!.current, isNot(first));
-    await tester.tap(find.text('Next turn'));
+    await tester.tap(find.text('NEXT TURN'));
     await tester.pump();
     expect(find.text('ROUND 2'), findsOneWidget);
 
     await tester.tap(find.bySemanticsLabel('End the fight'));
     await tester.pump();
     expect(store.scene.initiative, isNull);
-    expect(find.text('Roll initiative'), findsOneWidget);
+    expect(find.text('ROLL INITIATIVE'), findsOneWidget);
   });
 
   testWidgets("a player ends only their own token's turn", (tester) async {
@@ -94,15 +94,15 @@ void main() {
     ]);
     final store = SceneStore(table().applyPatches([Upsert(order)]));
     await show(tester, store, gm: false, self: alice);
-    expect(find.text('Roll initiative'), findsNothing);
-    expect(find.text('End my turn'), findsNothing);
+    expect(find.text('ROLL INITIATIVE'), findsNothing);
+    expect(find.text('END MY TURN'), findsNothing);
 
     store.apply([Upsert(order.next())]);
     await tester.pump();
-    await tester.tap(find.text('End my turn'));
+    await tester.tap(find.text('END MY TURN'));
     await tester.pump();
     expect(store.scene.initiative!.round, 2);
-    expect(find.text('End my turn'), findsNothing);
+    expect(find.text('END MY TURN'), findsNothing);
   });
 
   testWidgets('a forms pack starts everyone Steady, and the GM changes forms',
@@ -116,8 +116,8 @@ void main() {
       packFile: ScenePack(solaris),
     ));
     await show(tester, store, gm: true);
-    expect(find.text('Roll initiative'), findsNothing);
-    await tester.tap(find.text('Start the fight'));
+    expect(find.text('ROLL INITIATIVE'), findsNothing);
+    await tester.tap(find.text('START THE FIGHT'));
     await tester.pump();
     expect(find.text('Steady'), findsOneWidget); // Aria, a player's token.
     expect(find.text('Steady (NPC)'), findsOneWidget); // The Goblin.

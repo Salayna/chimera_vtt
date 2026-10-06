@@ -84,10 +84,10 @@ void main() {
       'to do on it', (tester) async {
     await pump(tester, gm: true);
     await rightClick(tester, const Offset(700, 500));
-    expect(find.text('Duplicate'), findsNothing);
+    expect(find.text('DUPLICATE'), findsNothing);
 
     await pump(tester, gm: false);
     await rightClick(tester, tokenOnScreen);
-    expect(find.text('Duplicate'), findsNothing);
+    expect(find.text('DUPLICATE'), findsNothing);
   });
 }

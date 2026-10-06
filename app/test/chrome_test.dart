@@ -47,12 +47,12 @@ void main() {
             assets: AssetStore(client),
             onEnter: (room) => entered = room)));
     await tester.pump();
-    expect(find.text('Sign in'), findsOneWidget);
+    expect(find.text('SIGN IN'), findsOneWidget);
     expect(find.text('Create room'), findsNothing);
 
     await tester.enterText(find.widgetWithText(CvTextInput, 'Room code'), 'k7q');
     await tester.pump();
-    await tester.tap(find.text('Join'));
+    await tester.tap(find.text('JOIN'));
     await tester.pump();
     expect(find.text('Room codes have 6 characters.'), findsOneWidget);
     expect(entered, isNull);
@@ -79,13 +79,13 @@ void main() {
 
     await tester.tap(find.text('Library').first);
     await tester.pump();
-    expect(find.text('Upload'), findsOneWidget);
+    expect(find.text('UPLOAD'), findsOneWidget);
     expect(find.text('Search maps'), findsOneWidget);
     await tester.tap(find.text('Tokens 0'));
     await tester.pump();
     expect(find.text('Search tokens'), findsOneWidget);
 
-    await tester.tap(find.text('Join with code'));
+    await tester.tap(find.text('JOIN WITH CODE'));
     await tester.pump();
     expect(find.widgetWithText(CvTextInput, 'Room code'), findsOneWidget);
     // Let the unreachable requests fail before the test ends.
@@ -339,7 +339,7 @@ void main() {
       ),
     ));
     expect(find.text('Owner'), findsNothing);
-    expect(find.text('Remove'), findsNothing);
+    expect(find.text('REMOVE'), findsNothing);
     expect(find.byType(EditableText), findsOneWidget);
     await tester.enterText(find.byType(EditableText), 'Prone');
     await tester.testTextInput.receiveAction(TextInputAction.done);

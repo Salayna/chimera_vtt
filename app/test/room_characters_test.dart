@@ -74,7 +74,7 @@ void main() {
         (w) => w is CvToolButton && w.label == 'Hit points / 12 +1'));
     await tester.pump();
     expect(host.store.scene.characters[ayla.id]!.values['HP'], 11);
-    await tester.tap(find.text('Sheet'));
+    await tester.tap(find.text('SHEET'));
     expect(opened, ayla.id);
   });
 
