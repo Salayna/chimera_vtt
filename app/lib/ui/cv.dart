@@ -73,6 +73,7 @@ enum Lucide {
       '<path d="m14.622 17.897-10.68-2.913"/><path d="M18.376 2.622a1 1 0 1 1 3.002 3.002L17.36 9.643a.5.5 0 0 0 0 .707l.944.944a2.41 2.41 0 0 1 0 3.408l-.944.944a.5.5 0 0 1-.707 0L8.354 7.348a.5.5 0 0 1 0-.707l.944-.944a2.41 2.41 0 0 1 3.408 0l.944.944a.5.5 0 0 0 .707 0z"/><path d="M9 8c-1.804 2.71-3.97 3.46-6.583 3.948a.507.507 0 0 0-.302.819l7.32 8.883a1 1 0 0 0 1.185.204C12.735 20.405 16 16.792 16 15"/>'),
   minus('<path d="M5 12h14"/>'),
   plus('<path d="M5 12h14"/><path d="M12 5v14"/>'),
+  play('<polygon points="6 3 20 12 6 21 6 3"/>'),
   puzzle(
       '<path d="M15.39 4.39a1 1 0 0 0 1.68-.474 2.5 2.5 0 1 1 3.014 3.015 1 1 0 0 0-.474 1.68l1.683 1.682a2.414 2.414 0 0 1 0 3.414L19.61 15.39a1 1 0 0 1-1.68-.474 2.5 2.5 0 1 0-3.014 3.015 1 1 0 0 1 .474 1.68l-1.683 1.682a2.414 2.414 0 0 1-3.414 0L8.61 19.61a1 1 0 0 0-1.68.474 2.5 2.5 0 1 1-3.014-3.015 1 1 0 0 0 .474-1.68l-1.683-1.682a2.414 2.414 0 0 1 0-3.414L4.39 8.61a1 1 0 0 1 1.68.474 2.5 2.5 0 1 0 3.014-3.015 1 1 0 0 1-.474-1.68l1.683-1.682a2.414 2.414 0 0 1 3.414 0z"/>'),
   radio(
@@ -405,6 +406,48 @@ class CvOverline extends StatelessWidget {
   @override
   Widget build(BuildContext context) =>
       Text(text.toUpperCase(), style: CvTypography.overline);
+}
+
+/// A panel's tab: an engraved label, a short rune bar under the selected
+/// one. Lay them in a row along a panel's top edge.
+class CvTab extends StatelessWidget {
+  const CvTab({super.key, required this.label, required this.selected, this.onTap});
+
+  final String label;
+  final bool selected;
+
+  /// Null for a lone tab that only names its panel.
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget tab(bool hover) => Container(
+          height: CvSizes.hit,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          alignment: Alignment.center,
+          child: Stack(alignment: Alignment.center, clipBehavior: Clip.none, children: [
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(label.toUpperCase(),
+                  style: CvTypography.overline.copyWith(
+                      color: selected || hover
+                          ? CvColors.textPrimary
+                          : CvColors.textSecondary)),
+            ),
+            if (selected)
+              Positioned(
+                bottom: -15,
+                child: Container(width: 18, height: 2, color: CvColors.rune500),
+              ),
+          ]),
+        );
+    return Semantics(
+      selected: selected,
+      child: onTap == null
+          ? tab(false)
+          : CvPressable(onTap: onTap, label: label, builder: (s) => tab(s.hover)),
+    );
+  }
 }
 
 /// A keycap: "Esc", "Del", "X".

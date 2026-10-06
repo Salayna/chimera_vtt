@@ -75,7 +75,7 @@ class _PartyPanelState extends State<PartyPanel> {
                   (_Tab.initiative, 'Initiative'),
                 ])
                   Flexible(
-                    child: _TabButton(
+                    child: CvTab(
                         label: label,
                         selected: _tab == tab,
                         onTap: () => setState(() => _tab = tab)),
@@ -134,10 +134,12 @@ class _PartyPanelState extends State<PartyPanel> {
               final tokens = scene.requireData.tokens.values;
               return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 const _Row(
-                  leading: CvAvatar(initials: 'GM', color: CvColors.rune500, gm: true, label: 'GM'),
+                  leading: CvAvatar(
+                      initials: 'GM', color: CvColors.rune500, gm: true, label: 'GM', size: 36),
                   title: 'GM',
                   sub: 'Game master',
                   subColor: CvColors.textGm,
+                  trailing: _GmBadge(),
                 ),
                 for (final MapEntry(key: id, value: m) in all.entries)
                   () {
@@ -151,6 +153,7 @@ class _PartyPanelState extends State<PartyPanel> {
                         initials: m.name.substring(0, m.name.length.clamp(0, 2)).toUpperCase(),
                         color: memberColor(m.color),
                         label: m.name,
+                        size: 36,
                       ),
                       title: m.name,
                       sub: away ? 'Away' : plays.isEmpty ? 'No tokens' : plays.join(', '),
@@ -199,12 +202,21 @@ class _PartyPanelState extends State<PartyPanel> {
             for (final t in npcs)
               _Row(
                 onTap: () => _find(t),
-                leading: Container(
-                  width: CvSizes.avatar,
-                  height: CvSizes.avatar,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: t.hidden ? CvColors.slate700 : CvColors.slate500,
+                leading: Opacity(
+                  opacity: t.hidden ? 0.5 : 1,
+                  child: Container(
+                    width: 36,
+                    height: 36,
+                    alignment: Alignment.center,
+                    decoration: const BoxDecoration(
+                        shape: BoxShape.circle, color: CvColors.slate300),
+                    child: Text(
+                        (t.name.isEmpty ? '?' : t.name.substring(0, 1)).toUpperCase(),
+                        style: const TextStyle(
+                            fontFamily: CvTypography.displayCaps,
+                            fontSize: 13,
+                            height: 1,
+                            color: CvColors.slate950)),
                   ),
                 ),
                 title: t.name.isEmpty ? 'Token' : t.name,
@@ -214,41 +226,6 @@ class _PartyPanelState extends State<PartyPanel> {
               ),
           ]);
         },
-      );
-}
-
-class _TabButton extends StatelessWidget {
-  const _TabButton({required this.label, required this.selected, required this.onTap});
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) => Semantics(
-        selected: selected,
-        child: CvPressable(
-          onTap: onTap,
-          label: label,
-          builder: (s) => Container(
-            height: CvSizes.hit,
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              border: Border(
-                bottom: BorderSide(
-                    width: 2,
-                    color: selected ? CvColors.rune500 : const Color(0x00000000)),
-              ),
-            ),
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Text(label.toUpperCase(),
-                  style: CvTypography.overline.copyWith(
-                      color: selected || s.hover ? CvColors.textPrimary : CvColors.textSecondary)),
-            ),
-          ),
-        ),
       );
 }
 
@@ -273,7 +250,7 @@ class _Row extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Widget row(bool hover) => Container(
-          constraints: const BoxConstraints(minHeight: 52),
+          constraints: const BoxConstraints(minHeight: 56),
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
           decoration: BoxDecoration(
             color: hover ? CvColors.surfaceHover : null,
@@ -284,11 +261,15 @@ class _Row extends StatelessWidget {
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(title,
-                    maxLines: 1, overflow: TextOverflow.ellipsis, style: CvTypography.label),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: CvTypography.body.copyWith(
+                        fontFamily: CvTypography.display, fontSize: 16, height: 20 / 16)),
                 Text(sub,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: CvTypography.caption.copyWith(color: subColor)),
+                    style: CvTypography.weight(CvTypography.caption, 600)
+                        .copyWith(color: subColor)),
               ]),
             ),
             ?trailing,
@@ -298,4 +279,21 @@ class _Row extends StatelessWidget {
         ? row(false)
         : CvPressable(onTap: onTap, label: title, builder: (s) => row(s.hover));
   }
+}
+
+/// "GM" on a rune-tinted pill.
+class _GmBadge extends StatelessWidget {
+  const _GmBadge();
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: CvColors.runeTint,
+          borderRadius: BorderRadius.circular(CvRadii.pill),
+        ),
+        child: Text('GM',
+            style: CvTypography.weight(CvTypography.caption, 800).copyWith(
+                fontSize: 11, letterSpacing: 0.12 * 11, color: CvColors.rune400)),
+      );
 }

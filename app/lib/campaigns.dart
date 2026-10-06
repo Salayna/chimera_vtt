@@ -929,55 +929,62 @@ class ScenesPanel extends StatelessWidget {
     return CvPopIn(
       child: CvPanel(
         width: PartyPanel.width,
-        padding: const EdgeInsets.all(CvSpacing.s5),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
-          spacing: 6,
           children: [
-            const CvOverline('Scenes'),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 8),
+              child: Row(children: [CvTab(label: 'Scenes', selected: true)]),
+            ),
+            Container(height: 1, color: CvColors.borderSubtle),
+            Padding(
+              padding: const EdgeInsets.all(CvSpacing.s5),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                spacing: 6,
+                children: [
             for (final s in scenes)
-              CvPressable(
-                onTap: s.id == live ? null : () => onSwitch(s.id),
-                label: s.id == live ? '${s.name}, live' : 'Show ${s.name}',
-                builder: (state) => Container(
-                  height: CvSizes.hit,
-                  padding: const EdgeInsets.only(left: 10),
-                  decoration: BoxDecoration(
-                    color: s.id == live
-                        ? CvColors.runeTint
-                        : state.hover
-                            ? CvColors.surfaceHover
-                            : const Color(0x00000000),
-                    borderRadius: BorderRadius.circular(CvRadii.md),
-                  ),
-                  child: Row(children: [
-                    Expanded(
-                      child: Text(s.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: CvTypography.label.copyWith(
-                              color: s.id == live
-                                  ? CvColors.rune300
-                                  : CvColors.textPrimary)),
-                    ),
-                    if (s.id == live)
-                      Padding(
-                        padding: const EdgeInsets.only(right: 10),
-                        child: Text('Live',
-                            style: CvTypography.caption
-                                .copyWith(color: CvColors.rune400)),
-                      )
-                    else
-                      CvToolButton(
-                        icon: Lucide.trash2,
-                        label: 'Delete ${s.name}',
-                        danger: true,
-                        tooltipSide: AxisDirection.up,
-                        onPressed: () => onDelete(s),
-                      ),
-                  ]),
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: s.id == live ? CvColors.runeTint : null,
+                  borderRadius: BorderRadius.circular(CvRadii.md),
+                  border: Border.all(
+                      color: s.id == live
+                          ? const Color(0x735FE0F0)
+                          : const Color(0x00000000)),
                 ),
+                child: Row(spacing: 12, children: [
+                  const _SceneThumb(),
+                  Expanded(
+                    child: Text(s.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: CvTypography.weight(CvTypography.label, 600)),
+                  ),
+                  if (s.id == live)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 8),
+                      child: CvOverline('Live'),
+                    )
+                  else ...[
+                    CvToolButton(
+                      icon: Lucide.play,
+                      label: 'Show to players',
+                      tooltipSide: AxisDirection.left,
+                      onPressed: () => onSwitch(s.id),
+                    ),
+                    CvToolButton(
+                      icon: Lucide.trash2,
+                      label: 'Delete ${s.name}',
+                      danger: true,
+                      tooltipSide: AxisDirection.left,
+                      onPressed: () => onDelete(s),
+                    ),
+                  ],
+                ]),
               ),
             if (current != null)
               _SceneNameField(
@@ -1030,11 +1037,51 @@ class ScenesPanel extends StatelessWidget {
                   ),
                 ),
               ]),
+                ],
+              ),
+            ),
           ],
         ),
       ),
     );
   }
+}
+
+/// A scene's stand-in picture: fine diagonal hatching.
+class _SceneThumb extends StatelessWidget {
+  const _SceneThumb();
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: 64,
+        height: 44,
+        decoration: BoxDecoration(
+          color: CvColors.slate850,
+          borderRadius: BorderRadius.circular(CvRadii.xs),
+          border: Border.all(color: CvColors.borderSubtle),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(CvRadii.xs),
+          child: const CustomPaint(painter: _Hatch()),
+        ),
+      );
+}
+
+class _Hatch extends CustomPainter {
+  const _Hatch();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = CvColors.slate800
+      ..strokeWidth = 6;
+    for (var x = -size.height; x < size.width; x += 12) {
+      canvas.drawLine(Offset(x, size.height), Offset(x + size.height, 0), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_Hatch oldDelegate) => false;
 }
 
 /// The live scene's name, saved half a second after typing stops.

@@ -75,9 +75,10 @@ class _LogPanelState extends State<LogPanel> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(14, 2, 2, 2),
+              padding: const EdgeInsets.only(left: 8, right: 2),
               child: Row(children: [
-                const Expanded(child: CvOverline('Journal')),
+                const CvTab(label: 'Journal', selected: true),
+                const Spacer(),
                 CvToolButton(
                   icon: _open ? Lucide.chevronUp : Lucide.chevronDown,
                   label: _open ? 'Hide the journal' : 'Show the journal',
@@ -154,8 +155,8 @@ class _LogPanelState extends State<LogPanel> {
                             child: CvTextInput(
                               controller: _text,
                               placeholder: _secret && !widget.gm
-                                  ? 'Whisper to the GM, or /r d20'
-                                  : 'Say something, or /r 2d6+3',
+                                  ? 'Whisper, or /r d20'
+                                  : 'Message, or /r d20',
                               maxLength: Say.maxLength,
                               error: _error,
                               keepFocus: true,
@@ -169,6 +170,18 @@ class _LogPanelState extends State<LogPanel> {
                           active: _dice,
                           tooltipSide: AxisDirection.up,
                           onPressed: () => setState(() => _dice = !_dice),
+                        ),
+                        ValueListenableBuilder(
+                          valueListenable: _text,
+                          builder: (context, value, _) => CvToolButton(
+                            icon: Lucide.arrowRight,
+                            label: 'Send',
+                            shortcut: '↵',
+                            tooltipSide: AxisDirection.up,
+                            onPressed: value.text.trim().isEmpty
+                                ? null
+                                : () => _submit(value.text),
+                          ),
                         ),
                       ],
                     ),
@@ -319,6 +332,7 @@ class _Entry extends StatelessWidget {
               Text(stamp,
                   style: CvTypography.caption.copyWith(color: CvColors.textDisabled)),
             ]),
+            const CvOverline('Roll'),
             if (blind)
               Text('The GM sees the result', style: quiet)
             else ...[
@@ -328,37 +342,37 @@ class _Entry extends StatelessWidget {
                 alignment: WrapAlignment.center,
                 children: [
                   for (final face in faces.expand((f) => f))
-                    Container(
-                      width: 30,
-                      height: 30,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: CvColors.slate950,
-                        border: Border.all(color: CvColors.borderStrong),
-                      ),
-                      child: Text('$face',
-                          style: CvTypography.label
-                              .copyWith(fontFamily: CvTypography.mono)),
-                    ),
+                    _Die(face, crit: _crit(formula, faces)),
                 ],
               ),
               Text('$total',
                   semanticsLabel: 'total $total',
                   style: CvTypography.titleLg.copyWith(
-                      fontFamily: CvTypography.mono, color: CvColors.textPrimary)),
+                      fontSize: 32,
+                      height: 36 / 32,
+                      color: _crit(formula, faces) ? CvColors.gold400 : CvColors.textPrimary)),
             ],
             Text(formula,
                 style: CvTypography.caption.copyWith(
                     fontFamily: CvTypography.mono, color: CvColors.textSecondary)),
           ]),
         ),
-      Chat(:final text, :final secret) => Text.rich(TextSpan(children: [
-          who,
-          if (secret)
-            TextSpan(text: e.gm ? ' in secret' : ' to the GM', style: quiet),
-          TextSpan(text: '  $text', style: CvTypography.bodySm),
-        ])),
+      Chat(:final text, :final secret) =>
+        Column(crossAxisAlignment: CrossAxisAlignment.stretch, spacing: 2, children: [
+          Row(children: [
+            Expanded(
+              child: Text.rich(TextSpan(children: [
+                who,
+                if (secret)
+                  TextSpan(text: e.gm ? ' in secret' : ' to the GM', style: quiet),
+              ])),
+            ),
+            Text(stamp,
+                style: CvTypography.caption.copyWith(
+                    fontFamily: CvTypography.mono, fontSize: 11, color: CvColors.textDisabled)),
+          ]),
+          Text(text, style: CvTypography.bodySm.copyWith(height: 19 / 13)),
+        ]),
       ConditionChange(
         :final token,
         :final condition,
@@ -408,8 +422,8 @@ class _Entry extends StatelessWidget {
     };
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: CvSpacing.s3),
-      // A roll's card holds its own time.
-      child: e is Roll
+      // A roll's card and a message hold their own time.
+      child: e is Roll || e is Chat
           ? body
           : Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -421,6 +435,16 @@ class _Entry extends StatelessWidget {
               ],
             ),
     );
+  }
+
+  /// A natural 20 on a lone d20.
+  static bool _crit(String formula, List<List<int>> faces) {
+    final terms = DiceFormula.tryParse(formula)?.terms ?? const [];
+    final dice = [for (final (i, t) in terms.indexed) if (t.sides != null) (t, faces[i])];
+    return dice.length == 1 &&
+        dice.single.$1.sides == 20 &&
+        dice.single.$2.length == 1 &&
+        dice.single.$2.single == 20;
   }
 
   /// Each die's face, constants as they are: `[4, 2] + 3`.
@@ -435,4 +459,30 @@ class _Entry extends StatelessWidget {
     }
     return b.toString();
   }
+}
+
+/// One die's face, engraved in a ring: gold on a natural 20.
+class _Die extends StatelessWidget {
+  const _Die(this.face, {this.crit = false});
+
+  final int face;
+  final bool crit;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: 32,
+        height: 32,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: CvColors.slate950,
+          border: Border.all(color: crit ? CvColors.gold500 : CvColors.slate600),
+        ),
+        child: Text('$face',
+            style: TextStyle(
+                fontFamily: CvTypography.display,
+                fontSize: 15,
+                height: 1,
+                color: crit ? CvColors.gold400 : CvColors.textPrimary)),
+      );
 }
