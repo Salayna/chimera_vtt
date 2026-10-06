@@ -200,11 +200,12 @@ void main() {
         expect(Command.fromJson(ok.toJson()).toJson(), ok.toJson());
       }
       expect(refusal(alice, const RollDice('2d')), Refusal.invalid);
-      expect(refusal(alice, const RollDice('d20', secret: true)),
-          Refusal.gmOnly);
-      expect(refusal(gm, const RollDice('d20', secret: true)), isNull);
-      expect(Command.fromJson(const RollDice('d4', secret: true).toJson())
-          .toJson(), const RollDice('d4', secret: true).toJson());
+      // A player's secret roll or message is for the GM.
+      expect(refusal(alice, const RollDice('d20', secret: true)), isNull);
+      expect(refusal(alice, const Say('Psst', secret: true)), isNull);
+      for (final secret in const [RollDice('d4', secret: true), Say('Psst', secret: true)]) {
+        expect(Command.fromJson(secret.toJson()).toJson(), secret.toJson());
+      }
       expect(refusal(alice, const Say('  ')), Refusal.invalid);
       expect(refusal(alice, Say('x' * 501)), Refusal.invalid);
       expect(refusal(alice, const Ping((x: double.nan, y: 0))), Refusal.invalid);

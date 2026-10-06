@@ -13,6 +13,7 @@ void main() {
     expect(json('   '), isNull);
     expect(commandFor('/r d20', secret: true)!.toJson(),
         const RollDice('d20', secret: true).toJson());
-    expect(commandFor('hi', secret: true)!.toJson(), const Say('hi').toJson());
+    expect(commandFor('hi', secret: true)!.toJson(),
+        const Say('hi', secret: true).toJson());
   });
 }

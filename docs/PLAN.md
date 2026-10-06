@@ -455,7 +455,7 @@ Phase 3 status 2026-10-03: players act.
 - **Pings:** a double-click on the map shows a ripple in the pinger's colour to everyone, above the fog. Pings aren't logged.
 - **Conditions:** free text with an optional value ("Darkness 2"), set and removed by the GM on any token and by players on their own. They show under the token's name.
 - **Log:** one panel at the bottom right that is also the chat. It holds rolls, messages and condition changes, never token moves. It's stored with the campaign (`log_entries`, readable only by the GM, like scenes), so it survives reloads and sessions. The room shows the last 200 entries, and players joining or resyncing get them with the snapshot.
-- **Secret entries:** the GM's "Roll in secret" switch, and condition changes on hidden tokens (marked "(hidden)"). They're logged and stored for the GM only, and never sent to players.
+- **Secret entries:** the log's "In secret" switch (the GM's) or "To the GM only" (a player's), for rolls and messages, and condition changes on hidden tokens (marked "(hidden)"). They're logged and stored for the GM only, and never sent to players. A player keeps their own copy of a whisper, and of a roll for the GM that they rolled but not its result (players share one channel); the copies go on a resync (added 2026-10-04).
 
 Limits: condition changes on hidden tokens aren't logged. Stored entries are never pruned. The protocol is now version 2, so clients on version 1 are refused.
 

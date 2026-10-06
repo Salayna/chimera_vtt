@@ -35,7 +35,8 @@ sealed class Command {
             TokenId(json['id'] as String), json['name'] as String),
         'rollDice' => RollDice(json['formula'] as String,
             secret: json['secret'] as bool? ?? false),
-        'say' => Say(json['text'] as String),
+        'say' => Say(json['text'] as String,
+            secret: json['secret'] as bool? ?? false),
         'ping' => Ping(pointFromJson(json['at'])),
         'placeRegion' =>
           PlaceRegion(Entity.fromJson(json['region'] as Json) as Region),
@@ -371,7 +372,8 @@ final class RollDice extends Command {
   /// Checked with [DiceFormula.tryParse].
   final String formula;
 
-  /// GM only: the roll is logged for the GM alone.
+  /// Logged for the GM alone. A player's is rolled for the GM: they see
+  /// that they rolled, not the result.
   final bool secret;
 
   @override
@@ -384,14 +386,17 @@ final class RollDice extends Command {
 
 /// A chat message.
 final class Say extends Command {
-  const Say(this.text);
+  const Say(this.text, {this.secret = false});
 
   static const maxLength = 500;
 
   final String text;
 
+  /// A whisper to the GM: logged for the GM alone.
+  final bool secret;
+
   @override
-  Json toJson() => {'type': 'say', 'text': text};
+  Json toJson() => {'type': 'say', 'text': text, if (secret) 'secret': true};
 }
 
 /// Draws everyone's eye to a point on the map for a moment.

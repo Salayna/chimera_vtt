@@ -52,7 +52,7 @@ sealed class TableEvent {
           gm: gm,
           secret: secret,
         ),
-      'chat' => Chat(by, at, json['text'] as String, gm: gm),
+      'chat' => Chat(by, at, json['text'] as String, gm: gm, secret: secret),
       'condition' => ConditionChange(
           by,
           at,
@@ -103,6 +103,9 @@ final class Roll extends TableEvent {
   final List<List<int>> faces;
   final int total;
 
+  /// A player's own copy of their roll for the GM, without its result.
+  bool get blind => faces.isEmpty;
+
   @override
   String get _type => 'roll';
 
@@ -111,7 +114,7 @@ final class Roll extends TableEvent {
 }
 
 final class Chat extends TableEvent {
-  const Chat(super.by, super.at, this.text, {super.gm});
+  const Chat(super.by, super.at, this.text, {super.gm, super.secret});
 
   final String text;
 

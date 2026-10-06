@@ -8,14 +8,14 @@ import '../ui/cv.dart';
 import 'chrome.dart';
 
 /// What a line typed in the log sends: `/r 2d6+3` (or `/roll`) rolls,
-/// in secret if [secret], and anything else is said. Null for nothing to
-/// send.
+/// and anything else is said, both for the GM alone if [secret]. Null for
+/// nothing to send.
 Command? commandFor(String line, {bool secret = false}) {
   final text = line.trim();
   if (text.isEmpty) return null;
   final roll = RegExp(r'^/r(?:oll)?(?:\s+(.*))?$').firstMatch(text);
   if (roll != null) return RollDice(roll[1] ?? '', secret: secret);
-  return Say(text);
+  return Say(text, secret: secret);
 }
 
 /// The room's log, which is also its chat: rolls, messages and condition
@@ -27,7 +27,8 @@ class LogPanel extends StatefulWidget {
   final Session session;
   final Outcome Function(Command) send;
 
-  /// The GM may roll in secret.
+  /// Whose switch it is: the GM keeps things to themselves, a player
+  /// whispers to the GM.
   final bool gm;
 
   static const width = 320.0;
@@ -136,16 +137,16 @@ class _LogPanelState extends State<LogPanel> {
                           ),
                         ),
                     ]),
-                    if (widget.gm)
-                      CvSwitch(
+                    CvSwitch(
                         value: _secret,
                         onChanged: (v) => setState(() => _secret = v),
-                        label: const Row(spacing: 8, children: [
-                          CvIcon(Lucide.eyeOff,
+                        label: Row(spacing: 8, children: [
+                          const CvIcon(Lucide.eyeOff,
                               size: CvSizes.iconSm,
                               color: CvColors.textSecondary),
                           Flexible(
-                            child: Text('Roll in secret',
+                            child: Text(
+                                widget.gm ? 'In secret' : 'To the GM only',
                                 maxLines: 1, overflow: TextOverflow.ellipsis),
                           ),
                         ]),
@@ -153,7 +154,9 @@ class _LogPanelState extends State<LogPanel> {
                     TextKeysOnly(
                       child: CvTextInput(
                         controller: _text,
-                        placeholder: 'Say something, or /r 2d6+3',
+                        placeholder: _secret && !widget.gm
+                            ? 'Whisper to the GM, or /r d20'
+                            : 'Say something, or /r 2d6+3',
                         maxLength: Say.maxLength,
                         error: _error,
                         keepFocus: true,
@@ -188,7 +191,7 @@ class _Entry extends StatelessWidget {
     final stamp = '${time.hour.toString().padLeft(2, '0')}:'
         '${time.minute.toString().padLeft(2, '0')}';
     final Widget body = switch (e) {
-      Roll(:final formula, :final faces, :final total, :final secret) => Row(
+      Roll(:final formula, :final faces, :final total, :final secret, :final blind) => Row(
           crossAxisAlignment: CrossAxisAlignment.end,
           spacing: CvSpacing.s5,
           children: [
@@ -196,23 +199,29 @@ class _Entry extends StatelessWidget {
               child: Text.rich(TextSpan(children: [
                 who,
                 TextSpan(
-                    text: ' rolled $formula${secret ? ' in secret' : ''}\n',
+                    text: ' rolled $formula'
+                        '${secret ? e.gm ? ' in secret' : ' for the GM' : ''}\n',
                     style: quiet),
                 TextSpan(
-                    text: _faces(formula, faces),
+                    text: blind
+                        ? 'The GM sees the result'
+                        : _faces(formula, faces),
                     style: CvTypography.caption.copyWith(
                         fontFamily: CvTypography.mono,
                         color: CvColors.textSecondary)),
               ])),
             ),
-            Text('$total',
+            if (!blind)
+              Text('$total',
                 semanticsLabel: 'total $total',
                 style: CvTypography.title.copyWith(
                     fontFamily: CvTypography.mono, color: CvColors.textPrimary)),
           ],
         ),
-      Chat(:final text) => Text.rich(TextSpan(children: [
+      Chat(:final text, :final secret) => Text.rich(TextSpan(children: [
           who,
+          if (secret)
+            TextSpan(text: e.gm ? ' in secret' : ' to the GM', style: quiet),
           TextSpan(text: '  $text', style: CvTypography.bodySm),
         ])),
       ConditionChange(

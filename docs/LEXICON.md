@@ -102,7 +102,7 @@ Otherwise it's a field of some entity.
 | **Optimistic move** | `ClientSession.request` | A player's own command, shown at once and snapped back if refused, or if no answer comes within two heartbeats. |
 | **Event** | `TableEvent` (sealed) | Something that happened at the table, made by the GM session from an accepted command: a roll, a chat message, a condition change, a character's action or a ping. Sent in batches. Token moves and the GM's scene edits make none. |
 | **Log** | `Session.currentLog`, `log_entries` | The room's last 200 logged events, oldest first, shown as its chat. Stored with the campaign in Postgres, and sent to players with every snapshot. Pings aren't logged. |
-| **Secret entry** | `TableEvent.secret` | A log entry only the GM sees, live and stored: a secret roll (`RollDice.secret`), or a condition change on a hidden token. Never sent to players. |
+| **Secret entry** | `TableEvent.secret` | A log entry only the GM sees, live and stored: a secret roll (`RollDice.secret`) or message (`Say.secret`), or a condition change on a hidden token. Never sent to players. A player's is a whisper to the GM: they keep their own copy, without a roll's result. |
 | **Roll** | `RollDice`, `Roll` | A dice roll: the command carries the formula, and the event the faces and total. The GM rolls, never the player. |
 | **Dice formula** | `DiceFormula` | Dice and constants added or subtracted: `2d6+3`, `d20`, `1d8+1d4-1`. Bounded, since players type it. |
 | **Ping** | `Ping`, `PingEvent` | A ripple on the map for a moment, to draw everyone's eye to a point. The ping tool (P) or a double-click makes one. |

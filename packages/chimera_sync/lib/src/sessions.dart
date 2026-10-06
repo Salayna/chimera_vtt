@@ -271,8 +271,8 @@ final class HostSession extends Session {
             total: dice.total(faces),
             gm: gm,
             secret: secret);
-      case Say(:final text):
-        return Chat(by, at, text.trim(), gm: gm);
+      case Say(:final text, :final secret):
+        return Chat(by, at, text.trim(), gm: gm, secret: secret);
       case Ping(at: final point):
         return PingEvent(by, at, point, gm: gm);
       case UseAction(:final character, :final action, :final dice, :final times, :final bands):
@@ -391,8 +391,25 @@ final class ClientSession extends Session {
       _pending[requestId] = (command, _beats);
       _send(Intent(from: self, requestId: requestId, command: command.toJson()));
       _publish();
+      _receive([?_ownCopy(command)]);
     }
     return outcome;
+  }
+
+  /// What the player keeps of their own message or roll to the GM, which the
+  /// GM never sends back: players share one channel. Gone after a resync.
+  // ponytail: per-player channels would let the GM send back the result.
+  TableEvent? _ownCopy(Command command) {
+    final at = DateTime.now().millisecondsSinceEpoch;
+    return switch (command) {
+      Say(:final text, secret: true) => Chat(self, at, text.trim(), secret: true),
+      RollDice(:final formula, secret: true) => Roll(self, at,
+          formula: '${DiceFormula.tryParse(formula)!}', // The reducer checked.
+          faces: const [],
+          total: 0,
+          secret: true),
+      _ => null,
+    };
   }
 
   @override

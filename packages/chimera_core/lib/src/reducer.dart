@@ -77,8 +77,6 @@ Outcome reduce(Scene scene, Actor actor, Command command) {
                 Upsert(t.withConditions({...t.conditions}..remove(name))),
               ])
             : const Refused(Refusal.notFound)),
-    RollDice(:final secret) when secret && actor is Player =>
-      const Refused(Refusal.gmOnly),
     RollDice(:final formula) => DiceFormula.tryParse(formula) == null
         ? const Refused(Refusal.invalid)
         : const Accepted([]),

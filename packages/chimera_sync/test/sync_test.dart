@@ -415,6 +415,36 @@ void main() {
     expect(late.currentLog, hasLength(2));
   });
 
+  test('a whisper to the GM reaches the GM alone; its sender keeps a copy',
+      () async {
+    final stored = <TableEvent>[];
+    final hub = LoopbackHub(manual: true);
+    final host = HostSession(
+        hub.connect(), gmId, SceneStore(Scene(settings: settings)),
+        onLogged: stored.add);
+    final alices = ClientSession(hub.connect(), alice);
+    final bobs = ClientSession(hub.connect(), bob);
+    final joins = [alices.join(), bobs.join()];
+    hub.flush();
+    await Future.wait(joins);
+
+    alices.request(const Say(' The cleric lies ', secret: true));
+    alices.request(const RollDice('d20+2', secret: true));
+    hub.flush();
+    await Future<void>.delayed(Duration.zero);
+
+    final [chat as Chat, roll as Roll] = host.currentLog;
+    expect((chat.text, chat.secret, chat.by), ('The cleric lies', true, alice));
+    expect((roll.secret, roll.blind), (true, false));
+    expect(roll.total, roll.faces.first.single + 2);
+    expect(stored, hasLength(2));
+    expect(bobs.currentLog, isEmpty);
+    // Alice keeps what she said, and that she rolled, not what.
+    final [said as Chat, rolled as Roll] = alices.currentLog;
+    expect((said.text, said.secret), ('The cleric lies', true));
+    expect((rolled.formula, rolled.secret, rolled.blind), ('1d20 + 2', true, true));
+  });
+
   test('loading a scene reaches every player', () async {
     final table = Table(Scene(settings: settings));
     await table.join();
