@@ -108,42 +108,9 @@ VoidCallback shareRulers(
 /// The command key, as the platform writes it: ⌘ or Ctrl.
 String get modKey => defaultTargetPlatform == TargetPlatform.macOS ? '⌘' : 'Ctrl ';
 
-/// The GM's panels, a rail beside the journal: the map and its grid. The tools themselves, tokens included, are in the [ToolDock].
-class GmRail extends StatelessWidget {
-  const GmRail({
-    super.key,
-    required this.controller,
-    this.onSetMap,
-    this.mapsOpen = false,
-  });
-
-  final TableController controller;
-  final bool mapsOpen;
-  final VoidCallback? onSetMap;
-
-  @override
-  Widget build(BuildContext context) => ListenableBuilder(
-        listenable: controller,
-        builder: (context, _) => CvToolbar(children: [
-          CvToolButton(
-              icon: Lucide.imageUp,
-              label: 'Change map',
-              shortcut: 'M',
-              active: mapsOpen,
-              onPressed: onSetMap),
-          CvToolButton(
-              icon: Lucide.grid3x3,
-              label: 'Grid',
-              shortcut: 'G',
-              active: controller.gridOptions,
-              onPressed: controller.toggleGridOptions),
-        ]),
-      );
-}
-
 /// The tools, docked at the bottom centre: search, move, ruler, ping, and
 /// for the [gm] undo and redo, fog, regions and the token strip.
-class ToolDock extends StatelessWidget {
+class ToolDock extends StatefulWidget {
   const ToolDock({
     super.key,
     required this.controller,
@@ -153,6 +120,8 @@ class ToolDock extends StatelessWidget {
     this.onAddToken,
     this.tokensOpen = false,
     this.onSearch,
+    this.onSetMap,
+    this.mapsOpen = false,
   });
 
   final TableController controller;
@@ -165,10 +134,27 @@ class ToolDock extends StatelessWidget {
   final VoidCallback? onAddToken;
   final bool tokensOpen;
 
+  /// The GM's less used tools, folded away behind "More tools": the map
+  /// and its grid.
+  final VoidCallback? onSetMap;
+  final bool mapsOpen;
+
+  @override
+  State<ToolDock> createState() => _ToolDockState();
+}
+
+class _ToolDockState extends State<ToolDock> {
+  bool _more = false;
+
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-        listenable: controller,
+        listenable: widget.controller,
         builder: (context, _) {
+          final controller = widget.controller;
+          final gm = widget.gm;
+          final onSearch = widget.onSearch;
+          // Open while one of them is in use, so it can be put away.
+          final more = _more || widget.mapsOpen || controller.gridOptions;
           Widget tool(Tool t, Lucide icon, String label, String key) =>
               CvToolButton(
                 icon: icon,
@@ -194,13 +180,13 @@ class ToolDock extends StatelessWidget {
                   label: 'Undo',
                   shortcut: '${modKey}Z',
                   tooltipSide: AxisDirection.up,
-                  onPressed: onUndo),
+                  onPressed: widget.onUndo),
               CvToolButton(
                   icon: Lucide.redo2,
                   label: 'Redo',
                   shortcut: '$modKey⇧Z',
                   tooltipSide: AxisDirection.up,
-                  onPressed: onRedo),
+                  onPressed: widget.onRedo),
               const CvToolbarSeparator(),
             ],
             tool(Tool.move, Lucide.mousePointer2, 'Move', 'V'),
@@ -220,15 +206,45 @@ class ToolDock extends StatelessWidget {
                 onPressed: () => controller.tool = Tool.fogBrush,
               ),
               tool(Tool.region, Lucide.scan, 'Regions', 'A'),
-              if (onAddToken != null) ...[
+              if (widget.onAddToken != null) ...[
                 const CvToolbarSeparator(),
                 CvToolButton(
                     icon: Lucide.circlePlus,
                     label: 'Add token',
                     shortcut: 'T',
                     tooltipSide: AxisDirection.up,
-                    active: tokensOpen,
-                    onPressed: onAddToken),
+                    active: widget.tokensOpen,
+                    onPressed: widget.onAddToken),
+              ],
+              if (widget.onSetMap != null) ...[
+                const CvToolbarSeparator(),
+                if (more) ...[
+                  CvToolButton(
+                      icon: Lucide.imageUp,
+                      label: 'Change map',
+                      shortcut: 'M',
+                      tooltipSide: AxisDirection.up,
+                      active: widget.mapsOpen,
+                      onPressed: widget.onSetMap),
+                  CvToolButton(
+                      icon: Lucide.grid3x3,
+                      label: 'Grid',
+                      shortcut: 'G',
+                      tooltipSide: AxisDirection.up,
+                      active: controller.gridOptions,
+                      onPressed: controller.toggleGridOptions),
+                ],
+                CvToolButton(
+                  icon: more ? Lucide.chevronLeft : Lucide.ellipsis,
+                  label: more ? 'Fewer tools' : 'More tools',
+                  tooltipSide: AxisDirection.up,
+                  onPressed: () {
+                    // Folding away closes what they opened.
+                    if (more && controller.gridOptions) controller.toggleGridOptions();
+                    if (more && widget.mapsOpen) widget.onSetMap!();
+                    setState(() => _more = !more);
+                  },
+                ),
               ],
             ],
           ]);

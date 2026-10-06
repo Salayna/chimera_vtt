@@ -208,7 +208,10 @@ void main() {
         controller: controller,
         gm: true,
         child: Stack(children: [
-          Positioned(left: 16, top: 100, child: GmRail(controller: controller)),
+          Positioned(
+              left: 16,
+              bottom: 16,
+              child: ToolDock(controller: controller, gm: true, onSetMap: () {})),
           Positioned(
               left: 100,
               top: 100,
@@ -222,7 +225,10 @@ void main() {
       ),
     ));
     expect(find.text('GRID'), findsNothing);
+    expect(find.bySemanticsLabel('Grid'), findsNothing); // Folded away.
 
+    await tester.tap(find.bySemanticsLabel('More tools'));
+    await tester.pump();
     await tester.tap(find.bySemanticsLabel('Grid'));
     await tester.pumpAndSettle();
     expect(find.text('GRID'), findsOneWidget);

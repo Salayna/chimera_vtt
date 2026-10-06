@@ -63,7 +63,6 @@ class _PartyPanelState extends State<PartyPanel> {
   Widget build(BuildContext context) => CvPanel(
         width: PartyPanel.width,
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Padding(
@@ -83,18 +82,20 @@ class _PartyPanelState extends State<PartyPanel> {
               ]),
             ),
             Container(height: 1, color: CvColors.borderSubtle),
-            switch (_tab) {
-              _Tab.party => _scroll(_party()),
-              _Tab.npcs => _scroll(_npcs()),
-              // It scrolls its own list, under its round.
-              _Tab.initiative => InitiativeBar(
-                  store: widget.store,
-                  controller: widget.controller,
-                  send: widget.send,
-                  gm: widget.gm,
-                  self: widget.self,
-                  fullPack: widget.fullPack),
-            },
+            Expanded(
+              child: switch (_tab) {
+                _Tab.party => _scroll(_party()),
+                _Tab.npcs => _scroll(_npcs()),
+                // It scrolls its own list, under its round.
+                _Tab.initiative => InitiativeBar(
+                    store: widget.store,
+                    controller: widget.controller,
+                    send: widget.send,
+                    gm: widget.gm,
+                    self: widget.self,
+                    fullPack: widget.fullPack),
+              },
+            ),
             Container(height: 1, color: CvColors.borderSubtle),
             Padding(
               padding: const EdgeInsets.all(CvSpacing.s4),
@@ -114,11 +115,8 @@ class _PartyPanelState extends State<PartyPanel> {
         ),
       );
 
-  Widget _scroll(Widget child) => ConstrainedBox(
-        constraints: const BoxConstraints(maxHeight: 300),
-        child: SingleChildScrollView(
-            padding: const EdgeInsets.all(CvSpacing.s3), child: child),
-      );
+  Widget _scroll(Widget child) => SingleChildScrollView(
+      padding: const EdgeInsets.all(CvSpacing.s3), child: child);
 
   /// The GM, then each member: here or away, and the tokens they play.
   Widget _party() => ValueListenableBuilder(

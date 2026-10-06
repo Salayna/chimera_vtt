@@ -1417,11 +1417,13 @@ class _GmRoomState extends State<GmRoom> {
           right: pad,
           top: pad,
           bottom: pad,
-          child: Column(
+          child: LayoutBuilder(
+            builder: (context, constraints) => Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             spacing: CvSpacing.s4,
             children: [
-              PartyPanel(
+              Expanded(
+                child: PartyPanel(
                 session: host,
                 store: host.store,
                 controller: _controller,
@@ -1433,7 +1435,10 @@ class _GmRoomState extends State<GmRoom> {
                 onRemove: _removeMember,
                 fullPack: _fullPack,
               ),
-              Flexible(
+              ),
+              // The scenes take what they need, up to half; the tabs the rest.
+              ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: constraints.maxHeight / 2),
                 child: SingleChildScrollView(
                   child: ScenesPanel(
                     scenes: _sceneList,
@@ -1452,49 +1457,6 @@ class _GmRoomState extends State<GmRoom> {
               ),
             ],
           ),
-        ),
-        Positioned(
-          left: _beside,
-          top: 0,
-          bottom: 0,
-          child: Center(
-            child: GmRail(
-              controller: _controller,
-              onSetMap: () => _toggleLibrary(LibraryKind.map),
-              mapsOpen: _libraryOpen == LibraryKind.map,
-            ),
-          ),
-        ),
-        Positioned(
-          left: _beside + CvSizes.rail + CvSpacing.s4,
-          top: 0,
-          bottom: 0,
-          child: Center(
-            child: StreamBuilder(
-              stream: host.store.changes,
-              initialData: host.store.scene,
-              builder: (context, snap) {
-                final settings = snap.requireData.settings;
-                final grid = settings.grid;
-                return Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  spacing: CvSpacing.s4,
-                  children: [
-                    GridOptions(
-                        controller: _controller,
-                        grid: grid,
-                        visible: settings.gridVisible,
-                        onCellSize: _setCellSize,
-                        onVisible: _setGridVisible,
-                        pack: settings.pack,
-                        packs: _packChoices(snap.requireData),
-                        onPack: _setPack,
-                        onInstallPack: _installPack),
-                  ],
-                );
-              },
-            ),
           ),
         ),
         Positioned(
@@ -1520,6 +1482,23 @@ class _GmRoomState extends State<GmRoom> {
                     controller: _controller,
                     store: host.store,
                     send: host.execute),
+                StreamBuilder(
+                  stream: host.store.changes,
+                  initialData: host.store.scene,
+                  builder: (context, snap) {
+                    final settings = snap.requireData.settings;
+                    return GridOptions(
+                        controller: _controller,
+                        grid: settings.grid,
+                        visible: settings.gridVisible,
+                        onCellSize: _setCellSize,
+                        onVisible: _setGridVisible,
+                        pack: settings.pack,
+                        packs: _packChoices(snap.requireData),
+                        onPack: _setPack,
+                        onInstallPack: _installPack);
+                  },
+                ),
                 if (_libraryOpen == LibraryKind.token) _tokenStrip(host),
                 ToolDock(
                     controller: _controller,
@@ -1528,6 +1507,8 @@ class _GmRoomState extends State<GmRoom> {
                     onRedo: host.redo,
                     onAddToken: _openTokens,
                     tokensOpen: _libraryOpen == LibraryKind.token,
+                    onSetMap: () => _toggleLibrary(LibraryKind.map),
+                    mapsOpen: _libraryOpen == LibraryKind.map,
                     onSearch: () => setState(() => _palette = true)),
               ],
             ),
@@ -1830,6 +1811,7 @@ class _PlayerRoomState extends State<PlayerRoom> {
         Positioned(
           right: pad,
           top: pad,
+          bottom: pad,
           child: PartyPanel(
             session: session,
             store: store,

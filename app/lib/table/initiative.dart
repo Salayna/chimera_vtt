@@ -117,7 +117,6 @@ class InitiativeBar extends StatelessWidget {
 
       final mine = current != null && current.owner == self;
       return Column(
-          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Padding(
@@ -144,10 +143,7 @@ class InitiativeBar extends StatelessWidget {
               ]),
             ),
             Container(height: 1, color: CvColors.borderSubtle),
-            // ponytail: a fixed cap keeps the scenes below in view; size it
-            // to the sidebar if fights get bigger.
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 300),
+            Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(CvSpacing.s3),
                 child: Column(
