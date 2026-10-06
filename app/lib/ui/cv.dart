@@ -134,8 +134,8 @@ class CvIcon extends StatelessWidget {
 enum CvTone {
   neutral(CvColors.textPrimary, CvColors.slate800),
   ok(CvColors.moss500, CvColors.mossTint),
-  gm(CvColors.amber500, CvColors.amberTint),
-  player(CvColors.teal400, CvColors.tealTint),
+  gm(CvColors.rune500, CvColors.runeTint),
+  player(CvColors.gold400, CvColors.goldTint),
   danger(CvColors.ember500, CvColors.emberTint);
 
   const CvTone(this.color, this.tint);
@@ -374,7 +374,7 @@ class CvWordmark extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Text.rich(
         TextSpan(text: 'Chimera ', children: const [
-          TextSpan(text: 'VTT', style: TextStyle(color: CvColors.amber500)),
+          TextSpan(text: 'VTT', style: TextStyle(color: CvColors.rune500)),
         ]),
         style: CvTypography.weight(CvTypography.body, 700)
             .copyWith(fontSize: size, height: 1, letterSpacing: -0.02 * size),
@@ -465,7 +465,7 @@ class _CvTooltipState extends State<CvTooltip> {
 // ---------- Buttons ----------
 
 /// An icon button for toolbars and rails, with a tooltip. [active] marks the
-/// current tool (amber). [inline] shows the label beside the icon instead.
+/// current tool (rune cyan). [inline] shows the label beside the icon instead.
 class CvToolButton extends StatelessWidget {
   const CvToolButton({
     super.key,
@@ -500,8 +500,8 @@ class CvToolButton extends StatelessWidget {
         if (s.disabled) {
           fg = CvColors.textDisabled;
         } else if (active) {
-          bg = s.hover ? const Color(0x3DE8A33D) : CvColors.amberTint;
-          fg = s.hover ? CvColors.amber300 : CvColors.amber400;
+          bg = s.hover ? const Color(0x3D5FE0F0) : CvColors.runeTint;
+          fg = s.hover ? CvColors.rune300 : CvColors.rune400;
         } else if (s.pressed) {
           bg = CvColors.surfacePressed;
           fg = CvColors.textPrimary;
@@ -520,7 +520,7 @@ class CvToolButton extends StatelessWidget {
             borderRadius: BorderRadius.circular(CvRadii.md),
             border: Border.all(
                 color: active && !s.disabled
-                    ? const Color(0x73E8A33D)
+                    ? const Color(0x735FE0F0)
                     : const Color(0x00000000)),
           ),
           child: DefaultTextStyle(
@@ -668,9 +668,9 @@ class CvToggleButton extends StatelessWidget {
             fg = CvColors.textDisabled;
             border = CvColors.borderSubtle;
           } else if (pressed) {
-            bg = CvColors.amberTint;
-            fg = CvColors.amber300;
-            border = const Color(0x8CE8A33D);
+            bg = CvColors.runeTint;
+            fg = CvColors.rune300;
+            border = const Color(0x8C5FE0F0);
           } else if (s.hover || s.pressed) {
             bg = s.pressed ? CvColors.surfacePressed : CvColors.surfaceHover;
             fg = CvColors.textPrimary;
@@ -695,7 +695,7 @@ class CvToggleButton extends StatelessWidget {
                     style: CvTypography.overline.copyWith(
                         height: 1,
                         color: pressed
-                            ? CvColors.amber400
+                            ? CvColors.rune400
                             : CvColors.textDisabled)),
               ]),
             ),
@@ -794,8 +794,8 @@ class CvSegmentedControl<T> extends StatelessWidget {
 
 enum CvButtonVariant { primary, player, secondary, ghost, danger, dangerGhost }
 
-/// A text action. [CvButtonVariant.primary] is amber (the GM's colour),
-/// [CvButtonVariant.player] teal.
+/// A text action. [CvButtonVariant.primary] is rune cyan (the GM's colour),
+/// [CvButtonVariant.player] gold.
 class CvButton extends StatelessWidget {
   const CvButton({
     super.key,
@@ -819,10 +819,10 @@ class CvButton extends StatelessWidget {
     const clear = Color(0x00000000);
     // (rest, hover, pressed, text, border, hover border)
     final (rest, hover, press, fg, border, hoverBorder) = switch (variant) {
-      CvButtonVariant.primary => (CvColors.amber500, CvColors.amber400,
-          CvColors.amber600, CvColors.textOnAccent, clear, clear),
-      CvButtonVariant.player => (CvColors.teal500, CvColors.teal400,
-          CvColors.teal600, CvColors.textOnAccent, clear, clear),
+      CvButtonVariant.primary => (CvColors.rune500, CvColors.rune400,
+          CvColors.rune600, CvColors.textOnAccent, clear, clear),
+      CvButtonVariant.player => (CvColors.gold500, CvColors.gold400,
+          CvColors.gold600, CvColors.textOnAccent, clear, clear),
       CvButtonVariant.secondary => (CvColors.slate800, CvColors.slate750,
           CvColors.slate700, CvColors.textPrimary, CvColors.borderStrong,
           CvColors.slate500),
@@ -1009,7 +1009,7 @@ class _CvTextInputState extends State<CvTextInput> {
                         BoxShadow(
                             color: invalid
                                 ? CvColors.emberTint
-                                : const Color(0x24E8E6E1),
+                                : const Color(0x24ECE8DD),
                             spreadRadius: 3)
                       ]
                     : null,
@@ -1040,7 +1040,7 @@ class _CvTextInputState extends State<CvTextInput> {
                     textInputAction:
                         widget.multiline ? TextInputAction.newline : null,
                     style: style,
-                    cursorColor: CvColors.amber500,
+                    cursorColor: CvColors.rune500,
                     backgroundCursorColor: CvColors.slate700,
                     selectionColor: CvColors.selectionText,
                     textCapitalization: widget.code
@@ -1531,7 +1531,7 @@ class CvSwitch extends StatelessWidget {
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(CvRadii.pill),
                 color: value
-                    ? (s.hover ? CvColors.amber400 : CvColors.amber500)
+                    ? (s.hover ? CvColors.rune400 : CvColors.rune500)
                     : (s.hover ? CvColors.slate600 : CvColors.slate700),
                 border: value ? null : Border.all(color: CvColors.slate600),
               ),
@@ -1615,7 +1615,7 @@ class CvSlider extends StatelessWidget {
                     width: width * t,
                     height: 4,
                     decoration: BoxDecoration(
-                        color: CvColors.amber500,
+                        color: CvColors.rune500,
                         borderRadius: BorderRadius.circular(2)),
                   ),
                   Positioned(
@@ -2049,7 +2049,7 @@ class _CvRoomCodeChipState extends State<CvRoomCodeChip> {
       );
 }
 
-/// Someone at the table: initials on their hue. The GM wears an amber ring.
+/// Someone at the table: initials on their hue. The GM wears an rune cyan ring.
 class CvAvatar extends StatelessWidget {
   const CvAvatar({
     super.key,
@@ -2076,9 +2076,9 @@ class CvAvatar extends StatelessWidget {
           alignment: Alignment.center,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: gm ? CvColors.amber500 : color,
+            color: gm ? CvColors.rune500 : color,
             boxShadow: [
-              if (gm) const BoxShadow(color: CvColors.amber500, spreadRadius: 4),
+              if (gm) const BoxShadow(color: CvColors.rune500, spreadRadius: 4),
               const BoxShadow(
                   color: CvColors.surfacePanelSolid, spreadRadius: 2),
             ],
@@ -2151,7 +2151,7 @@ class CvAvatarStack extends StatelessWidget {
 /// The app shell: no Material, the design's ground and type.
 Widget cvApp({required String title, required Widget home}) => WidgetsApp(
       title: title,
-      color: CvColors.amber500,
+      color: CvColors.rune500,
       textStyle: CvTypography.body,
       debugShowCheckedModeBanner: false,
       pageRouteBuilder: <T>(RouteSettings settings, WidgetBuilder builder) =>

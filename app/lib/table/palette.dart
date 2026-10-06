@@ -274,7 +274,7 @@ class _CommandPaletteState extends State<CommandPalette> {
               ),
               child: Row(spacing: 10, children: [
                 CvIcon(item.icon,
-                    color: selected ? CvColors.amber500 : CvColors.textSecondary),
+                    color: selected ? CvColors.rune500 : CvColors.textSecondary),
                 Expanded(
                   child: Text(item.label,
                       maxLines: 1,

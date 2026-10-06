@@ -97,7 +97,7 @@ class _GmSignInState extends State<GmSignIn> {
           ),
           if (_notice case final notice?)
             Text(notice,
-                style: CvTypography.caption.copyWith(color: CvColors.teal300)),
+                style: CvTypography.caption.copyWith(color: CvColors.gold300)),
           CvButton(
             label: 'Sign in',
             icon: Lucide.logIn,

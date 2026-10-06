@@ -226,7 +226,7 @@ class _GridAlignLayerState extends State<GridAlignLayer> {
           magnificationScale: 3,
           focalPointOffset: const Offset(0, lift),
           decoration: const MagnifierDecoration(
-            shape: CircleBorder(side: BorderSide(color: CvColors.amber500, width: 2)),
+            shape: CircleBorder(side: BorderSide(color: CvColors.rune500, width: 2)),
             shadows: CvElevation.shadow2,
           ),
           child: const CustomPaint(painter: _Crosshair()),
@@ -256,7 +256,7 @@ class _GridAlignLayerState extends State<GridAlignLayer> {
               }}',
                   style: CvTypography.weight(CvTypography.label, 600).copyWith(
                       color: s == a.step
-                          ? CvColors.amber400
+                          ? CvColors.rune400
                           : s.index < a.step.index
                               ? CvColors.textPrimary
                               : CvColors.textDisabled)),
@@ -333,11 +333,11 @@ class _HandlesPainter extends CustomPainter {
       final far = toScreen((x: a.anchor.x + a.size, y: a.anchor.y + a.size));
       final square = Rect.fromPoints(anchor, far);
       canvas
-        ..drawRect(square, Paint()..color = CvColors.amber500.withValues(alpha: 0.16))
+        ..drawRect(square, Paint()..color = CvColors.rune500.withValues(alpha: 0.16))
         ..drawRect(
             square,
             Paint()
-              ..color = CvColors.amber400
+              ..color = CvColors.rune400
               ..style = PaintingStyle.stroke
               ..strokeWidth = 2);
     }
@@ -364,10 +364,10 @@ class _HandlesPainter extends CustomPainter {
           at,
           8,
           Paint()
-            ..color = CvColors.amber500
+            ..color = CvColors.rune500
             ..style = filled ? PaintingStyle.fill : PaintingStyle.stroke
             ..strokeWidth = 2.5)
-      ..drawCircle(at, 2, Paint()..color = filled ? const Color(0xFF101216) : CvColors.amber500);
+      ..drawCircle(at, 2, Paint()..color = filled ? const Color(0xFF101216) : CvColors.rune500);
   }
 
   @override
@@ -383,7 +383,7 @@ class _Crosshair extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final c = size.center(Offset.zero);
     final paint = Paint()
-      ..color = CvColors.amber400
+      ..color = CvColors.rune400
       ..strokeWidth = 1.5;
     final r = math.min(size.width, size.height) / 2;
     for (final d in [const Offset(1, 0), const Offset(0, 1)]) {

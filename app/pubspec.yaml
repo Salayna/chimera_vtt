@@ -68,9 +68,15 @@ flutter:
   # IBM Plex (SIL OFL, fonts/OFL.txt). Plex Sans is the variable font;
   # CvTypography sets its weight axis.
   fonts:
-    - family: IBM Plex Sans
+    - family: Mulish
       fonts:
-        - asset: fonts/IBMPlexSans.ttf
+        - asset: fonts/Mulish.ttf
+    - family: Marcellus
+      fonts:
+        - asset: fonts/Marcellus-Regular.ttf
+    - family: Marcellus SC
+      fonts:
+        - asset: fonts/MarcellusSC-Regular.ttf
     - family: IBM Plex Mono
       fonts:
         - asset: fonts/IBMPlexMono-Medium.ttf

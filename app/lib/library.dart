@@ -318,7 +318,7 @@ class _LibraryPanelState extends State<LibraryPanel> {
                 borderRadius: BorderRadius.circular(CvRadii.md),
                 border: Border.all(
                     color: s.hover
-                        ? CvColors.amber500
+                        ? CvColors.rune500
                         : CvColors.borderSubtle),
               ),
               child: Stack(fit: StackFit.expand, children: [
@@ -384,7 +384,7 @@ class _LibraryPanelState extends State<LibraryPanel> {
               Text(error,
                   style: CvTypography.caption.copyWith(color: CvColors.ember400))
             else if (entries == null)
-              const Center(child: CvSpinner(size: 20, color: CvColors.amber500))
+              const Center(child: CvSpinner(size: 20, color: CvColors.rune500))
             else if (entries.isEmpty)
               Text(widget.hint,
                   style: CvTypography.caption
@@ -581,13 +581,13 @@ class _LibraryPageState extends State<LibraryPage> {
             CvPanel(
               solid: true,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              child: CvProgressBar(label: 'Uploading $file', color: CvColors.amber500),
+              child: CvProgressBar(label: 'Uploading $file', color: CvColors.rune500),
             ),
           if (_error case final error?)
             Text(error, style: CvTypography.bodySm.copyWith(color: CvColors.textDanger)),
           if (all == null)
             if (_error == null)
-              const Center(child: CvSpinner(size: 20, color: CvColors.amber500))
+              const Center(child: CvSpinner(size: 20, color: CvColors.rune500))
             else
               const SizedBox()
           else if (shown.isEmpty)

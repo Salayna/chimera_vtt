@@ -196,7 +196,7 @@ class InitiativeBar extends StatelessWidget {
 }
 
 /// One token in the order: its owner's colour, name and value. The current
-/// one is lit in amber.
+/// one is lit in rune cyan.
 class _Entry extends StatelessWidget {
   const _Entry({
     required this.token,
@@ -233,13 +233,13 @@ class _Entry extends StatelessWidget {
         padding: EdgeInsets.only(left: 8, right: removable(s) ? 0 : 10),
         decoration: BoxDecoration(
           color: current
-              ? CvColors.amberTint
+              ? CvColors.runeTint
               : s.hover
               ? CvColors.surfaceHover
               : const Color(0x00000000),
           borderRadius: BorderRadius.circular(CvRadii.md),
           border: Border.all(
-            color: current ? CvColors.amber500 : const Color(0x00000000),
+            color: current ? CvColors.rune500 : const Color(0x00000000),
           ),
         ),
         child: Row(
@@ -262,7 +262,7 @@ class _Entry extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: CvTypography.label.copyWith(
-                  color: current ? CvColors.amber300 : CvColors.textPrimary,
+                  color: current ? CvColors.rune300 : CvColors.textPrimary,
                 ),
               ),
             ),

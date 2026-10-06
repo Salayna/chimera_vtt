@@ -770,7 +770,7 @@ class _ModuleEditorState extends State<ModuleEditor> {
                 padding: const EdgeInsets.symmetric(horizontal: 10),
                 decoration: BoxDecoration(
                   color: t == token
-                      ? CvColors.amberTint
+                      ? CvColors.runeTint
                       : s.hover
                           ? CvColors.surfaceHover
                           : const Color(0x00000000),
@@ -788,7 +788,7 @@ class _ModuleEditorState extends State<ModuleEditor> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: CvTypography.label.copyWith(
-                            color: t == token ? CvColors.amber300 : null)),
+                            color: t == token ? CvColors.rune300 : null)),
                   ),
                 ]),
               ),

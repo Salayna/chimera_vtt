@@ -162,7 +162,7 @@ class _PackTokensPanelState extends State<PackTokensPanel> {
             color: s.hover ? CvColors.surfaceHover : CvColors.surfaceInput,
             borderRadius: BorderRadius.circular(CvRadii.md),
             border: Border.all(
-                color: s.hover ? CvColors.amber500 : CvColors.borderSubtle),
+                color: s.hover ? CvColors.rune500 : CvColors.borderSubtle),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,

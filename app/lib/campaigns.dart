@@ -552,7 +552,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
                     style: CvTypography.bodySm.copyWith(color: CvColors.textDanger)),
               if (list == null)
                 if (_error == null)
-                  const Center(child: CvSpinner(size: 20, color: CvColors.amber500))
+                  const Center(child: CvSpinner(size: 20, color: CvColors.rune500))
                 else
                   const SizedBox()
               else
@@ -663,7 +663,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               spacing: 6,
                               children: [
-                                CvIcon(icon, color: CvColors.amber500),
+                                CvIcon(icon, color: CvColors.rune500),
                                 const Spacer(),
                                 Text(title, style: CvTypography.label),
                                 Text(text,
@@ -762,7 +762,7 @@ class _CampaignCard extends StatelessWidget {
                   ),
                   Row(spacing: 6, children: [
                     const CvIcon(Lucide.layers,
-                        size: 14, color: CvColors.amber500),
+                        size: 14, color: CvColors.rune500),
                     Text(_count(summary.scenes, 'scene'),
                         style: CvTypography.bodySm),
                     Text('·',
@@ -945,7 +945,7 @@ class ScenesPanel extends StatelessWidget {
                   padding: const EdgeInsets.only(left: 10),
                   decoration: BoxDecoration(
                     color: s.id == live
-                        ? CvColors.amberTint
+                        ? CvColors.runeTint
                         : state.hover
                             ? CvColors.surfaceHover
                             : const Color(0x00000000),
@@ -958,7 +958,7 @@ class ScenesPanel extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                           style: CvTypography.label.copyWith(
                               color: s.id == live
-                                  ? CvColors.amber300
+                                  ? CvColors.rune300
                                   : CvColors.textPrimary)),
                     ),
                     if (s.id == live)
@@ -966,7 +966,7 @@ class ScenesPanel extends StatelessWidget {
                         padding: const EdgeInsets.only(right: 10),
                         child: Text('Live',
                             style: CvTypography.caption
-                                .copyWith(color: CvColors.amber400)),
+                                .copyWith(color: CvColors.rune400)),
                       )
                     else
                       CvToolButton(

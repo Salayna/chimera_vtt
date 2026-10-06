@@ -134,7 +134,7 @@ class _LoopbackDemoState extends State<LoopbackDemo> {
           child: player == null
               ? const StatusScreen(
                   title: 'Waiting for the GM to open the room…',
-                  spinner: CvColors.teal500)
+                  spinner: CvColors.gold500)
               : Stack(children: [
                   Positioned.fill(
                     child: TableView(

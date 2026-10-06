@@ -45,7 +45,7 @@ class HubTitle extends StatelessWidget {
             CvOverline(o),
             const SizedBox(height: 6),
           ],
-          Text(title, style: CvTypography.display),
+          Text(title, style: CvTypography.displayLg),
           if (subtitle case final s?) ...[
             const SizedBox(height: 6),
             Text(s,
@@ -59,7 +59,7 @@ class HubTitle extends StatelessWidget {
 int hubColumns(double width, double minWidth, double gap, int max) =>
     ((width + gap) / (minWidth + gap)).floor().clamp(1, max);
 
-/// A cover-led card: lifts on hover, outlined in amber when [selected].
+/// A cover-led card: lifts on hover, outlined in rune cyan when [selected].
 /// [dashed] is the "new" card: a dashed outline and no fill.
 class HubCard extends StatelessWidget {
   const HubCard({
@@ -87,9 +87,9 @@ class HubCard extends StatelessWidget {
         builder: (s) {
           final lift = s.hover && !s.pressed;
           final border = selected
-              ? CvColors.amber500
+              ? CvColors.rune500
               : dashed && s.hover
-                  ? CvColors.amber600
+                  ? CvColors.rune600
                   : s.hover || dashed
                       ? CvColors.borderStrong
                       : CvColors.borderSubtle;
@@ -99,7 +99,7 @@ class HubCard extends StatelessWidget {
             transform: Matrix4.translationValues(0, lift ? -2 : 0, 0),
             decoration: BoxDecoration(
               color: dashed
-                  ? (s.hover ? CvColors.amberTint : const Color(0x00000000))
+                  ? (s.hover ? CvColors.runeTint : const Color(0x00000000))
                   : CvColors.surfacePanelSolid,
               borderRadius: BorderRadius.circular(CvRadii.lg),
               border: dashed
@@ -112,7 +112,7 @@ class HubCard extends StatelessWidget {
               child: DefaultTextStyle(
                 style: CvTypography.body.copyWith(
                     color: dashed && s.hover
-                        ? CvColors.amber300
+                        ? CvColors.rune300
                         : dashed
                             ? CvColors.textSecondary
                             : CvColors.textPrimary),
@@ -209,7 +209,7 @@ class _CoverPainter extends CustomPainter {
   bool shouldRepaint(_CoverPainter old) => old.seed != seed;
 }
 
-/// "GM" (amber) or "Player" (teal) on a pill.
+/// "GM" (rune cyan) or "Player" (gold) on a pill.
 class HubRoleBadge extends StatelessWidget {
   const HubRoleBadge({super.key, this.gm = true});
 
@@ -217,12 +217,12 @@ class HubRoleBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fg = gm ? CvColors.amber300 : CvColors.teal300;
+    final fg = gm ? CvColors.rune300 : CvColors.gold300;
     return Container(
       height: 22,
       padding: const EdgeInsets.symmetric(horizontal: 8),
       decoration: BoxDecoration(
-        color: gm ? CvColors.amberTint : CvColors.tealTint,
+        color: gm ? CvColors.runeTint : CvColors.goldTint,
         borderRadius: BorderRadius.circular(CvRadii.pill),
       ),
       child: Row(mainAxisSize: MainAxisSize.min, spacing: 5, children: [
@@ -309,7 +309,7 @@ class _HubPopoverState extends State<HubPopover> {
       );
 }
 
-/// One of the top bar's tabs: underlined in amber when [current].
+/// One of the top bar's tabs: underlined in rune cyan when [current].
 class _NavTab extends StatelessWidget {
   const _NavTab({
     required this.icon,
@@ -339,7 +339,7 @@ class _NavTab extends StatelessWidget {
             decoration: BoxDecoration(
               border: Border(
                 bottom: BorderSide(
-                    color: current ? CvColors.amber500 : const Color(0x00000000),
+                    color: current ? CvColors.rune500 : const Color(0x00000000),
                     width: 2),
               ),
             ),
@@ -402,7 +402,7 @@ class _HubTopBarState extends State<HubTopBar> {
       height: 64,
       padding: const EdgeInsets.symmetric(horizontal: 32),
       decoration: const BoxDecoration(
-        color: Color(0xF514161B),
+        color: Color(0xF50E1217),
         border: Border(bottom: BorderSide(color: CvColors.borderSubtle)),
       ),
       child: Row(spacing: 28, children: [
@@ -470,7 +470,7 @@ class _HubTopBarState extends State<HubTopBar> {
                 child: Row(mainAxisSize: MainAxisSize.min, spacing: 4, children: [
                   CvAvatar(
                     initials: name.substring(0, math.min(2, name.length)).toUpperCase(),
-                    color: CvColors.amber500,
+                    color: CvColors.rune500,
                     gm: true,
                     label: name,
                   ),

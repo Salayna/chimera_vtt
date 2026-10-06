@@ -259,7 +259,7 @@ class _SystemsPageState extends State<SystemsPage> {
               if (installed == null && _error == null)
                 const Padding(
                   padding: EdgeInsets.all(16),
-                  child: CvSpinner(size: 20, color: CvColors.amber500),
+                  child: CvSpinner(size: 20, color: CvColors.rune500),
                 ),
               for (final pack in installed ?? const <SystemPack>[])
                 _Row(

@@ -61,7 +61,7 @@ StreamSubscription<TableEvent> showPings(
         Session session, TableController controller) =>
     session.events.listen((e) {
       if (e case PingEvent(:final point, :final by, :final gm)) {
-        controller.ping(point, gm ? CvColors.amber500 : playerColor(by));
+        controller.ping(point, gm ? CvColors.rune500 : playerColor(by));
       }
     });
 
@@ -95,7 +95,7 @@ VoidCallback shareRulers(
     controller.otherRulers.value = [
       for (final p in peers)
         if (p.ruler case final r? when p.player != session.self.value)
-          (r, p.gm ? CvColors.amber500 : playerColor(PlayerId(p.player))),
+          (r, p.gm ? CvColors.rune500 : playerColor(PlayerId(p.player))),
     ];
   });
   return () {
@@ -440,7 +440,7 @@ class FogOptions extends StatelessWidget {
                         value: FogMode.reveal,
                         label: 'Reveal',
                         icon: Lucide.eye,
-                        checked: CvColors.teal300
+                        checked: CvColors.gold300
                       ),
                     ],
                   ),
@@ -865,7 +865,7 @@ class YourTokens extends StatelessWidget {
                             shape: BoxShape.circle,
                             color: playerColor(self),
                             boxShadow: const [
-                              BoxShadow(color: CvColors.teal500, spreadRadius: 2)
+                              BoxShadow(color: CvColors.gold500, spreadRadius: 2)
                             ],
                           ),
                         ),
@@ -1541,7 +1541,7 @@ class _GroundPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = const Color(0x0AE8E6E1);
+    final paint = Paint()..color = const Color(0x0AECE8DD);
     for (var x = 0.0; x < size.width; x += CvSizes.token) {
       canvas.drawRect(Rect.fromLTWH(x, 0, 1, size.height), paint);
     }

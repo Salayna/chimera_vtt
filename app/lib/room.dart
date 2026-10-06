@@ -164,12 +164,14 @@ class _SignedOut extends StatelessWidget {
             children: [
               Row(spacing: 10, children: [
                 CvIconBadge(icon, tone: tone),
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(title, style: CvTypography.title),
-                  Text(subtitle,
-                      style: CvTypography.bodySm
-                          .copyWith(color: CvColors.textSecondary)),
-                ]),
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(title, style: CvTypography.title),
+                    Text(subtitle,
+                        style: CvTypography.bodySm
+                            .copyWith(color: CvColors.textSecondary)),
+                  ]),
+                ),
               ]),
               child,
             ],
@@ -183,7 +185,7 @@ class _SignedOut extends StatelessWidget {
           padding: const EdgeInsets.all(CvSpacing.s6),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             Text('Gather at the table',
-                textAlign: TextAlign.center, style: CvTypography.display),
+                textAlign: TextAlign.center, style: CvTypography.displayLg),
             const SizedBox(height: CvSpacing.s4),
             Text('Run a campaign as the GM, or join one with a room code.',
                 textAlign: TextAlign.center,
@@ -1284,7 +1286,7 @@ class _GmRoomState extends State<GmRoom> {
       return _error == null
           ? StatusScreen(
               title: 'Opening the room…',
-              spinner: CvColors.amber500,
+              spinner: CvColors.rune500,
               code: widget.code,
               onLeave: widget.onLeave)
           : StatusScreen(
@@ -1577,7 +1579,7 @@ class _GmRoomState extends State<GmRoom> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       spacing: CvSpacing.s5,
                       children: [
-                        CvProgressBar(label: name, color: CvColors.amber500),
+                        CvProgressBar(label: name, color: CvColors.rune500),
                         Text('Players see it when the upload finishes.',
                             style: CvTypography.caption
                                 .copyWith(color: CvColors.textSecondary)),
@@ -1737,7 +1739,7 @@ class _PlayerRoomState extends State<PlayerRoom> {
         message: session == null
             ? null
             : "You're in. The table appears as soon as the GM arrives.",
-        spinner: CvColors.teal500,
+        spinner: CvColors.gold500,
         code: widget.code,
         onLeave: widget.onLeave,
       );

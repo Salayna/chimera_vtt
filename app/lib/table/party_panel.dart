@@ -74,10 +74,12 @@ class _PartyPanelState extends State<PartyPanel> {
                   if (widget.gm) (_Tab.npcs, 'NPCs'),
                   (_Tab.initiative, 'Initiative'),
                 ])
-                  _TabButton(
-                      label: label,
-                      selected: _tab == tab,
-                      onTap: () => setState(() => _tab = tab)),
+                  Flexible(
+                    child: _TabButton(
+                        label: label,
+                        selected: _tab == tab,
+                        onTap: () => setState(() => _tab = tab)),
+                  ),
               ]),
             ),
             Container(height: 1, color: CvColors.borderSubtle),
@@ -132,7 +134,7 @@ class _PartyPanelState extends State<PartyPanel> {
               final tokens = scene.requireData.tokens.values;
               return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 const _Row(
-                  leading: CvAvatar(initials: 'GM', color: CvColors.amber500, gm: true, label: 'GM'),
+                  leading: CvAvatar(initials: 'GM', color: CvColors.rune500, gm: true, label: 'GM'),
                   title: 'GM',
                   sub: 'Game master',
                   subColor: CvColors.textGm,
@@ -236,12 +238,15 @@ class _TabButton extends StatelessWidget {
               border: Border(
                 bottom: BorderSide(
                     width: 2,
-                    color: selected ? CvColors.amber500 : const Color(0x00000000)),
+                    color: selected ? CvColors.rune500 : const Color(0x00000000)),
               ),
             ),
-            child: Text(label.toUpperCase(),
-                style: CvTypography.overline.copyWith(
-                    color: selected || s.hover ? CvColors.textPrimary : CvColors.textSecondary)),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(label.toUpperCase(),
+                  style: CvTypography.overline.copyWith(
+                      color: selected || s.hover ? CvColors.textPrimary : CvColors.textSecondary)),
+            ),
           ),
         ),
       );

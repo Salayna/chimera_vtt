@@ -262,7 +262,7 @@ class _CharactersPageState extends State<CharactersPage> {
           if (_error case final error?)
             Text(error, style: CvTypography.bodySm.copyWith(color: CvColors.textDanger)),
           if (list == null && _error == null)
-            const Center(child: CvSpinner(size: 20, color: CvColors.amber500))
+            const Center(child: CvSpinner(size: 20, color: CvColors.rune500))
           else if (list != null && list.isEmpty)
             Text('No characters yet. Make one for a system with a sheet, '
                 'D&D 5e or a module you installed.',

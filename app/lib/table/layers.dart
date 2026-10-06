@@ -32,7 +32,7 @@ class GridPainter extends CustomPainter {
     // Hidden lines still show while the GM sets the grid up.
     if (!settings.gridVisible && !setup) return;
     final paint = Paint()
-      ..color = setup ? CvColors.amber500.withValues(alpha: 0.85) : const Color(0x40FFFFFF)
+      ..color = setup ? CvColors.rune500.withValues(alpha: 0.85) : const Color(0x40FFFFFF)
       ..strokeWidth = setup ? 2 : 1;
     final lines = <Offset>[];
     for (var x = grid.offset.x % grid.cellSize; x <= settings.width; x += grid.cellSize) {
@@ -222,8 +222,8 @@ class TokenGlides extends ChangeNotifier {
 /// Every token. A drag repaints this layer through [drag] without
 /// rebuilding any widget.
 ///
-/// Rings follow the design system: teal for the viewer's own tokens, bone
-/// for other players', dashed slate for unowned, amber with a halo when
+/// Rings follow the design system: gold for the viewer's own tokens, bone
+/// for other players', dashed slate for unowned, rune cyan with a halo when
 /// selected. Hidden tokens (GM only) are faded with a dashed ring. Ring
 /// sizes are the design's 56 px token, scaled to the token.
 class TokenPainter extends CustomPainter {
@@ -287,7 +287,7 @@ class TokenPainter extends CustomPainter {
           TextSpan(
               text: text.substring(token.name.length),
               style: base.copyWith(
-                  fontSize: 11 * u, color: CvColors.amber300)),
+                  fontSize: 11 * u, color: CvColors.rune300)),
       ]),
       textDirection: TextDirection.ltr,
       textAlign: TextAlign.center,
@@ -358,10 +358,10 @@ class TokenPainter extends CustomPainter {
       final ringWidth = CvRadii.ringToken * u;
       final ringRadius = radius + ringWidth / 2;
       final (ringColor, dashed) = switch (token) {
-        _ when isSelected => (CvColors.amber500, false),
+        _ when isSelected => (CvColors.rune500, false),
         Token(hidden: true) => (CvColors.slate300, true),
         Token(owner: null) => (CvColors.slate400, true),
-        Token(:final owner) when owner == self => (CvColors.teal500, false),
+        Token(:final owner) when owner == self => (CvColors.gold500, false),
         _ => (CvColors.bone100, false),
       };
       stroke
@@ -374,7 +374,7 @@ class TokenPainter extends CustomPainter {
       }
       if (isSelected) {
         stroke
-          ..color = CvColors.amber500
+          ..color = CvColors.rune500
           ..strokeWidth = 2 * u;
         canvas.drawCircle(center, radius + 8 * u, stroke);
       }
@@ -503,7 +503,7 @@ class FogPainter extends CustomPainter {
           Paint()
             ..style = PaintingStyle.stroke
             ..strokeWidth = b.radius / 24
-            ..color = reveal ? CvColors.teal300 : CvColors.bone100);
+            ..color = reveal ? CvColors.gold300 : CvColors.bone100);
     }
     if (ops[erasing?.value] case final op?) {
       paintFogShape(canvas, op.shape, FogMode.cover, color: CvColors.emberTint);
@@ -578,14 +578,14 @@ class RegionPainter extends CustomPainter {
         ..drawRect(
             rect,
             Paint()
-              ..color = (picked ? CvColors.amberTint : const Color(0x24E8E6E1))
+              ..color = (picked ? CvColors.runeTint : const Color(0x24ECE8DD))
                   .withValues(alpha: (picked ? 0.16 : 0.14) * alpha))
         ..drawRect(
             rect.deflate(u),
             Paint()
               ..style = PaintingStyle.stroke
               ..strokeWidth = 2 * u
-              ..color = (picked ? CvColors.amber500 : CvColors.slate300)
+              ..color = (picked ? CvColors.rune500 : CvColors.slate300)
                   .withValues(alpha: 0.9 * alpha));
       final tags = [
         for (final MapEntry(:key, :value) in r.tags.entries)
@@ -605,7 +605,7 @@ class RegionPainter extends CustomPainter {
           Paint()
             ..style = PaintingStyle.stroke
             ..strokeWidth = 2 * u
-            ..color = CvColors.amber500);
+            ..color = CvColors.rune500);
     }
   }
 

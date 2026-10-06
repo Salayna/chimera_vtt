@@ -9,8 +9,8 @@ import 'theme.dart';
 import 'ui/cv.dart';
 
 /// One of a pack's advancement tracks as a graph: each node where the pack puts it (or in
-/// a row, a chain), lines to what it requires, taken nodes in amber and
-/// those that can be taken outlined in teal. [onChanged] takes the
+/// a row, a chain), lines to what it requires, taken nodes in rune cyan and
+/// those that can be taken outlined in gold. [onChanged] takes the
 /// character having taken one; null shows the graph read-only.
 class AdvancementView extends StatelessWidget {
   const AdvancementView({
@@ -129,15 +129,15 @@ class _Node extends StatelessWidget {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: taken
-                  ? CvColors.amber500
+                  ? CvColors.rune500
                   : open && s.hover
-                      ? CvColors.tealTint
+                      ? CvColors.goldTint
                       : CvColors.bgSunken,
               border: Border.all(
                   color: taken
-                      ? CvColors.amber300
+                      ? CvColors.rune300
                       : open
-                          ? CvColors.teal500
+                          ? CvColors.gold500
                           : CvColors.borderSubtle,
                   width: 2),
             ),
@@ -167,7 +167,7 @@ class _Lines extends CustomPainter {
           a,
           b,
           Paint()
-            ..color = taken ? CvColors.amber500 : CvColors.borderStrong
+            ..color = taken ? CvColors.rune500 : CvColors.borderStrong
             ..strokeWidth = 2);
     }
   }

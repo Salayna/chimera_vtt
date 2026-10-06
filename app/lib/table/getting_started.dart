@@ -153,7 +153,7 @@ class _GettingStartedState extends State<GettingStarted> {
             children: [
               CvIcon(done ? Lucide.circleCheck : Lucide.circle,
                   size: CvSizes.iconSm,
-                  color: done ? CvColors.amber500 : CvColors.textSecondary),
+                  color: done ? CvColors.rune500 : CvColors.textSecondary),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,

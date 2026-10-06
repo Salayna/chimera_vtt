@@ -264,7 +264,7 @@ class _DicePickerState extends State<_DicePicker> {
                           fit: BoxFit.scaleDown,
                           child: Text('d$n',
                               style: CvTypography.label.copyWith(
-                                  color: n == 20 ? CvColors.amber300 : CvColors.textPrimary)),
+                                  color: n == 20 ? CvColors.rune300 : CvColors.textPrimary)),
                         ),
                       ),
                     ),
